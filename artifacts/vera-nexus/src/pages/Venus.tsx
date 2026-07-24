@@ -8,6 +8,7 @@ import {
   type ChatSession, type ChatMessage, type SavedAnalysisType, type SavedAnalysis,
 } from '../lib/venusHistory';
 import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil, LayoutGrid, Workflow as WorkflowIcon, Paperclip, X, Loader2, AlertCircle } from 'lucide-react';
+import { DraftWorkspace, detectDraftChannel } from './DraftWorkspace';
 import { GoalPanel } from './GoalPanel';
 import { RoadmapTracker } from './RoadmapTracker';
 import { TodayCard } from './TodayCard';
@@ -79,15 +80,6 @@ const EXAMPLE_PROMPTS = [
   "Find 3 failed companies most similar to mine and why they failed",
   "Run an investor-fit analysis — which VCs are most likely to fund us?",
 ];
-
-const SAVED_TYPE_COLORS: Record<SavedAnalysisType, string> = {
-  risk: 'var(--red)',
-  roadmap: 'var(--mint)',
-  pattern: 'var(--amber)',
-  fundraising: 'var(--indigo-light)',
-  competitive: 'var(--green)',
-  analysis: 'var(--dim)',
-};
 
 interface CompanyReportSnapshot {
   foundedYear?: string;
@@ -182,14 +174,6 @@ function savePanelPref(key: string, value: boolean) {
   }
 }
 
-function groupSavedByType(saved: ReturnType<typeof getSavedAnalyses>) {
-  const groups: Partial<Record<SavedAnalysisType, typeof saved>> = {};
-  for (const s of saved) {
-    if (!groups[s.type]) groups[s.type] = [];
-    groups[s.type]!.push(s);
-  }
-  return groups;
-}
 
 // Shows the file selected via the composer's paperclip button, before it's
 // actually sent — an uploading spinner while the request is in flight, the
@@ -270,7 +254,6 @@ export function VenusPage() {
     return existing.length > 0 ? existing[0] : createSession();
   });
   const [saved, setSaved] = useState(getSavedAnalyses);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
   const [showGoalPanel, setShowGoalPanel] = useState(() => loadPanelPref(SHOW_GOAL_PANEL_KEY));
   const [showRoadmap, setShowRoadmap] = useState(() => loadPanelPref(SHOW_ROADMAP_KEY));
@@ -304,7 +287,6 @@ export function VenusPage() {
   );
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
-  const [groqKey, setGroqKey] = useState(() => localStorage.getItem('ve_groq_key') || '');
   const [input, setInput] = useState('');
   const [companyReports, setCompanyReports] = useState<Record<string, CompanyReportState>>(loadCompanyReportCache);
   const [pendingAttachment, setPendingAttachment] = useState<UploadedAttachment | null>(null);
@@ -572,6 +554,19 @@ export function VenusPage() {
     setMainView('chat');
   };
 
+  // A refinement rewrites the draft in place and is persisted, so the
+  // revised text survives a reload or a switch between chats. Without this
+  // the workspace would hold the newest version only in component state and
+  // quietly throw away the founder's edits the moment they navigated away.
+  const handleDraftRevised = (messageIndex: number, nextText: string) => {
+    const updated: ChatSession = {
+      ...sessionRef.current,
+      messages: sessionRef.current.messages.map((m, i) => (i === messageIndex ? { ...m, content: nextText } : m)),
+    };
+    setCurrentSession(updated);
+    persistSession(updated);
+  };
+
   // Mini Vera hands its exchange over here once it hits its turn limit: the
   // messages become a real session with real history, rather than being
   // thrown away when the panel closes.
@@ -626,22 +621,6 @@ export function VenusPage() {
       });
     }
   }, [messages]);
-
-  const handleDeleteSaved = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    deleteSavedAnalysis(id);
-    setSaved(getSavedAnalyses());
-  };
-
-  const toggleGroup = (type: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      next.has(type) ? next.delete(type) : next.add(type);
-      return next;
-    });
-  };
-
-  const savedGroups = groupSavedByType(saved);
 
   return (
     <div
@@ -843,48 +822,11 @@ export function VenusPage() {
             </div>
           )}
 
-          {/* Saved Analyses */}
-          {Object.keys(savedGroups).length > 0 && (
-            <div>
-              <div
-                className="text-[10.5px] font-bold uppercase px-[10px] pb-2"
-                style={{ color: 'var(--v7-text-mute)', fontFamily: 'var(--v7-font-mono)', letterSpacing: '0.07em' }}
-              >
-                Saved
-              </div>
-              {(Object.entries(savedGroups) as [SavedAnalysisType, typeof saved][]).map(([type, items]) => (
-                <div key={type} className="mb-2">
-                  <button
-                    onClick={() => toggleGroup(type)}
-                    className="w-full flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors"
-                    style={{ color: SAVED_TYPE_COLORS[type] }}
-                  >
-                    {collapsedGroups.has(type) ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                    {typeLabel(type)}s ({items.length})
-                  </button>
-                  {!collapsedGroups.has(type) && items.map(item => (
-                    <div
-                      key={item.id}
-                      onClick={() => handleOpenSaved(item)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleOpenSaved(item); }}
-                      className="group flex items-center justify-between px-3 py-1.5 rounded text-xs transition-colors cursor-pointer mb-0.5"
-                      style={{ color: 'var(--v7-text-dim)' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--v7-bg-raised-2)'; e.currentTarget.style.color = 'var(--v7-text)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--v7-text-dim)'; }}
-                    >
-                      <span className="truncate flex-1">{item.title}</span>
-                      <Trash2
-                        className="w-3 h-3 shrink-0 ml-1 opacity-0 group-hover:opacity-60 hover:!opacity-100 text-[var(--red)] transition-opacity cursor-pointer"
-                        onClick={(e) => handleDeleteSaved(item.id, e)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* The saved-analysis list used to live here, under the full chat
+              history — so reaching it meant scrolling past every chat the
+              founder had ever started. Command Center owns saved work now
+              (see its SAVED ANALYSIS line and the book behind it), which is
+              a fixed position that doesn't recede as history grows. */}
         </div>
 
         {/* Bottom Settings */}
@@ -922,27 +864,13 @@ export function VenusPage() {
 
           {showSettings && (
             <div className="mt-2 p-3 rounded-lg" style={{ background: 'var(--v7-bg-raised-2)', border: '1px solid var(--v7-border)' }}>
+              {/* The Groq API key field lived here. Vera runs on a managed
+                  key server-side, so the field was asking founders to supply
+                  something the product already has — and its "NOT
+                  CONFIGURED" state read as a broken install on an app that
+                  was working fine. Connectors are what actually belongs in
+                  this panel. */}
               <div className="text-[10px] uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--v7-font-mono)', color: 'var(--v7-text-mute)' }}>
-                Groq API Key
-              </div>
-              <input
-                type="password"
-                value={groqKey}
-                onChange={e => {
-                  setGroqKey(e.target.value);
-                  localStorage.setItem('ve_groq_key', e.target.value);
-                }}
-                placeholder="gsk_..."
-                className="w-full rounded px-2.5 py-2 text-xs focus:outline-none transition-colors"
-                style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border)', color: 'var(--v7-text)', fontFamily: 'var(--v7-font-mono)' }}
-                onFocus={e => (e.currentTarget.style.borderColor = 'var(--v7-cyan-strong)')}
-                onBlur={e => (e.currentTarget.style.borderColor = 'var(--v7-border)')}
-              />
-              <p className="text-[9px] mt-1.5 leading-relaxed" style={{ fontFamily: 'var(--v7-font-mono)', color: 'var(--v7-text-mute)' }}>
-                Get a free key at console.groq.com
-              </p>
-
-              <div className="text-[10px] uppercase tracking-wider mb-2 mt-4 pt-3" style={{ fontFamily: 'var(--v7-font-mono)', color: 'var(--v7-text-mute)', borderTop: '1px solid var(--v7-border)' }}>
                 Connectors
               </div>
               <ConnectorPicker />
@@ -1131,7 +1059,29 @@ export function VenusPage() {
                         {msg.role === 'venus' && !(msg as any).isError && <ConfidenceBadge confidence={msg.confidence} note={msg.confidenceNote} />}
                       </div>
 
-                      {msg.content && <VenusMessage content={msg.content} confidence={msg.confidence} confidenceNote={msg.confidenceNote} />}
+                      {/* A response that IS the deliverable (a post, an
+                          email, a Slack message the founder asked Vera to
+                          write) renders as a working document instead of
+                          chat prose — copyable, revisable line by line, and
+                          publishable where the connector can take it. Every
+                          other answer stays exactly as it was. */}
+                      {(() => {
+                        if (msg.role !== 'venus' || (msg as any).isError || !msg.content) {
+                          return msg.content ? <VenusMessage content={msg.content} confidence={msg.confidence} confidenceNote={msg.confidenceNote} /> : null;
+                        }
+                        const draftChannel = detectDraftChannel(msg.contextQuery, msg.content);
+                        if (!draftChannel) {
+                          return <VenusMessage content={msg.content} confidence={msg.confidence} confidenceNote={msg.confidenceNote} />;
+                        }
+                        return (
+                          <DraftWorkspace
+                            key={i}
+                            initialText={msg.content}
+                            channel={draftChannel}
+                            onTextChange={(next) => handleDraftRevised(i, next)}
+                          />
+                        );
+                      })()}
 
                       {msg.cards && msg.cards.length > 0 && (() => {
                         if ((msg as any).isError) {

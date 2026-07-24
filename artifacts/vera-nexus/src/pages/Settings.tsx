@@ -1,21 +1,15 @@
 import { useState, useEffect } from 'react';
-import {
-  useGetGroqKeyStatus, useSaveGroqKey, useDeleteGroqKey,
-  useGetOnboarding, useSaveOnboarding
-} from '@workspace/api-client-react';
+import { useGetOnboarding, useSaveOnboarding } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getGetGroqKeyStatusQueryKey, getGetOnboardingQueryKey } from '@workspace/api-client-react';
+import { getGetOnboardingQueryKey } from '@workspace/api-client-react';
 import { useCompanyFacts } from '../lib/venusApi';
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
-  const { data: keyStatus } = useGetGroqKeyStatus();
   const { data: onboarding } = useGetOnboarding();
   const { data: factsData } = useCompanyFacts();
   const facts = factsData?.facts ?? [];
 
-  const [apiKey, setApiKey] = useState('');
-  
   const [formData, setFormData] = useState({
     companyName: '', stage: '', industry: '', teamSize: '', country: '', primaryGoal: ''
   });
@@ -33,23 +27,6 @@ export function SettingsPage() {
     }
   }, [onboarding]);
 
-  const saveKeyMutation = useSaveGroqKey({
-    mutation: {
-      onSuccess: () => {
-        setApiKey('');
-        queryClient.invalidateQueries({ queryKey: getGetGroqKeyStatusQueryKey() });
-      }
-    }
-  });
-
-  const deleteKeyMutation = useDeleteGroqKey({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetGroqKeyStatusQueryKey() });
-      }
-    }
-  });
-
   const saveOnboardingMutation = useSaveOnboarding({
     mutation: {
       onSuccess: () => {
@@ -65,53 +42,6 @@ export function SettingsPage() {
         <p className="text-sm font-mono text-[var(--muted)]">Configure Vera Nexus core parameters.</p>
       </header>
 
-      {/* Groq API Key Section */}
-      <section className="bg-[var(--surface2)] border border-[var(--border)] rounded-xl p-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--indigo)] opacity-5 blur-[60px] pointer-events-none"></div>
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h2 className="text-lg font-syne font-bold text-white flex items-center gap-2 mb-1">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-              Groq API Key
-            </h2>
-            <p className="text-xs text-[var(--muted)]">Configure your Groq API key to power Vera.</p>
-          </div>
-          {keyStatus?.configured ? (
-            <span className="px-2 py-1 bg-[var(--mint)]/10 text-[var(--mint)] border border-[var(--mint)]/30 rounded text-[10px] uppercase font-mono tracking-wider font-bold">Configured</span>
-          ) : (
-            <span className="px-2 py-1 bg-[var(--surface3)] text-[var(--dim)] border border-[var(--border)] rounded text-[10px] uppercase font-mono tracking-wider">Not Configured</span>
-          )}
-        </div>
-
-        {keyStatus?.configured ? (
-          <div className="flex items-center justify-between bg-[var(--bg)] border border-[var(--border2)] rounded p-4">
-            <div className="font-mono text-sm text-[var(--text)]">{keyStatus.maskedKey}</div>
-            <button 
-              onClick={() => deleteKeyMutation.mutate()}
-              className="text-xs font-bold uppercase text-[var(--red)] hover:text-white transition-colors"
-            >
-              Remove
-            </button>
-          </div>
-        ) : (
-          <div className="flex gap-3">
-            <input 
-              type="password" 
-              value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-              placeholder="gsk_..." 
-              className="flex-1 bg-[var(--bg)] border border-[var(--border)] rounded px-4 py-2 font-mono text-sm text-white focus:border-[var(--indigo)] outline-none"
-            />
-            <button 
-              onClick={() => saveKeyMutation.mutate({ data: { apiKey } })}
-              disabled={!apiKey || saveKeyMutation.isPending}
-              className="bg-[var(--indigo)] hover:bg-[var(--indigo-light)] disabled:opacity-50 text-white font-bold uppercase text-xs tracking-wider px-6 rounded transition-colors"
-            >
-              Save Key
-            </button>
-          </div>
-        )}
-      </section>
 
       {/* Business Context */}
       <section className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8">

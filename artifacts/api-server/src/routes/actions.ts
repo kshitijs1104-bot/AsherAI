@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { requireAuth, requireUserId } from "../middlewares/auth";
 import { getGroqClient } from "../lib/groq";
 import { draftText } from "../lib/draftText";
+import { publishLinkedinDraft } from "../lib/connectors/sendAction";
 
 const router = Router();
 
@@ -88,6 +89,48 @@ router.post("/actions/:type/run", requireAuth, async (req, res) => {
   } catch (err) {
     req.log.error(err);
     return res.status(500).json({ error: "Action failed" });
+  }
+});
+
+// Publishes a draft the founder refined in the chat's draft workspace,
+// straight to its channel. Separate from /actions/:type/run because nothing
+// is being generated here — the text is already exactly what the founder
+// approved, and re-running it through the model would silently publish
+// something they hadn't read.
+const PublishBody = z.object({
+  channel: z.enum(["linkedin"]),
+  content: z.string().min(1),
+});
+
+router.post("/actions/publish", requireAuth, async (req, res) => {
+  const body = PublishBody.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: "'channel' (linkedin) and non-empty 'content' are required" });
+
+  try {
+    const userId = requireUserId(req);
+    const { postId } = await publishLinkedinDraft(userId, body.data.content);
+
+    // Logged as a resolved queue row rather than a pending one: this already
+    // happened, so it belongs in the founder's history of what Vera did, not
+    // in the list of things still waiting on them.
+    await db.insert(queueItemsTable).values({
+      userId,
+      type: "published_draft",
+      source: "linkedin",
+      title: "LinkedIn post published",
+      body: body.data.content.slice(0, 200),
+      draftContent: body.data.content,
+      status: "accepted",
+      resolvedAt: new Date(),
+    });
+
+    return res.json({ published: true, postId });
+  } catch (err) {
+    req.log.error(err);
+    // getConnector throws a founder-readable message ("linkedin isn't
+    // connected — reconnect it to send this."), which the frontend shows
+    // verbatim, so don't flatten it into a generic failure.
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Failed to publish" });
   }
 });
 

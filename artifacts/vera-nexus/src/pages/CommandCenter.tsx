@@ -107,10 +107,27 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
     action.mutate({ id: item.id, action: 'accept' });
   };
 
-  const handleAccept = () => action.mutate({ id: item.id, action: 'accept' });
+  // Accepting one of these doesn't just tidy the board — it saves a real
+  // Gmail draft, posts a real Slack message, publishes a real LinkedIn
+  // post. That was a single click on a small inline link sitting directly
+  // under "Dismiss", with nothing between a misclick and something the
+  // founder's customers can see. These now take two deliberate clicks.
+  const outbound = outboundTargetFor(item);
+  const [confirmingSend, setConfirmingSend] = useState(false);
+
+  const handleAccept = () => {
+    if (outbound && !confirmingSend) { setConfirmingSend(true); return; }
+    setConfirmingSend(false);
+    action.mutate({ id: item.id, action: 'accept' });
+  };
   const handleReject = () => action.mutate({ id: item.id, action: 'reject' });
+  // Saving an edit sends too — the server treats 'edited' exactly like
+  // 'accept' for the purposes of actually performing the action — so it
+  // needs the same confirmation step as Accept does.
   const handleSubmitEdit = () => {
     if (!draft.trim()) return;
+    if (outbound && !confirmingSend) { setConfirmingSend(true); return; }
+    setConfirmingSend(false);
     action.mutate({ id: item.id, action: 'edit', editedContent: draft.trim() }, { onSuccess: () => setEditing(false) });
   };
 
@@ -159,10 +176,28 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
           <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
             {editing ? (
               <>
-                <button type="button" onClick={handleSubmitEdit} style={linkStyle(palette, false)}>Save</button>
-                <button type="button" onClick={() => setEditing(false)} style={linkStyle(palette, true)}>Cancel</button>
+                <button type="button" onClick={handleSubmitEdit} style={linkStyle(palette, false, !!outbound && confirmingSend)}>
+                  {outbound ? (confirmingSend ? 'Yes, send it' : 'Save & send') : 'Save'}
+                </button>
+                <button type="button" onClick={() => { setEditing(false); setConfirmingSend(false); }} style={linkStyle(palette, true)}>Cancel</button>
+                {confirmingSend && outbound && (
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', color: palette.coral }}>
+                    This will {outbound}.
+                  </span>
+                )}
               </>
             ) : (
+              confirmingSend && outbound ? (
+                <>
+                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', color: palette.coral }}>
+                    This will {outbound}.
+                  </span>
+                  <button type="button" onClick={handleAccept} style={linkStyle(palette, false, true)}>
+                    {action.isPending ? 'Sending…' : 'Yes, send it'}
+                  </button>
+                  <button type="button" onClick={() => setConfirmingSend(false)} style={linkStyle(palette, true)}>Cancel</button>
+                </>
+              ) : (
               <>
                 <button type="button" onClick={resolution ? handleResolve : handleAccept} style={linkStyle(palette, false, isFlagged)}>
                   {resolution ? resolution.label : meta.acceptLabel}
@@ -170,6 +205,7 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
                 {item.draftContent && <button type="button" onClick={() => setEditing(true)} style={linkStyle(palette, true)}>Edit</button>}
                 <button type="button" onClick={handleReject} style={linkStyle(palette, true)}>{meta.rejectLabel}</button>
               </>
+              )
             )}
           </div>
         )}
@@ -251,6 +287,23 @@ function StreakBand({ palette, stats, streak }: { palette: Palette; stats: Daily
       )}
     </div>
   );
+}
+
+// Whether accepting this item performs a real, outward-facing action rather
+// than just resolving a row. Mirrors the source checks in the server's
+// performQueueItemSendAction — an item only actually sends when it has draft
+// content AND a source with a live send step. Everything else ("I've seen
+// this", an instant-action draft the founder copies out by hand) resolves
+// silently and needs no confirmation.
+const OUTBOUND_LABELS: Record<string, string> = {
+  gmail: 'save this as a real draft in your Gmail account',
+  slack: 'post this message to Slack',
+  linkedin: 'publish this post to LinkedIn',
+};
+
+function outboundTargetFor(item: QueueItem): string | null {
+  if (!item.draftContent) return null;
+  return OUTBOUND_LABELS[item.source] ?? null;
 }
 
 // Where a queue item's primary action should actually take the founder.
@@ -437,6 +490,52 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
             <StreakBand palette={palette} stats={dailyBrief.data.stats} streak={streak} />
           )}
 
+          {/* SAVED ANALYSIS — sits ABOVE the queue on purpose. It first went
+              at the foot of the board, which meant a founder with a busy
+              queue had to scroll past everything Vera did overnight to
+              reach the things they'd deliberately kept — the busier the
+              board, the more buried the shelf. One compact line here costs
+              almost nothing and stays reachable no matter how full the
+              queue gets. */}
+          <div style={{ marginBottom: '24px', paddingBottom: '18px', borderBottom: `1px solid ${palette.line}` }}>
+            {savedAnalyses.length === 0 ? (
+              <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', letterSpacing: '0.05em', color: palette.faint, margin: 0 }}>
+                SAVED ANALYSIS · NOTHING KEPT YET
+              </p>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setView('book')}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '7px',
+                    fontFamily: "'Fraunces', serif", fontSize: '14px', fontStyle: 'italic',
+                    background: 'transparent', border: 'none', padding: '0 0 2px',
+                    color: palette.teal, borderBottom: `1px solid ${palette.tealBorder}`, cursor: 'pointer',
+                  }}
+                >
+                  View saved analysis <ArrowRight style={{ width: 13, height: 13 }} />
+                </button>
+
+                <span style={{ display: 'flex', gap: '9px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  {savedTypeCounts.map(([t, count]) => (
+                    <span
+                      key={t}
+                      title={`${typeLabel(t)} · ${count}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                        fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', color: palette.faint,
+                      }}
+                    >
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: savedTypeColor(t, isLight) }} />
+                      {count}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'flex', gap: '4px', marginBottom: '26px', flexWrap: 'wrap' }}>
             {/* Only categories that actually render a section below get a
                 jump chip. The sections themselves are skipped when empty
@@ -484,53 +583,6 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
             ),
           )}
 
-          {/* SAVED ANALYSIS — the board's own section for work the founder
-              chose to keep, plus the way through to the full book. Sits
-              last because it's a reference shelf, not part of today's
-              queue: everything above wants clearing, this wants revisiting. */}
-          <div style={{ marginTop: '30px', paddingTop: '22px', borderTop: `1px solid ${palette.line}` }}>
-            <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', letterSpacing: '0.1em', color: palette.faint, margin: '0 0 10px' }}>
-              SAVED ANALYSIS
-            </p>
-
-            {savedAnalyses.length === 0 ? (
-              <p style={{ fontSize: '13px', color: palette.muted, fontStyle: 'italic', margin: 0 }}>
-                Nothing saved yet — hit “Save as Analysis” under any Vera response and it gets filed here by type.
-              </p>
-            ) : (
-              <>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
-                  {savedTypeCounts.map(([t, count]) => (
-                    <span
-                      key={t}
-                      style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '6px',
-                        fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', letterSpacing: '0.03em',
-                        color: palette.muted, border: `1px solid ${palette.paperEdge}`,
-                        borderRadius: '20px', padding: '5px 10px',
-                      }}
-                    >
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: savedTypeColor(t, isLight) }} />
-                      {typeLabel(t)} · {count}
-                    </span>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setView('book')}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '7px',
-                    fontFamily: "'Fraunces', serif", fontSize: '13.5px', fontStyle: 'italic',
-                    background: 'transparent', border: 'none', padding: '0 0 2px',
-                    color: palette.teal, borderBottom: `1px solid ${palette.tealBorder}`, cursor: 'pointer',
-                  }}
-                >
-                  View saved analysis <ArrowRight style={{ width: 13, height: 13 }} />
-                </button>
-              </>
-            )}
-          </div>
         </div>
       </div>
       )}

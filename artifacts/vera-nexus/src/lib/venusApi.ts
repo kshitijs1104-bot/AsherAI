@@ -290,6 +290,24 @@ export interface ConnectorStatus {
   lastError: string | null;
 }
 
+// Publishes an already-approved draft from the chat's draft workspace. The
+// text is sent verbatim — nothing is regenerated — so what publishes is
+// exactly what the founder read.
+export function usePublishDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { channel: 'linkedin'; content: string }) =>
+      apiFetch<{ published: boolean; postId: string }>('/api/actions/publish', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/queue'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/daily-brief'] });
+    },
+  });
+}
+
 export function useConnectors() {
   return useQuery({
     queryKey: ['/api/connectors'],

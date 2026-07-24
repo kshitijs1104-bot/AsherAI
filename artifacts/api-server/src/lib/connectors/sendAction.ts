@@ -24,6 +24,28 @@ async function getConnector(userId: string, type: string) {
 // reply, publish a LinkedIn post). Item types/sources with nothing to send
 // (an insight, an automation suggestion, a plain alert) just no-op here;
 // "accepting" them only ever meant "I've seen this."
+// Publishes a LinkedIn post for this founder. Shared by two callers: a queue
+// item being accepted (below), and a draft being published straight from the
+// chat's draft workspace (routes/actions.ts's /actions/publish) — the same
+// connector lookup, token decrypt and client lifecycle either way, so the
+// send path can't drift between the two entry points.
+//
+// LinkedIn is the only channel that can publish a draft written from scratch:
+// createPost needs nothing but the text. Gmail can only createDraftReply into
+// an EXISTING thread, and Slack's postMessage needs a channel id, so neither
+// can accept a fresh draft without more input than a chat message carries.
+export async function publishLinkedinDraft(userId: string, content: string): Promise<{ postId: string }> {
+  const connector = await getConnector(userId, "linkedin");
+  if (!connector.oauthTokenRef) throw new Error("LinkedIn connector has no stored token");
+  const tokens = JSON.parse(decryptToken(connector.oauthTokenRef)) as LinkedinTokens;
+  const linkedin = await createLinkedinClient(async () => tokens.accessToken, tokens.authorUrn);
+  try {
+    return await linkedin.createPost(content);
+  } finally {
+    await linkedin.close();
+  }
+}
+
 export async function performQueueItemSendAction(userId: string, item: QueueItem): Promise<void> {
   if (!item.draftContent) return;
 
@@ -68,15 +90,7 @@ export async function performQueueItemSendAction(userId: string, item: QueueItem
   }
 
   if (item.source === "linkedin") {
-    const connector = await getConnector(userId, "linkedin");
-    if (!connector.oauthTokenRef) throw new Error("LinkedIn connector has no stored token");
-    const tokens = JSON.parse(decryptToken(connector.oauthTokenRef)) as LinkedinTokens;
-    const linkedin = await createLinkedinClient(async () => tokens.accessToken, tokens.authorUrn);
-    try {
-      await linkedin.createPost(item.draftContent);
-    } finally {
-      await linkedin.close();
-    }
+    await publishLinkedinDraft(userId, item.draftContent);
     return;
   }
 
