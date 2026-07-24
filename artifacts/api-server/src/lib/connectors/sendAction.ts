@@ -27,6 +27,19 @@ async function getConnector(userId: string, type: string) {
 export async function performQueueItemSendAction(userId: string, item: QueueItem): Promise<void> {
   if (!item.draftContent) return;
 
+  // gmail/slack need routing metadata (thread + recipient, channel) to send
+  // anywhere. Without it the send used to fall straight through to the
+  // no-op tail below, so the queue row was marked "accepted" and struck
+  // through while nothing was ever drafted or posted — the founder is told
+  // the thing happened when it did not. Fail loudly instead: routes/queue.ts
+  // calls this BEFORE resolving the row, so the item stays pending and the
+  // error renders on the card.
+  if ((item.source === "gmail" || item.source === "slack") && !item.metadataJson) {
+    throw new Error(
+      `This ${item.source} draft is missing its routing details, so it can't be sent. Re-sync ${item.source} and try again.`,
+    );
+  }
+
   if (item.source === "gmail" && item.metadataJson) {
     const { threadId, to, subject } = JSON.parse(item.metadataJson) as { threadId: string; to: string; subject: string };
     const connector = await getConnector(userId, "gmail");

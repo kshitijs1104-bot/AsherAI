@@ -52,11 +52,22 @@ function categorize(item: QueueItem): Category {
   return 'notes';
 }
 
-const CATEGORY_META: Record<Category, { label: string; acceptLabel: string; rejectLabel: string }> = {
-  drafts: { label: 'DRAFTS', acceptLabel: 'Accept', rejectLabel: 'Dismiss' },
-  decisions: { label: 'DECISIONS', acceptLabel: 'Log outcome', rejectLabel: 'Snooze' },
-  workflows: { label: 'WORKFLOWS', acceptLabel: 'Set up', rejectLabel: 'Dismiss' },
-  notes: { label: 'NOTES', acceptLabel: 'Acknowledge', rejectLabel: 'Dismiss' },
+type CategoryMeta = {
+  label: string;
+  acceptLabel: string;
+  rejectLabel: string;
+  // Past-tense forms shown on an already-resolved row. Spelled out rather
+  // than derived from the verbs above, which would produce "SET UPED".
+  acceptedLabel: string;
+  editedLabel: string;
+  rejectedLabel: string;
+};
+
+const CATEGORY_META: Record<Category, CategoryMeta> = {
+  drafts: { label: 'DRAFTS', acceptLabel: 'Accept', rejectLabel: 'Dismiss', acceptedLabel: 'ACCEPTED', editedLabel: 'EDITED & SENT', rejectedLabel: 'DISMISSED' },
+  decisions: { label: 'DECISIONS', acceptLabel: 'Log outcome', rejectLabel: 'Snooze', acceptedLabel: 'OUTCOME LOGGED', editedLabel: 'OUTCOME LOGGED', rejectedLabel: 'SNOOZED' },
+  workflows: { label: 'WORKFLOWS', acceptLabel: 'Set up', rejectLabel: 'Dismiss', acceptedLabel: 'SET UP', editedLabel: 'SET UP', rejectedLabel: 'DISMISSED' },
+  notes: { label: 'NOTES', acceptLabel: 'Acknowledge', rejectLabel: 'Dismiss', acceptedLabel: 'ACKNOWLEDGED', editedLabel: 'ACKNOWLEDGED', rejectedLabel: 'DISMISSED' },
 };
 
 function formatTime(iso: string): string {
@@ -95,6 +106,10 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', letterSpacing: '0.04em', color: isFlagged ? palette.coral : palette.faint, margin: '0 0 4px' }}>
           {sourceLabel(item.source)} · {item.createdAt ? formatTime(item.createdAt) : ''}
+          {/* A resolved item was previously only struck through, which made
+              "I actioned this" and "I dismissed this" look identical the
+              next morning. Say which one it was. */}
+          {isDone && ` · ${resolutionLabel(item.status, meta)}`}
         </p>
         <p style={{ fontSize: '14.5px', lineHeight: 1.55, margin: '0 0 8px', color: isDone ? palette.faint : palette.text, textDecoration: isDone ? 'line-through' : 'none' }}>
           {item.title}{item.body && item.body !== item.title ? ` — ${item.body}` : ''}
@@ -119,14 +134,14 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
           <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
             {editing ? (
               <>
-                <a onClick={handleSubmitEdit} style={linkStyle(palette, false)}>Save</a>
-                <a onClick={() => setEditing(false)} style={linkStyle(palette, true)}>Cancel</a>
+                <button type="button" onClick={handleSubmitEdit} style={linkStyle(palette, false)}>Save</button>
+                <button type="button" onClick={() => setEditing(false)} style={linkStyle(palette, true)}>Cancel</button>
               </>
             ) : (
               <>
-                <a onClick={handleAccept} style={linkStyle(palette, false, isFlagged)}>{meta.acceptLabel}</a>
-                {item.draftContent && <a onClick={() => setEditing(true)} style={linkStyle(palette, true)}>Edit</a>}
-                <a onClick={handleReject} style={linkStyle(palette, true)}>{meta.rejectLabel}</a>
+                <button type="button" onClick={handleAccept} style={linkStyle(palette, false, isFlagged)}>{meta.acceptLabel}</button>
+                {item.draftContent && <button type="button" onClick={() => setEditing(true)} style={linkStyle(palette, true)}>Edit</button>}
+                <button type="button" onClick={handleReject} style={linkStyle(palette, true)}>{meta.rejectLabel}</button>
               </>
             )}
           </div>
@@ -141,6 +156,15 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
   );
 }
 
+// Past-tense echo of whichever verb the founder actually pressed, so the
+// resolved row says what happened rather than just looking crossed out.
+function resolutionLabel(status: string, meta: CategoryMeta): string {
+  if (status === 'accepted') return meta.acceptedLabel;
+  if (status === 'edited') return meta.editedLabel;
+  if (status === 'rejected') return meta.rejectedLabel;
+  return status.toUpperCase();
+}
+
 function linkStyle(palette: Palette, quiet: boolean, flagged?: boolean): CSSProperties {
   return {
     fontFamily: "'IBM Plex Mono', monospace",
@@ -148,6 +172,12 @@ function linkStyle(palette: Palette, quiet: boolean, flagged?: boolean): CSSProp
     letterSpacing: '0.02em',
     color: quiet ? palette.muted : flagged ? palette.coral : palette.teal,
     textDecoration: 'none',
+    // These controls are <button>s (they were <a>s with no href, so keyboard
+    // users could neither Tab to them nor press Enter). Strip the UA button
+    // chrome so they keep reading as the quiet inline links they were.
+    background: 'transparent',
+    border: 'none',
+    padding: 0,
     borderBottom: quiet ? '1px solid transparent' : `1px solid ${flagged ? palette.coralBorder : palette.tealBorder}`,
     cursor: 'pointer',
   };
@@ -277,7 +307,12 @@ export function CommandCenterSection({ theme, onBack }: { theme: VenusTheme; onB
           )}
 
           <div style={{ display: 'flex', gap: '4px', marginBottom: '26px', flexWrap: 'wrap' }}>
-            {(Object.keys(CATEGORY_META) as Category[]).map((cat) => (
+            {/* Only categories that actually render a section below get a
+                jump chip. The sections themselves are skipped when empty
+                (see the `grouped[cat].length === 0 ? null` render further
+                down), so a chip for an empty category pointed at a ref that
+                was never attached and its click silently did nothing. */}
+            {(Object.keys(CATEGORY_META) as Category[]).filter((cat) => grouped[cat].length > 0).map((cat) => (
               <button
                 key={cat}
                 onClick={() => sectionRefs.current[cat]?.scrollIntoView({ behavior: 'smooth' })}

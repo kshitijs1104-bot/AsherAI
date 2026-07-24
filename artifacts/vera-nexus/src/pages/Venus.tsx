@@ -143,6 +143,27 @@ const SHOW_GOAL_PANEL_KEY = 've_show_goal_panel';
 const SHOW_ROADMAP_KEY = 've_show_roadmap';
 const SIDEBAR_COLLAPSED_KEY = 've_sidebar_collapsed';
 
+// Tracks whether the viewport is below Tailwind's `md` breakpoint. Used to
+// force the sidebar into its rail on phones without touching the founder's
+// stored desktop preference (see railMode in VenusPage).
+const NARROW_QUERY = '(max-width: 767px)';
+
+function useIsNarrowViewport(): boolean {
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(NARROW_QUERY).matches,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_QUERY);
+    const onChange = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
+    setIsNarrow(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  return isNarrow;
+}
+
 function loadPanelPref(key: string, defaultValue = true): boolean {
   try {
     const raw = localStorage.getItem(key);
@@ -222,6 +243,23 @@ export function VenusPage() {
   const [showGoalPanel, setShowGoalPanel] = useState(() => loadPanelPref(SHOW_GOAL_PANEL_KEY));
   const [showRoadmap, setShowRoadmap] = useState(() => loadPanelPref(SHOW_ROADMAP_KEY));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadPanelPref(SIDEBAR_COLLAPSED_KEY, false));
+  // Venus was authored desktop-only (no responsive breakpoint anywhere in
+  // this file), so the 260px sidebar kept its full width on a phone: at
+  // 390px it left ~130px for the chat column and squeezed the composer
+  // textarea down to ~32px wide — the primary input of the whole product,
+  // unusable. Below `md` the sidebar is forced to its existing 44px rail
+  // (which already carries the expand toggle, theme switch and bell), so
+  // the chat keeps the screen. This deliberately does NOT write to
+  // SIDEBAR_COLLAPSED_KEY — a phone visit must not silently collapse the
+  // sidebar for the founder's next desktop session.
+  const isNarrow = useIsNarrowViewport();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // On a phone the sidebar starts as the rail and, when opened, floats over
+  // the chat as a drawer instead of pushing it sideways — pushing is what
+  // squeezed the composer to nothing. On desktop nothing changes: the
+  // persisted collapse preference still drives it.
+  const railMode = isNarrow ? !mobileNavOpen : sidebarCollapsed;
+  const asideFloats = isNarrow && mobileNavOpen;
   // Command Center opens INTO this same view — same swap New Chat does —
   // never a separate route. 'chat' is the default/only state a fresh
   // session or session-switch returns to. The one exception: a fresh page
@@ -320,7 +358,13 @@ export function VenusPage() {
 
   const toggleGoalPanel = () => setShowGoalPanel((v) => { const next = !v; savePanelPref(SHOW_GOAL_PANEL_KEY, next); return next; });
   const toggleRoadmap = () => setShowRoadmap((v) => { const next = !v; savePanelPref(SHOW_ROADMAP_KEY, next); return next; });
-  const toggleSidebar = () => setSidebarCollapsed((v) => { const next = !v; savePanelPref(SIDEBAR_COLLAPSED_KEY, next); return next; });
+  // On a phone this drives the transient drawer and must not write the
+  // desktop preference — otherwise opening the nav once on mobile would
+  // leave the founder's next desktop session collapsed.
+  const toggleSidebar = () => {
+    if (isNarrow) { setMobileNavOpen((v) => !v); return; }
+    setSidebarCollapsed((v) => { const next = !v; savePanelPref(SIDEBAR_COLLAPSED_KEY, next); return next; });
+  };
 
   const startRename = (s: ChatSession, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -521,7 +565,7 @@ export function VenusPage() {
       {/* Left Sidebar — collapsible to a thin rail so the chat can go full
           width. Collapsed state persists (ve_sidebar_collapsed) so it
           doesn't reset back open on the next visit. */}
-      {sidebarCollapsed ? (
+      {railMode ? (
         <div
           className="w-[44px] flex flex-col items-center gap-1 shrink-0 sticky top-0 h-screen"
           style={{ background: 'var(--v7-bg-raised)', borderRight: '1px solid var(--v7-border)', paddingTop: '20px' }}
@@ -540,9 +584,23 @@ export function VenusPage() {
           <NotificationBell onOpenCommandCenter={() => setMainView('command-center')} />
         </div>
       ) : (
+      <>
+      {asideFloats && (
+        <div
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+          className="fixed inset-0 z-40"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+        />
+      )}
       <aside
-        className="w-[260px] flex flex-col shrink-0 sticky top-0 h-screen"
-        style={{ background: 'var(--v7-bg-raised)', borderRight: '1px solid var(--v7-border)', padding: '20px 14px' }}
+        className={`w-[260px] flex flex-col shrink-0 h-screen ${asideFloats ? 'fixed inset-y-0 left-0 z-50' : 'sticky top-0'}`}
+        style={{
+          background: 'var(--v7-bg-raised)',
+          borderRight: '1px solid var(--v7-border)',
+          padding: '20px 14px',
+          ...(asideFloats ? { boxShadow: '0 0 40px rgba(0,0,0,0.45)' } : {}),
+        }}
       >
         {/* Brand mark — moved here from the chat header so it doesn't eat
             vertical space above the goal panel. Sits once, above the back
@@ -802,6 +860,7 @@ export function VenusPage() {
           )}
         </div>
       </aside>
+      </>
       )}
 
       {/* Main Chat Area — swaps to Command Center in place, same view New
@@ -822,7 +881,7 @@ export function VenusPage() {
           accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"
           className="hidden"
         />
-        <div style={{ padding: '14px 32px 0' }}>
+        <div style={{ padding: isNarrow ? '14px 16px 0' : '14px 32px 0' }}>
           {showGoalPanel && <GoalPanel serverChatId={currentSession.serverChatId} onRequireServerChat={ensureServerChat} />}
           {showRoadmap && <RoadmapTracker chatId={currentSession.serverChatId} />}
         </div>
@@ -837,7 +896,7 @@ export function VenusPage() {
           // still centers when everything fits, but collapses to 0 and lets
           // the container scroll normally once content is taller than the
           // available space.
-          <div className="flex-1 overflow-y-auto flex flex-col items-center text-center relative" style={{ padding: '56px 32px 48px' }}>
+          <div className="flex-1 overflow-y-auto flex flex-col items-center text-center relative" style={{ padding: isNarrow ? '32px 16px 32px' : '56px 32px 48px' }}>
             <div
               className="absolute pointer-events-none"
               style={{
@@ -930,7 +989,7 @@ export function VenusPage() {
                 </button>
               </form>
 
-              <div className="grid grid-cols-2 gap-[10px] w-full">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-[10px] w-full">
                 {EXAMPLE_PROMPTS.map((prompt, i) => (
                   <button
                     key={prompt}
@@ -1371,6 +1430,12 @@ function ConfidenceBadge({ confidence, note }: { confidence?: 'verified' | 'expl
 }
 
 function ResponseJumpNav({ cards }: { cards: any[] }) {
+  // With a single card the "nav" is one chip sitting directly above the very
+  // heading it links to — the title rendered twice, two lines apart, for no
+  // navigational gain. Jumping only earns its space once there's somewhere
+  // to jump to.
+  if (cards.length < 2) return null;
+
   return (
     <div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface2)]/80 p-2">
       {cards.map((card, index) => (

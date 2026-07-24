@@ -632,6 +632,20 @@
   }
 }
 
+/* Tailwind's preflight resets `cursor` on <button> back to the UA default
+   (`default`), so every button in the app — sidebar nav, composer send,
+   workflow Activate, theme toggle — rendered with an arrow cursor and read
+   as non-interactive on hover. Restore the pointer once, globally, rather
+   than sprinkling `cursor-pointer` on individual buttons, and give disabled
+   controls the affordance that says "this won't do anything yet". */
+:where(button, [role='button'], summary):not(:disabled):not([aria-disabled='true']) {
+  cursor: pointer;
+}
+:where(button, [role='button']):disabled,
+:where(button, [role='button'])[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
 /* Vera concept v7 — hero mark breathing glow, used on Venus.tsx empty state */
 @keyframes v7-breathe {
   0%, 100% { box-shadow: 0 0 30px -10px var(--v7-glow-shadow-a); }
