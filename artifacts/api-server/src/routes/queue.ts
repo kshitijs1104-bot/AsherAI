@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, queueItemsTable } from "@workspace/db";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireUserId } from "../middlewares/auth";
 import { performQueueItemSendAction } from "../lib/connectors/sendAction";
@@ -11,35 +11,56 @@ const router = Router();
 // drafted/decided/found — this is deliberately never a "create" endpoint for
 // the founder; items only ever arrive via connectors/workflows/decision
 // follow-ups (later phases) or, for now, the first-run demo seed below.
-const DEMO_ITEMS: { type: string; source: string; title: string; body: string; draftContent: string | null }[] = [
-  {
-    type: "draft_reply",
-    source: "gmail",
-    title: "Reply drafted for Priya (Northwind Retail)",
-    body: "Asked about the Q3 pricing tier — drafted a reply covering the volume discount and renewal timeline.",
-    draftContent:
-      "Hi Priya,\n\nThanks for flagging this — for the volume you're at, the Q3 tier works out to the discounted rate we discussed on the call. I've attached the updated schedule; happy to lock in the renewal date whenever works for you.\n\nBest,\n",
-  },
-  {
-    type: "insight",
-    source: "connector:sheets",
-    title: "Weekly revenue sheet: 3rd week of flat MRR",
-    body: "Your tracked revenue sheet has shown no net new MRR for 3 consecutive weekly syncs — usually the first sign worth a look before it shows up in the monthly numbers.",
-    draftContent: null,
-  },
-  {
-    type: "automation_suggestion",
-    source: "workflow",
-    title: "Automate: weekly report from Sheets",
-    body: "You've manually pulled the same weekly numbers into a summary twice now — Vera can generate this automatically every Monday from your connected sheet.",
-    draftContent: null,
-  },
+// The board starts EMPTY apart from this one item. It previously seeded
+// three fabricated entries — a drafted reply to "Priya (Northwind Retail)",
+// a flat-MRR reading off a revenue sheet, a suggestion to automate a report
+// the founder had supposedly run twice — none of which referred to anything
+// real. Every one of them described work Vera had not done, sourced from
+// accounts that were not connected, so the founder's first impression of
+// the product was three pieces of fiction they had to clear by hand. What
+// lands here from now on is only ever something Vera actually did for THIS
+// founder, via a connector poll, a workflow run, or a decision follow-up.
+//
+// The single exception is this welcome item: it makes no claim about work
+// performed, it just points at the one setup step that makes everything
+// else start arriving. `source: "vera"` is what the frontend keys off to
+// route its action at Workflows instead of treating it as a draft to send.
+const WELCOME_ITEM = {
+  type: "welcome",
+  source: "vera",
+  title: "Welcome to Vera — your personalized business consultant",
+  body: "This board is where everything Vera drafts, decides, or finds for you shows up. It's quiet right now because nothing is connected yet — set up your first workflow and Vera starts filling it in on its own.",
+  draftContent: null,
+  externalId: "welcome",
+};
+
+// Titles of the three fabricated rows the old seeder wrote. Accounts
+// created before this change still hold them, and dropping the seeder does
+// nothing about rows already in the table — so they're cleared here.
+// Matched on exact title AND the exact source the seeder paired it with,
+// which no genuine connector row can collide with (a real Gmail item's
+// title is built from the actual thread's subject).
+const RETIRED_DEMO_ROWS: { title: string; source: string }[] = [
+  { title: "Reply drafted for Priya (Northwind Retail)", source: "gmail" },
+  { title: "Weekly revenue sheet: 3rd week of flat MRR", source: "connector:sheets" },
+  { title: "Automate: weekly report from Sheets", source: "workflow" },
 ];
 
-async function ensureDemoSeed(userId: string) {
+async function purgeRetiredDemoRows(userId: string) {
+  await db.delete(queueItemsTable).where(
+    and(
+      eq(queueItemsTable.userId, userId),
+      or(...RETIRED_DEMO_ROWS.map((r) => and(eq(queueItemsTable.title, r.title), eq(queueItemsTable.source, r.source)))),
+    ),
+  );
+}
+
+// Runs once per founder, keyed on "has this user ever had a queue row",
+// so clearing the welcome item doesn't bring it back on the next load.
+async function ensureWelcomeItem(userId: string) {
   const [existing] = await db.select({ id: queueItemsTable.id }).from(queueItemsTable).where(eq(queueItemsTable.userId, userId)).limit(1);
   if (existing) return;
-  await db.insert(queueItemsTable).values(DEMO_ITEMS.map((item) => ({ userId, ...item })));
+  await db.insert(queueItemsTable).values({ userId, ...WELCOME_ITEM }).onConflictDoNothing();
 }
 
 // GET /queue — pending items first (oldest first, so the founder clears the
@@ -49,7 +70,8 @@ async function ensureDemoSeed(userId: string) {
 router.get("/queue", requireAuth, async (req, res) => {
   try {
     const userId = requireUserId(req);
-    await ensureDemoSeed(userId);
+    await purgeRetiredDemoRows(userId);
+    await ensureWelcomeItem(userId);
 
     const rows = await db
       .select()

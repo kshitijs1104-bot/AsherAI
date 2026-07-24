@@ -13,9 +13,28 @@ const router = Router();
 
 const OAUTH_STATE_COOKIE = "ve_oauth_state";
 
+// The redirect_uri handed to the provider AND later replayed at token
+// exchange — the two must match each other byte-for-byte, and must match
+// what's whitelisted in the provider's console, or the flow dies at
+// "redirect_uri_mismatch" before the founder ever sees a consent screen.
+//
+// Reads x-forwarded-proto directly rather than trusting req.protocol alone:
+// app.ts sets `trust proxy` (which makes req.protocol correct), but this is
+// the one value where getting it wrong silently breaks every connector, so
+// it doesn't rely on that setting still being there. Falls back to https for
+// any non-localhost host, since a deployed origin is effectively never
+// plain http.
 function redirectUriFor(type: string, req: any): string {
   const envVar = `${type.toUpperCase()}_REDIRECT_URI`;
-  return process.env[envVar] ?? `${req.protocol}://${req.get("host")}/api/connectors/${type}/callback`;
+  const override = process.env[envVar];
+  if (override) return override;
+
+  const host = String(req.get("host") ?? "");
+  const forwarded = String(req.get("x-forwarded-proto") ?? "").split(",")[0]?.trim();
+  const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(host);
+  const proto = forwarded || (isLocal ? req.protocol : "https");
+
+  return `${proto}://${host}/api/connectors/${type}/callback`;
 }
 
 // Where the browser lands after a successful/failed OAuth round trip.
@@ -64,6 +83,13 @@ router.get("/connectors/:type/auth", requireAuth, async (req, res) => {
     return res.status(404).json({ error: "This connector isn't available yet" });
   }
 
+  // Logged because "redirect_uri_mismatch" is the single most common way
+  // this flow fails and the provider never tells you which URI it received
+  // — this is the exact string that has to be whitelisted in the provider's
+  // console, copyable straight out of the server logs.
+  const redirectUri = redirectUriFor(type, req);
+  req.log.info({ connector: type, redirectUri }, "connector oauth start");
+
   const state = randomBytes(16).toString("hex");
   // Standard OAuth CSRF guard: a random value minted only at the start of
   // THIS browser's auth attempt, round-tripped through the provider, and
@@ -72,7 +98,7 @@ router.get("/connectors/:type/auth", requireAuth, async (req, res) => {
   // attacker's own authorization code and link the attacker's account into
   // the victim's session.
   res.cookie(OAUTH_STATE_COOKIE, state, { httpOnly: true, sameSite: "lax", maxAge: 10 * 60 * 1000 });
-  return res.redirect(adapter.getAuthUrl(redirectUriFor(type, req), state));
+  return res.redirect(adapter.getAuthUrl(redirectUri, state));
 });
 
 router.get("/connectors/:type/callback", requireAuth, async (req, res) => {

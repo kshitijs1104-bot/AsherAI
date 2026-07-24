@@ -425,42 +425,64 @@
    plain gray, not alpha-blended rgba) — solid so they don't read as a
    translucent wash, but tinted so surfaces/chips/hover states actually
    carry the color variety this pass is about, instead of pushing all of
-   it onto borders and text alone. */
-.v7-light {
-  --v7-bg: #f7f5f1;
-  --v7-bg-raised: #ffffff;
-  --v7-bg-raised-2: #eae6de;
-  --v7-border: #ddd5c8;
-  --v7-border-strong: #c7bba8;
-  --v7-text: #1c1a17;
-  --v7-text-dim: #57534a;
-  --v7-text-mute: #7c766b;
-  --v7-cyan: #3a5998;
-  --v7-pink: #bf5b3f;
-  --v7-cyan-soft: #e6eaf1;
-  --v7-cyan-strong: #3a5998;
-  --v7-pink-soft: #f5e6df;
-  --v7-tint: #ffffff;
-  --v7-tint-border: #c9c1b0;
-  --v7-glow-1: rgba(58,89,152,0.07);
-  --v7-glow-2: rgba(124,92,168,0.05);
-  --v7-glow-shadow-a: rgba(58,89,152,0.16);
-  --v7-glow-shadow-b: rgba(58,89,152,0.26);
+   it onto borders and text alone.
 
-  --bg: #f7f5f1;
+   SIXTH PASS — contrast. The fifth pass fixed hue variety but left the
+   whole surface washed out: every neutral was a beige within a few points
+   of its neighbours (#f7f5f1 page, #eae6de raised, #ddd5c8 border), so
+   panels barely separated from the page, and the accents were desaturated
+   far enough that blue, green and terracotta all read as the same dusty
+   mid-tone. --v7-text-mute (#7c766b on #f7f5f1) measured 4.14:1, under the
+   4.5:1 AA floor, and --v7-pink (#bf5b3f on white) measured 4.39:1 — both
+   genuinely failing, which is why secondary text and half the card-type
+   labels felt washed out rather than merely quiet.
+
+   This pass keeps the warm identity but pulls the neutrals apart and
+   restores chroma to the accents (ratios measured, not estimated):
+     - Neutrals step in visible increments (page → raised → sunken), so a
+       card reads as a card without needing a heavy border.
+     - Text now clears AA comfortably: --v7-text 16.33:1, --v7-text-dim
+       9.81:1, --v7-text-mute 6.21:1 (up from 4.14:1).
+     - Accents move to saturated hues that stay legible on white — blue
+       6.70:1, terracotta 5.18:1 (up from 4.39:1), green 5.02:1, violet
+       6.98:1. Blue and green give up a little contrast versus the old
+       dusty tones (6.86 and 6.15) in exchange for the chroma that makes
+       them read as distinct hues at all, and both stay far above AA. */
+.v7-light {
+  --v7-bg: #f4f2ee;
+  --v7-bg-raised: #ffffff;
+  --v7-bg-raised-2: #e7e3dc;
+  --v7-border: #cfc8bb;
+  --v7-border-strong: #a89e8c;
+  --v7-text: #161512;
+  --v7-text-dim: #403c34;
+  --v7-text-mute: #605949;
+  --v7-cyan: #1d4ed8;
+  --v7-pink: #c2410c;
+  --v7-cyan-soft: #dce6fd;
+  --v7-cyan-strong: #1d4ed8;
+  --v7-pink-soft: #fde4d3;
+  --v7-tint: #ffffff;
+  --v7-tint-border: #bdb4a3;
+  --v7-glow-1: rgba(29,78,216,0.09);
+  --v7-glow-2: rgba(126,34,206,0.07);
+  --v7-glow-shadow-a: rgba(29,78,216,0.20);
+  --v7-glow-shadow-b: rgba(29,78,216,0.32);
+
+  --bg: #f4f2ee;
   --surface: #ffffff;
-  --surface2: #eae6de;
-  --surface3: #ddd5c8;
-  --border: #c7bba8;
-  --border2: #c7bba8;
-  --text: #1c1a17;
-  --muted: #57534a;
-  --muted-text: #57534a;
-  --dim: #7c766b;
-  --indigo: #3a5998;
-  --indigo-light: #7c5ca8;
-  --mint: #3d6b4f;
-  --green: #bf5b3f;
+  --surface2: #ebe7e0;
+  --surface3: #ddd7cb;
+  --border: #cfc8bb;
+  --border2: #b5ab99;
+  --text: #161512;
+  --muted: #403c34;
+  --muted-text: #403c34;
+  --dim: #605949;
+  --indigo: #1d4ed8;
+  --indigo-light: #7e22ce;
+  --mint: #15803d;
+  --green: #c2410c;
   font-weight: 500;
 }
 

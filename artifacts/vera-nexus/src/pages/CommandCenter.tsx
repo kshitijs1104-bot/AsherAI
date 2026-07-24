@@ -1,11 +1,11 @@
 import { useRef, useState, type CSSProperties } from 'react';
+import { useLocation } from 'wouter';
 import { ArrowLeft, Flame } from 'lucide-react';
 import {
   useQueue, useQueueAction, useDailyBrief, useRunInstantAction,
-  type QueueItem, type InstantActionType,
+  type QueueItem, type InstantActionType, type DailyBriefStats,
 } from '../lib/venusApi';
 import type { VenusTheme } from '../lib/venusTheme';
-import { formatMinutes } from './TodayCard';
 
 // "OS" — the operational home Vera opens INTO the same view New Chat opens
 // into (see Venus.tsx's mainView state), never a separate route/page. The
@@ -23,12 +23,17 @@ const DARK = {
   coral: '#d97a63', coralDim: 'rgba(217,122,99,0.14)', coralBorder: 'rgba(217,122,99,0.3)',
   marginRule: 'rgba(217,122,99,0.35)', dogear: '#0a0d12',
 };
+// `faint` carries the timestamp/source line on every row and was #a89d84 on
+// #fffdf7 — 2.64:1 measured, less than half the AA floor, so the one piece
+// of text saying WHERE an item came from was the hardest thing on the board
+// to read. Now 4.55:1, with `muted` at 7.02:1. Matches the contrast pass in
+// index.css's .v7-light.
 const LIGHT = {
-  bg: '#f2ede2', paper: '#fffdf7', paperEdge: '#e3dac6', line: 'rgba(25,20,10,0.08)',
-  text: '#242019', muted: '#786f5c', faint: '#a89d84',
-  teal: '#0e8f72', tealDim: 'rgba(14,143,114,0.12)', tealBorder: 'rgba(14,143,114,0.3)',
-  coral: '#a5502e', coralDim: 'rgba(165,80,46,0.1)', coralBorder: 'rgba(165,80,46,0.28)',
-  marginRule: 'rgba(165,80,46,0.32)', dogear: '#f2ede2',
+  bg: '#efe9dc', paper: '#fffdf7', paperEdge: '#ddd3bb', line: 'rgba(25,20,10,0.12)',
+  text: '#1c1913', muted: '#5f5747', faint: '#7d7460',
+  teal: '#0b7a61', tealDim: 'rgba(11,122,97,0.14)', tealBorder: 'rgba(11,122,97,0.38)',
+  coral: '#8f4325', coralDim: 'rgba(143,67,37,0.12)', coralBorder: 'rgba(143,67,37,0.34)',
+  marginRule: 'rgba(143,67,37,0.38)', dogear: '#efe9dc',
 };
 
 type Palette = typeof DARK;
@@ -76,11 +81,29 @@ function formatTime(iso: string): string {
 
 function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: Palette; category: Category; fresh?: boolean }) {
   const action = useQueueAction();
+  const [, navigate] = useLocation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.draftContent ?? '');
   const isDone = item.status !== 'pending';
   const meta = CATEGORY_META[category];
   const isFlagged = item.type === 'schedule_alert' || item.type === 'goal_risk';
+  const resolution = resolutionFor(item);
+
+  // An item that exists because something isn't set up yet was previously
+  // "resolved" by ticking it off, which cleared the row and left the actual
+  // problem exactly where it was — the board told you to connect Slack, you
+  // pressed the only affirmative button, and Slack stayed unconnected. When
+  // an item has somewhere to go, the primary action goes there first and
+  // only marks the row resolved once the founder is on the page that can
+  // actually fix it.
+  const handleResolve = () => {
+    if (resolution) {
+      action.mutate({ id: item.id, action: 'accept' });
+      navigate(resolution.href);
+      return;
+    }
+    action.mutate({ id: item.id, action: 'accept' });
+  };
 
   const handleAccept = () => action.mutate({ id: item.id, action: 'accept' });
   const handleReject = () => action.mutate({ id: item.id, action: 'reject' });
@@ -139,7 +162,9 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
               </>
             ) : (
               <>
-                <button type="button" onClick={handleAccept} style={linkStyle(palette, false, isFlagged)}>{meta.acceptLabel}</button>
+                <button type="button" onClick={resolution ? handleResolve : handleAccept} style={linkStyle(palette, false, isFlagged)}>
+                  {resolution ? resolution.label : meta.acceptLabel}
+                </button>
                 {item.draftContent && <button type="button" onClick={() => setEditing(true)} style={linkStyle(palette, true)}>Edit</button>}
                 <button type="button" onClick={handleReject} style={linkStyle(palette, true)}>{meta.rejectLabel}</button>
               </>
@@ -154,6 +179,96 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
       </div>
     </div>
   );
+}
+
+// The streak used to be a 10.5px sticker rotated 3° into the top-right
+// corner, and the counters under it were 10px mono labels — small enough
+// that the one surface meant to build a daily habit was the easiest thing
+// on the page to miss entirely. This gives the streak the top line, at a
+// size that registers, and says something addressed to the founder rather
+// than printing a bare number.
+function streakLine(streak: number): { headline: string; sub: string } {
+  if (streak <= 0) return { headline: 'Day one', sub: 'Clear something off the board and the streak starts today.' };
+  if (streak === 1) return { headline: '1 day in a row', sub: 'One day is a start. Come back tomorrow and it becomes a habit.' };
+  if (streak < 5) return { headline: `${streak} days in a row`, sub: "You've shown up every day this week. Vera's been keeping up." };
+  if (streak < 14) return { headline: `${streak} days in a row`, sub: 'This is a routine now, not a novelty.' };
+  return { headline: `${streak} days in a row`, sub: "Genuinely impressive. Vera works better the longer you've done this." };
+}
+
+// "Time saved" was a number in minutes — 8m, 24m — which reads as a
+// rounding error and quietly invites the founder to check the maths on a
+// figure nobody can verify. Free time is the same idea told as a joke: the
+// number goes up honestly with automations, but the framing never asks to
+// be taken literally, and once you're past a handful of automations it just
+// gives up and says infinity.
+function freeTimeLabel(minutes: number): string {
+  if (minutes <= 0) return '—';
+  if (minutes >= 240) return '∞';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+}
+
+function StreakBand({ palette, stats, streak }: { palette: Palette; stats: DailyBriefStats; streak: number }) {
+  const { headline, sub } = streakLine(streak);
+  const counters = [
+    stats.decisionsCaptured > 0 && [String(stats.decisionsCaptured), stats.decisionsCaptured === 1 ? 'decision captured' : 'decisions captured'],
+    stats.lessonsLearned > 0 && [String(stats.lessonsLearned), stats.lessonsLearned === 1 ? 'lesson learned' : 'lessons learned'],
+    stats.automationsCompleted > 0 && [String(stats.automationsCompleted), stats.automationsCompleted === 1 ? 'automation run' : 'automations run'],
+    stats.timeSavedMinutes > 0 && [freeTimeLabel(stats.timeSavedMinutes), 'free time earned'],
+  ].filter((x): x is [string, string] => !!x);
+
+  return (
+    <div
+      style={{
+        marginBottom: '26px',
+        padding: '18px 20px',
+        borderRadius: '10px',
+        background: palette.tealDim,
+        border: `1px solid ${palette.tealBorder}`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: counters.length ? '14px' : 0 }}>
+        <Flame style={{ width: 20, height: 20, color: palette.teal, flexShrink: 0 }} />
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontSize: '19px', fontWeight: 600, color: palette.text, margin: 0, lineHeight: 1.25 }}>{headline}</p>
+          <p style={{ fontSize: '13px', fontStyle: 'italic', color: palette.muted, margin: '2px 0 0', lineHeight: 1.4 }}>{sub}</p>
+        </div>
+      </div>
+
+      {counters.length > 0 && (
+        <div style={{ display: 'flex', gap: '26px', flexWrap: 'wrap', paddingTop: '14px', borderTop: `1px solid ${palette.tealBorder}` }}>
+          {counters.map(([value, label]) => (
+            <span key={label} style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '20px', fontWeight: 600, color: palette.teal, lineHeight: 1.1 }}>{value}</span>
+              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', color: palette.muted, letterSpacing: '0.03em' }}>{label}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Where a queue item's primary action should actually take the founder.
+// Derived from the item rather than stored on it, so no schema change is
+// needed and older rows written before this existed still route correctly.
+// Returns null for items whose resolution genuinely is just "I've seen
+// this" (a plain insight, a read alert) — those keep the old tick-off.
+function resolutionFor(item: QueueItem): { label: string; href: string } | null {
+  if (item.type === 'welcome') return { label: 'Set up workflows', href: '/venus/workflows' };
+  if (item.type === 'automation_suggestion') return { label: 'Set up workflow', href: '/venus/workflows' };
+  if (item.type === 'goal_risk') return { label: 'Review goal', href: '/venus/goals' };
+  if (item.type === 'decision_followup') return { label: 'Log outcome', href: '/venus/decisions' };
+
+  // "Reconnect Slack"-shaped items: the fix lives on the Workflows page,
+  // which is where every connector is actually linked from.
+  if (item.type === 'connector_error' || item.type === 'connector_setup') {
+    return { label: 'Fix connection', href: '/venus/workflows' };
+  }
+
+  return null;
 }
 
 // Past-tense echo of whichever verb the founder actually pressed, so the
@@ -256,9 +371,14 @@ export function CommandCenterSection({ theme, onBack }: { theme: VenusTheme; onB
   const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const boardName = theme === 'light' ? 'Whiteboard' : 'Blackboard';
 
+  // overflowY below is load-bearing: Venus.tsx mounts this inside a
+  // `flex-1 flex flex-col overflow-hidden` column, so without its own scroll
+  // context everything past the fold was simply clipped and unreachable —
+  // the board could not be scrolled at all once it held more than a
+  // screenful.
   return (
     <div
-      style={{ background: palette.bg, minHeight: '100%', flex: 1, display: 'flex', justifyContent: 'center', padding: '48px 20px 80px', fontFamily: "'Fraunces', serif", color: palette.text }}
+      style={{ background: palette.bg, minHeight: '100%', flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: '48px 20px 80px', fontFamily: "'Fraunces', serif", color: palette.text }}
     >
       <div style={{ width: '100%', maxWidth: '640px' }}>
         <a onClick={onBack} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: palette.muted, textDecoration: 'none', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '28px', cursor: 'pointer' }}>
@@ -270,12 +390,6 @@ export function CommandCenterSection({ theme, onBack }: { theme: VenusTheme; onB
           <div style={{ position: 'absolute', left: 34, top: 0, bottom: 0, width: 1, background: palette.marginRule }} />
           {/* dog-ear */}
           <div style={{ position: 'absolute', top: 0, right: 0, width: 0, height: 0, borderStyle: 'solid', borderWidth: '0 34px 34px 0', borderColor: `transparent ${palette.dogear} transparent transparent` }} />
-
-          {streak > 0 && (
-            <div style={{ position: 'absolute', top: 36, right: -6, transform: 'rotate(3deg)', background: palette.tealDim, border: `1px solid ${palette.tealBorder}`, color: palette.teal, fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', letterSpacing: '0.03em', padding: '5px 10px 5px 8px', borderRadius: '3px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Flame style={{ width: 13, height: 13 }} /> {streak}-day streak
-            </div>
-          )}
 
           <p style={{ fontStyle: 'italic', fontSize: '13px', color: palette.muted, margin: '0 0 4px' }}>{dateLabel}</p>
           <h1 style={{ fontSize: '28px', fontWeight: 500, margin: '0 0 6px' }}>Today's {boardName}</h1>
@@ -289,21 +403,7 @@ export function CommandCenterSection({ theme, onBack }: { theme: VenusTheme; onB
               Lives here, not buried in a settings page, since this is the
               one screen a founder is meant to open every day. */}
           {dailyBrief.data?.stats && (
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '22px', paddingBottom: '18px', borderBottom: `1px solid ${palette.line}` }}>
-              {[
-                dailyBrief.data.stats.decisionsCaptured > 0 && [String(dailyBrief.data.stats.decisionsCaptured), dailyBrief.data.stats.decisionsCaptured === 1 ? 'decision captured' : 'decisions captured'],
-                dailyBrief.data.stats.lessonsLearned > 0 && [String(dailyBrief.data.stats.lessonsLearned), dailyBrief.data.stats.lessonsLearned === 1 ? 'lesson learned' : 'lessons learned'],
-                dailyBrief.data.stats.automationsCompleted > 0 && [String(dailyBrief.data.stats.automationsCompleted), dailyBrief.data.stats.automationsCompleted === 1 ? 'automation completed' : 'automations completed'],
-                dailyBrief.data.stats.timeSavedMinutes > 0 && [formatMinutes(dailyBrief.data.stats.timeSavedMinutes), 'time saved'],
-              ]
-                .filter((x): x is [string, string] => !!x)
-                .map(([value, label]) => (
-                  <span key={label} style={{ display: 'flex', alignItems: 'baseline', gap: '5px' }}>
-                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '13px', fontWeight: 500, color: palette.teal }}>{value}</span>
-                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', color: palette.faint, letterSpacing: '0.03em' }}>{label}</span>
-                  </span>
-                ))}
-            </div>
+            <StreakBand palette={palette} stats={dailyBrief.data.stats} streak={streak} />
           )}
 
           <div style={{ display: 'flex', gap: '4px', marginBottom: '26px', flexWrap: 'wrap' }}>

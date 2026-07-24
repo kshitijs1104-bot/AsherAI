@@ -197,7 +197,7 @@ function groupSavedByType(saved: ReturnType<typeof getSavedAnalyses>) {
 // on selection (see handleFileSelect), not at send time, so a bad file
 // (wrong type, too large) fails right away instead of only surfacing once
 // the whole message send fails.
-function AttachmentChip({ fileName, uploading, error, onRemove }: { fileName?: string; uploading: boolean; error?: string; onRemove: () => void }) {
+function AttachmentChip({ fileName, previewUrl, uploading, error, onRemove }: { fileName?: string; previewUrl?: string | null; uploading: boolean; error?: string; onRemove: () => void }) {
   if (error) {
     return (
       <div
@@ -209,6 +209,38 @@ function AttachmentChip({ fileName, uploading, error, onRemove }: { fileName?: s
         <button onClick={onRemove} title="Dismiss">
           <X className="w-3.5 h-3.5" />
         </button>
+      </div>
+    );
+  }
+
+  // An image shows itself. The thumbnail is the confirmation that the right
+  // file was picked — a filename is not, especially for camera rolls and
+  // screenshots where every name looks the same.
+  if (previewUrl) {
+    return (
+      <div
+        className="inline-flex items-center gap-2.5 text-[12px] font-medium p-1.5 pr-2.5 rounded-xl mb-2"
+        style={{ background: 'var(--v7-bg-raised-2, var(--surface2))', color: 'var(--v7-text-dim, var(--dim))' }}
+      >
+        <div className="relative shrink-0">
+          <img
+            src={previewUrl}
+            alt={fileName ? `Preview of ${fileName}` : 'Attached image preview'}
+            className="w-11 h-11 rounded-lg object-cover"
+            style={{ border: '1px solid var(--v7-border, var(--border))' }}
+          />
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-lg" style={{ background: 'rgba(0,0,0,0.45)' }}>
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#fff' }} />
+            </div>
+          )}
+        </div>
+        <span className="truncate max-w-[180px]">{uploading ? 'Uploading…' : fileName}</span>
+        {!uploading && (
+          <button onClick={onRemove} title="Remove attachment" className="shrink-0">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     );
   }
@@ -276,6 +308,9 @@ export function VenusPage() {
   const [input, setInput] = useState('');
   const [companyReports, setCompanyReports] = useState<Record<string, CompanyReportState>>(loadCompanyReportCache);
   const [pendingAttachment, setPendingAttachment] = useState<UploadedAttachment | null>(null);
+  // Local object URL for an image attachment, so the composer shows the
+  // picture itself rather than its filename. Null for non-image files.
+  const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadAttachment = useUploadAttachment();
   // Backs the Command Center nav row's unread badge — same query
@@ -295,10 +330,28 @@ export function VenusPage() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
+
+    // Preview comes from the local File, not the uploaded URL: it can be
+    // shown the instant the picker closes (while the upload is still in
+    // flight) and it costs no extra network round trip. Attaching a
+    // screenshot and being shown only "Screenshot 2026-07-25.png" gives the
+    // founder no way to confirm they picked the right image.
+    setAttachmentPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    });
+
     uploadAttachment.mutate(
       { file, chatId: currentSession.serverChatId },
       { onSuccess: (attachment) => setPendingAttachment(attachment) },
     );
+  };
+
+  // Object URLs are held by the browser until explicitly revoked, so every
+  // path that drops the attachment goes through here.
+  const clearAttachment = () => {
+    setAttachmentPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
+    setPendingAttachment(null);
   };
 
   const messages = currentSession.messages;
@@ -409,7 +462,7 @@ export function VenusPage() {
     // awareness of it at all, short of a deeper multimodal-input rework.
     const text = pendingAttachment ? `${baseText}\n\n[Attached file: ${pendingAttachment.fileName}]`.trim() : baseText;
     setInput('');
-    setPendingAttachment(null);
+    clearAttachment();
 
     const newMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
     const updatedTitle = messages.length === 0 ? titleFromMessage(text) : currentSession.title;
@@ -951,9 +1004,10 @@ export function VenusPage() {
               {(pendingAttachment || uploadAttachment.isPending || uploadAttachment.isError) && (
                 <AttachmentChip
                   fileName={pendingAttachment?.fileName}
+                  previewUrl={attachmentPreview}
                   uploading={uploadAttachment.isPending}
                   error={uploadAttachment.isError ? (uploadAttachment.error instanceof Error ? uploadAttachment.error.message : 'Upload failed') : undefined}
-                  onRemove={() => { setPendingAttachment(null); uploadAttachment.reset(); }}
+                  onRemove={() => { clearAttachment(); uploadAttachment.reset(); }}
                 />
               )}
               <form
@@ -1107,9 +1161,10 @@ export function VenusPage() {
               <div className="max-w-4xl mx-auto mb-2">
                 <AttachmentChip
                   fileName={pendingAttachment?.fileName}
+                  previewUrl={attachmentPreview}
                   uploading={uploadAttachment.isPending}
                   error={uploadAttachment.isError ? (uploadAttachment.error instanceof Error ? uploadAttachment.error.message : 'Upload failed') : undefined}
-                  onRemove={() => { setPendingAttachment(null); uploadAttachment.reset(); }}
+                  onRemove={() => { clearAttachment(); uploadAttachment.reset(); }}
                 />
               </div>
             )}

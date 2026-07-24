@@ -14,6 +14,17 @@ if (!process.env["CLERK_SECRET_KEY"]) {
 
 const app: Express = express();
 
+// Replit (like every other PaaS here) terminates TLS at its edge and
+// forwards plain HTTP to this process, so without this `req.protocol` is
+// "http" and `req.ip` is the proxy's address. That broke OAuth outright:
+// routes/connectors.ts builds each provider's redirect_uri from
+// req.protocol, so it sent Google `http://<host>/api/connectors/gmail/
+// callback` while the console can only whitelist the https:// form —
+// hence "Error 400: redirect_uri_mismatch" on every connector. Trusting
+// the first proxy hop makes req.protocol/req.ip reflect the original
+// client request.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
