@@ -250,12 +250,12 @@ export function WorkflowsPage() {
       <div className="relative max-w-2xl mx-auto px-6 py-8" style={{ zIndex: 1 }}>
         <div className="flex items-center justify-between mb-6">
           <button
-            onClick={() => navigate('/venus/command-center')}
+            onClick={() => navigate('/venus')}
             className="flex items-center gap-1.5 text-[13px] font-medium"
             style={{ color: 'var(--v7-text-mute)' }}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Back to Command Center
+            Back to Vera
           </button>
           <VenusThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>

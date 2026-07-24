@@ -7,14 +7,14 @@ import {
   detectAnalysisType, typeLabel, titleFromMessage,
   type ChatSession, type ChatMessage, type SavedAnalysisType,
 } from '../lib/venusHistory';
-import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil, LayoutGrid, Workflow as WorkflowIcon, Paperclip, X, Loader2 } from 'lucide-react';
+import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil, LayoutGrid, Workflow as WorkflowIcon, Paperclip, X, Loader2, AlertCircle } from 'lucide-react';
 import { GoalPanel } from './GoalPanel';
 import { RoadmapTracker } from './RoadmapTracker';
 import { TodayCard } from './TodayCard';
 import { VenusThemeToggle } from './VenusThemeToggle';
 import { NotificationBell } from './NotificationBell';
 import { useVenusTheme } from '../lib/venusTheme';
-import { useUploadAttachment, type UploadedAttachment } from '../lib/venusApi';
+import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
 
 // One consistent compact row shape for everything below New Chat — replaces
 // the old mismatched treatment (a separately-styled full-width Command
@@ -22,7 +22,7 @@ import { useUploadAttachment, type UploadedAttachment } from '../lib/venusApi';
 // toggle row). "Nav" rows just navigate; "toggle" rows show a persistent
 // tinted/active state while their panel is open, so the two behaviors read
 // as one family instead of unrelated components bolted together.
-function SidebarNavRow({ icon: Icon, label, onClick }: { icon: typeof LayoutGrid; label: string; onClick: () => void }) {
+function SidebarNavRow({ icon: Icon, label, onClick, badgeCount }: { icon: typeof LayoutGrid; label: string; onClick: () => void; badgeCount?: number }) {
   return (
     <button
       onClick={onClick}
@@ -33,6 +33,17 @@ function SidebarNavRow({ icon: Icon, label, onClick }: { icon: typeof LayoutGrid
     >
       <Icon className="w-3.5 h-3.5" />
       {label}
+      {/* Replaces the separate notification bell — Command Center is
+          already the destination for pending items, so the unread count
+          lives directly on its own nav row instead of a second icon. */}
+      {!!badgeCount && badgeCount > 0 && (
+        <span
+          className="ml-auto flex items-center justify-center rounded-full text-[9px] font-bold"
+          style={{ minWidth: '15px', height: '15px', padding: '0 4px', background: 'var(--red, #e5555c)', color: '#fff', lineHeight: 1 }}
+        >
+          {badgeCount > 9 ? '9+' : badgeCount}
+        </span>
+      )}
     </button>
   );
 }
@@ -162,7 +173,22 @@ function groupSavedByType(saved: ReturnType<typeof getSavedAnalyses>) {
 // on selection (see handleFileSelect), not at send time, so a bad file
 // (wrong type, too large) fails right away instead of only surfacing once
 // the whole message send fails.
-function AttachmentChip({ fileName, uploading, onRemove }: { fileName?: string; uploading: boolean; onRemove: () => void }) {
+function AttachmentChip({ fileName, uploading, error, onRemove }: { fileName?: string; uploading: boolean; error?: string; onRemove: () => void }) {
+  if (error) {
+    return (
+      <div
+        className="inline-flex items-center gap-2 text-[12px] font-medium px-2.5 py-1.5 rounded-lg mb-2"
+        style={{ background: 'var(--v7-bg-raised-2, var(--surface2))', color: 'var(--red, #e5555c)' }}
+      >
+        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+        <span className="truncate max-w-[260px]">{error}</span>
+        <button onClick={onRemove} title="Dismiss">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div
       className="inline-flex items-center gap-2 text-[12px] font-medium px-2.5 py-1.5 rounded-lg mb-2"
@@ -201,6 +227,10 @@ export function VenusPage() {
   const [pendingAttachment, setPendingAttachment] = useState<UploadedAttachment | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadAttachment = useUploadAttachment();
+  // Backs the Command Center nav row's unread badge — same query
+  // NotificationBell used to poll independently, now read once here.
+  const { data: queueData } = useQueue();
+  const pendingQueueCount = queueData?.items.filter(i => i.status === 'pending').length ?? 0;
   const endRef = useRef<HTMLDivElement | null>(null);
   const analyzeMutation = useVenusAnalyze();
   const createChatMutation = useCreateChat();
@@ -549,7 +579,6 @@ export function VenusPage() {
           </button>
           <div className="flex items-center gap-1 shrink-0">
             <VenusThemeToggle theme={theme} onToggle={toggleTheme} />
-            <NotificationBell />
             <button
               onClick={toggleSidebar}
               title="Collapse sidebar"
@@ -588,7 +617,7 @@ export function VenusPage() {
             first, toggles last, room left for future nav items between
             Workflows and Goals). */}
         <div className="mb-[18px]" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => navigate('/venus/command-center')} />
+          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => navigate('/venus/command-center')} badgeCount={pendingQueueCount} />
           <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/venus/workflows')} />
           <SidebarToggleRow icon={Target} label="Goals" active={showGoalPanel} onClick={toggleGoalPanel} />
           <SidebarToggleRow icon={MapIcon} label="Roadmap" active={showRoadmap} onClick={toggleRoadmap} />
@@ -834,11 +863,12 @@ export function VenusPage() {
                 Vera traces what's actually driving your numbers, so every decision has a reason behind it.
               </p>
 
-              {(pendingAttachment || uploadAttachment.isPending) && (
+              {(pendingAttachment || uploadAttachment.isPending || uploadAttachment.isError) && (
                 <AttachmentChip
                   fileName={pendingAttachment?.fileName}
                   uploading={uploadAttachment.isPending}
-                  onRemove={() => setPendingAttachment(null)}
+                  error={uploadAttachment.isError ? (uploadAttachment.error instanceof Error ? uploadAttachment.error.message : 'Upload failed') : undefined}
+                  onRemove={() => { setPendingAttachment(null); uploadAttachment.reset(); }}
                 />
               )}
               <form
@@ -994,12 +1024,13 @@ export function VenusPage() {
         {/* Input */}
         {messages.length > 0 && (
           <div className="p-4 border-t border-[var(--border)] bg-[var(--bg)] shrink-0">
-            {(pendingAttachment || uploadAttachment.isPending) && (
+            {(pendingAttachment || uploadAttachment.isPending || uploadAttachment.isError) && (
               <div className="max-w-4xl mx-auto mb-2">
                 <AttachmentChip
                   fileName={pendingAttachment?.fileName}
                   uploading={uploadAttachment.isPending}
-                  onRemove={() => setPendingAttachment(null)}
+                  error={uploadAttachment.isError ? (uploadAttachment.error instanceof Error ? uploadAttachment.error.message : 'Upload failed') : undefined}
+                  onRemove={() => { setPendingAttachment(null); uploadAttachment.reset(); }}
                 />
               </div>
             )}

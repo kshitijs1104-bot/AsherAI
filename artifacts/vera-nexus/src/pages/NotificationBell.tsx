@@ -3,13 +3,15 @@ import { useLocation } from 'wouter';
 import { Bell } from 'lucide-react';
 import { useQueue } from '../lib/venusApi';
 
-// Lives next to the theme toggle in Venus.tsx's sidebar header (both the
-// collapsed rail and expanded states) — the one piece of Command Center
-// chrome that follows the founder into the chat itself, so a new item never
-// waits silently until they happen to click back to Vera Nexus and remember
-// to check. Deliberately thin: the popover previews, it never lets you act
-// (accept/edit/reject) from here — that stays exclusively Command Center's
-// job so there's one place state actually changes, not two.
+// Lives ONLY in the collapsed sidebar rail — when the sidebar is expanded,
+// the Command Center nav row is already visible with its own unread badge
+// (see Venus.tsx's SidebarNavRow badgeCount), so a second bell icon there
+// would just duplicate it. Collapsing hides that row entirely, which is
+// exactly when this becomes the only way to see there's something waiting
+// without expanding the sidebar first. Deliberately thin: the popover
+// previews, it never lets you act (accept/edit/reject) from here — that
+// stays exclusively Command Center's job so there's one place state
+// actually changes, not two.
 export function NotificationBell({ className = '' }: { className?: string }) {
   const [, navigate] = useLocation();
   const [open, setOpen] = useState(false);
@@ -64,7 +66,12 @@ export function NotificationBell({ className = '' }: { className?: string }) {
 
       {open && (
         <div
-          className="absolute right-0 mt-2 w-[280px] rounded-xl p-2.5 z-50"
+          // left-full (not right-0) — this button sits in a 44px-wide rail
+          // pinned to the very left edge of the viewport; right-aligning a
+          // 280px popover against it pushes most of the popover off-screen
+          // to the left. Opening to the right of the button instead keeps
+          // it fully on-screen.
+          className="absolute left-full top-0 ml-2 w-[280px] rounded-xl p-2.5 z-50"
           style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border, rgba(255,255,255,0.08))', boxShadow: '0 12px 32px -8px rgba(0,0,0,0.4)' }}
         >
           <div className="text-[10.5px] font-bold uppercase px-1 pb-2" style={{ color: 'var(--v7-text-mute)', fontFamily: 'var(--v7-font-mono)', letterSpacing: '0.06em' }}>
