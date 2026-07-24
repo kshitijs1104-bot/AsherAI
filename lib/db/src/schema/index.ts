@@ -11,3 +11,8 @@ export * from "./goals";
 export * from "./company_facts";
 export * from "./roadmaps";
 export * from "./messages";
+export * from "./queue_items";
+export * from "./connectors";
+export * from "./workflows";
+export * from "./monthly_recaps";
+export * from "./attachments";

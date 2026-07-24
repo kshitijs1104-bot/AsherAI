@@ -10,22 +10,28 @@ import {
   type DailyBriefStats,
 } from '../lib/venusApi';
 
-function formatInr(n: number): string {
-  return '₹' + n.toLocaleString('en-IN');
+function formatMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
 }
 
-// The "why should I trust this daily" counter strip — read-only, always
-// visible whenever there's at least one non-zero number worth showing (an
-// all-zero row on day one is just noise, not a trust signal yet). Compact by
-// design: this competes for attention against everything else in the
-// founder's day, so it has to be scannable in under a second, not another
-// dashboard to interpret.
-function StatsStrip({ stats }: { stats: DailyBriefStats }) {
+// The Business Stats row (see build plan section 7) — replaces the old
+// ad-hoc decisions/goals/value strip with exactly four counters, all of
+// them plain accumulating counts that only ever go up: Decisions Captured,
+// Lessons Learned, Automations Completed, Time Saved. Deliberately no
+// percentage or completeness score anywhere here — the point is "operating
+// history I'm building," not "a profile I haven't finished." The queue-clear
+// streak renders as a fifth, equally plain counter rather than a badge —
+// "day I cleared queue," not a gamification level.
+export function StatsStrip({ stats }: { stats: DailyBriefStats }) {
   const items: { label: string; value: string }[] = [];
-  if (stats.decisionsResolved > 0) items.push({ label: stats.decisionsResolved === 1 ? 'decision resolved' : 'decisions resolved', value: String(stats.decisionsResolved) });
-  if (stats.daysActive > 0) items.push({ label: stats.daysActive === 1 ? 'day active' : 'days active', value: String(stats.daysActive) });
-  if (stats.goalsCompleted > 0) items.push({ label: stats.goalsCompleted === 1 ? 'goal hit' : 'goals hit', value: String(stats.goalsCompleted) });
-  if (stats.valueTrackedInr > 0) items.push({ label: 'value tracked', value: formatInr(stats.valueTrackedInr) });
+  if (stats.decisionsCaptured > 0) items.push({ label: stats.decisionsCaptured === 1 ? 'decision captured' : 'decisions captured', value: String(stats.decisionsCaptured) });
+  if (stats.lessonsLearned > 0) items.push({ label: stats.lessonsLearned === 1 ? 'lesson learned' : 'lessons learned', value: String(stats.lessonsLearned) });
+  if (stats.automationsCompleted > 0) items.push({ label: stats.automationsCompleted === 1 ? 'automation completed' : 'automations completed', value: String(stats.automationsCompleted) });
+  if (stats.timeSavedMinutes > 0) items.push({ label: 'time saved', value: formatMinutes(stats.timeSavedMinutes) });
+  if (stats.queueStreakDays > 0) items.push({ label: stats.queueStreakDays === 1 ? 'day streak' : 'day streak', value: String(stats.queueStreakDays) });
 
   if (items.length === 0) return null;
 
@@ -330,7 +336,7 @@ export function TodayCard() {
   };
 
   const stats = briefQuery.data?.stats ?? null;
-  const hasStats = !!stats && (stats.decisionsResolved > 0 || stats.daysActive > 0 || stats.goalsCompleted > 0 || stats.valueTrackedInr > 0);
+  const hasStats = !!stats && (stats.decisionsCaptured > 0 || stats.lessonsLearned > 0 || stats.automationsCompleted > 0 || stats.timeSavedMinutes > 0 || stats.queueStreakDays > 0);
 
   if (dismissed) return null;
   // A stat worth showing is its own reason to keep this card up, even on a
@@ -349,8 +355,8 @@ export function TodayCard() {
     if (checkinStep) parts.push('1 quick question');
     if (inboxItems.length > 0) parts.push(`${inboxItems.length} flagged`);
     if (hasStats && stats) {
-      if (stats.decisionsResolved > 0) parts.push(`${stats.decisionsResolved} decision${stats.decisionsResolved === 1 ? '' : 's'} helped`);
-      else if (stats.daysActive > 0) parts.push(`${stats.daysActive} day${stats.daysActive === 1 ? '' : 's'} active`);
+      if (stats.queueStreakDays > 0) parts.push(`${stats.queueStreakDays} day${stats.queueStreakDays === 1 ? '' : 's'} streak`);
+      else if (stats.decisionsCaptured > 0) parts.push(`${stats.decisionsCaptured} decision${stats.decisionsCaptured === 1 ? '' : 's'} captured`);
     }
     return (
       <button

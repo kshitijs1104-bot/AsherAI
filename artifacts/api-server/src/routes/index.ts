@@ -13,6 +13,12 @@ import goalsRouter from "./goals";
 import companyFactsRouter from "./companyFacts";
 import roadmapsRouter from "./roadmaps";
 import dailyBriefRouter from "./dailyBrief";
+import queueRouter from "./queue";
+import connectorsRouter from "./connectors";
+import actionsRouter from "./actions";
+import workflowsRouter from "./workflows";
+import recapsRouter from "./recaps";
+import attachmentsRouter from "./attachments";
 
 const router: IRouter = Router();
 
@@ -30,5 +36,11 @@ router.use(goalsRouter);
 router.use(companyFactsRouter);
 router.use(roadmapsRouter);
 router.use(dailyBriefRouter);
+router.use(queueRouter);
+router.use(connectorsRouter);
+router.use(actionsRouter);
+router.use(workflowsRouter);
+router.use(recapsRouter);
+router.use(attachmentsRouter);
 
 export default router;

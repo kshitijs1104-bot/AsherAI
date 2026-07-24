@@ -1,5 +1,5 @@
-import { db, goalsTable, venusDecisionsTable, roadmapsTable, companyFactsTable, messagesTable } from "@workspace/db";
-import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { db, goalsTable, venusDecisionsTable, roadmapsTable, companyFactsTable, messagesTable, queueItemsTable } from "@workspace/db";
+import { and, desc, eq, isNotNull, isNull, inArray } from "drizzle-orm";
 import { attachGoalProgress } from "../routes/chats";
 import { parsePhases } from "./roadmap";
 
@@ -197,6 +197,20 @@ export interface UsageStats {
   goalsActive: number;
   daysActive: number;
   valueTrackedInr: number;
+
+  // ---- Business Stats row (see section 7 of the build plan) ----
+  // Deliberately no percentage/completeness score anywhere in this set —
+  // every one of these is a plain accumulating count of real activity, the
+  // kind that only ever goes up, so a founder reads "operating history I'm
+  // building" rather than "a profile I haven't finished filling out."
+  decisionsCaptured: number;
+  lessonsLearned: number;
+  automationsCompleted: number;
+  timeSavedMinutes: number;
+  // Consecutive days (ending today or yesterday) with at least one queue
+  // item actually acted on (accepted/edited — opening Command Center and
+  // looking doesn't count). 0 the moment a day is skipped entirely.
+  queueStreakDays: number;
 }
 
 function countDistinctDays(dateLists: (Date | null)[][]): number {
@@ -209,31 +223,78 @@ function countDistinctDays(dateLists: (Date | null)[][]): number {
   return days.size;
 }
 
+// Streak semantics match a normal daily-streak counter (Duolingo-style): a
+// day counts only if it has >=1 qualifying action, and the streak is still
+// "alive" through today even if today has nothing yet — it only breaks once
+// a full day has passed with zero action. Dates are bucketed by UTC
+// calendar day (same convention as countDistinctDays above), not the
+// founder's local timezone — acceptable drift for a "you're building
+// something" signal, not something worth a per-user timezone lookup for.
+function computeQueueStreak(resolvedDates: (Date | null)[]): number {
+  const activeDays = new Set(resolvedDates.filter((d): d is Date => !!d).map((d) => d.toISOString().slice(0, 10)));
+  if (activeDays.size === 0) return 0;
+
+  const cursor = new Date();
+  cursor.setUTCHours(0, 0, 0, 0);
+  if (!activeDays.has(cursor.toISOString().slice(0, 10))) {
+    cursor.setUTCDate(cursor.getUTCDate() - 1); // today not yet active — streak can still extend from yesterday
+    if (!activeDays.has(cursor.toISOString().slice(0, 10))) return 0; // yesterday empty too — streak is broken
+  }
+
+  let streak = 0;
+  while (activeDays.has(cursor.toISOString().slice(0, 10))) {
+    streak++;
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  return streak;
+}
+
+// A flat per-item estimate, not a measured value — there's no real timer on
+// how long a founder would have spent hand-writing a reply or pulling a
+// report themselves. Automation-sourced items (a connector or workflow did
+// the work end-to-end) are weighted higher than instant actions (the
+// founder still had to type the input themselves).
+const MINUTES_SAVED_PER_AUTOMATION = 8;
+const MINUTES_SAVED_PER_INSTANT_ACTION = 4;
+
 export async function getUsageStats(userId: string): Promise<UsageStats> {
-  const [decisionsResolved, goalRows, messageDays, decisionDays, factDays] = await Promise.all([
-    db.select({ id: venusDecisionsTable.id }).from(venusDecisionsTable)
-      .where(and(eq(venusDecisionsTable.sessionId, userId), eq(venusDecisionsTable.status, "resolved")))
-      .then((rows) => rows.length)
-      .catch((err) => { console.error("[dailyBrief] usageStats: decisionsResolved failed", err); return 0; }),
-    db.select({ status: goalsTable.status, valueInr: goalsTable.valueInr }).from(goalsTable)
-      .where(eq(goalsTable.userId, userId))
-      .catch((err) => { console.error("[dailyBrief] usageStats: goals failed", err); return [] as { status: string; valueInr: number }[]; }),
-    // Best-effort — the messages table is the real usage log going forward,
-    // but degrades to empty gracefully (e.g. before its migration has run)
-    // rather than breaking this whole stat strip.
-    db.select({ createdAt: messagesTable.createdAt }).from(messagesTable)
-      .where(eq(messagesTable.userId, userId))
-      .then((rows) => rows.map((r) => r.createdAt))
-      .catch(() => [] as (Date | null)[]),
-    db.select({ createdAt: venusDecisionsTable.createdAt }).from(venusDecisionsTable)
-      .where(eq(venusDecisionsTable.sessionId, userId))
-      .then((rows) => rows.map((r) => r.createdAt))
-      .catch(() => [] as (Date | null)[]),
-    db.select({ createdAt: companyFactsTable.createdAt }).from(companyFactsTable)
-      .where(eq(companyFactsTable.userId, userId))
-      .then((rows) => rows.map((r) => r.createdAt))
-      .catch(() => [] as (Date | null)[]),
-  ]);
+  const [decisionsResolved, goalRows, messageDays, decisionDays, factDays, decisionsCaptured, lessonsLearned, resolvedQueueRows] =
+    await Promise.all([
+      db.select({ id: venusDecisionsTable.id }).from(venusDecisionsTable)
+        .where(and(eq(venusDecisionsTable.sessionId, userId), eq(venusDecisionsTable.status, "resolved")))
+        .then((rows) => rows.length)
+        .catch((err) => { console.error("[dailyBrief] usageStats: decisionsResolved failed", err); return 0; }),
+      db.select({ status: goalsTable.status, valueInr: goalsTable.valueInr }).from(goalsTable)
+        .where(eq(goalsTable.userId, userId))
+        .catch((err) => { console.error("[dailyBrief] usageStats: goals failed", err); return [] as { status: string; valueInr: number }[]; }),
+      // Best-effort — the messages table is the real usage log going forward,
+      // but degrades to empty gracefully (e.g. before its migration has run)
+      // rather than breaking this whole stat strip.
+      db.select({ createdAt: messagesTable.createdAt }).from(messagesTable)
+        .where(eq(messagesTable.userId, userId))
+        .then((rows) => rows.map((r) => r.createdAt))
+        .catch(() => [] as (Date | null)[]),
+      db.select({ createdAt: venusDecisionsTable.createdAt }).from(venusDecisionsTable)
+        .where(eq(venusDecisionsTable.sessionId, userId))
+        .then((rows) => rows.map((r) => r.createdAt))
+        .catch(() => [] as (Date | null)[]),
+      db.select({ createdAt: companyFactsTable.createdAt }).from(companyFactsTable)
+        .where(eq(companyFactsTable.userId, userId))
+        .then((rows) => rows.map((r) => r.createdAt))
+        .catch(() => [] as (Date | null)[]),
+      db.select({ id: venusDecisionsTable.id }).from(venusDecisionsTable)
+        .where(and(eq(venusDecisionsTable.sessionId, userId), eq(venusDecisionsTable.archived, false)))
+        .then((rows) => rows.length)
+        .catch(() => 0),
+      db.select({ id: venusDecisionsTable.id }).from(venusDecisionsTable)
+        .where(and(eq(venusDecisionsTable.sessionId, userId), isNotNull(venusDecisionsTable.lesson)))
+        .then((rows) => rows.length)
+        .catch(() => 0),
+      db.select({ source: queueItemsTable.source, resolvedAt: queueItemsTable.resolvedAt })
+        .from(queueItemsTable)
+        .where(and(eq(queueItemsTable.userId, userId), inArray(queueItemsTable.status, ["accepted", "edited"])))
+        .catch(() => [] as { source: string; resolvedAt: Date | null }[]),
+    ]);
 
   const goalsCompleted = goalRows.filter((g) => g.status === "completed").length;
   const goalsActive = goalRows.filter((g) => g.status === "active").length;
@@ -245,5 +306,22 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
   // (the true per-turn log) as that table fills in going forward.
   const daysActive = countDistinctDays([messageDays, decisionDays, factDays]);
 
-  return { decisionsResolved, goalsCompleted, goalsActive, daysActive, valueTrackedInr };
+  const automationRows = resolvedQueueRows.filter((r) => r.source !== "instant_action");
+  const instantActionRows = resolvedQueueRows.filter((r) => r.source === "instant_action");
+  const automationsCompleted = automationRows.length;
+  const timeSavedMinutes = automationRows.length * MINUTES_SAVED_PER_AUTOMATION + instantActionRows.length * MINUTES_SAVED_PER_INSTANT_ACTION;
+  const queueStreakDays = computeQueueStreak(resolvedQueueRows.map((r) => r.resolvedAt));
+
+  return {
+    decisionsResolved,
+    goalsCompleted,
+    goalsActive,
+    daysActive,
+    valueTrackedInr,
+    decisionsCaptured,
+    lessonsLearned,
+    automationsCompleted,
+    timeSavedMinutes,
+    queueStreakDays,
+  };
 }

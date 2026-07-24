@@ -11,6 +11,33 @@
     },
     {
       "path": "./lib/api-zod"
+    },
+    {
+      "path": "./lib/integrations/google-oauth"
+    },
+    {
+      "path": "./lib/integrations/gmail"
+    },
+    {
+      "path": "./lib/integrations/google-calendar"
+    },
+    {
+      "path": "./lib/integrations/google-sheets"
+    },
+    {
+      "path": "./lib/integrations/slack"
+    },
+    {
+      "path": "./lib/integrations/notion"
+    },
+    {
+      "path": "./lib/integrations/jira"
+    },
+    {
+      "path": "./lib/integrations/linkedin"
+    },
+    {
+      "path": "./lib/integrations/whatsapp"
     }
   ]
 }

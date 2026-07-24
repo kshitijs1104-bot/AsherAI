@@ -7,12 +7,56 @@ import {
   detectAnalysisType, typeLabel, titleFromMessage,
   type ChatSession, type ChatMessage, type SavedAnalysisType,
 } from '../lib/venusHistory';
-import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil } from 'lucide-react';
+import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil, LayoutGrid, Workflow as WorkflowIcon, Paperclip, X, Loader2 } from 'lucide-react';
 import { GoalPanel } from './GoalPanel';
 import { RoadmapTracker } from './RoadmapTracker';
 import { TodayCard } from './TodayCard';
 import { VenusThemeToggle } from './VenusThemeToggle';
+import { NotificationBell } from './NotificationBell';
 import { useVenusTheme } from '../lib/venusTheme';
+import { useUploadAttachment, type UploadedAttachment } from '../lib/venusApi';
+
+// One consistent compact row shape for everything below New Chat — replaces
+// the old mismatched treatment (a separately-styled full-width Command
+// Center button sitting above a visually unrelated two-column Goal/Roadmap
+// toggle row). "Nav" rows just navigate; "toggle" rows show a persistent
+// tinted/active state while their panel is open, so the two behaviors read
+// as one family instead of unrelated components bolted together.
+function SidebarNavRow({ icon: Icon, label, onClick }: { icon: typeof LayoutGrid; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-[9px] text-[13px] font-medium rounded-[10px] transition-colors"
+      style={{ color: 'var(--v7-text-dim)', padding: '8px 8px' }}
+      onMouseEnter={e => { e.currentTarget.style.color = 'var(--v7-text)'; e.currentTarget.style.background = 'var(--v7-bg-raised-2)'; }}
+      onMouseLeave={e => { e.currentTarget.style.color = 'var(--v7-text-dim)'; e.currentTarget.style.background = 'transparent'; }}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </button>
+  );
+}
+
+function SidebarToggleRow({ icon: Icon, label, active, onClick }: { icon: typeof Target; label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-[9px] text-[13px] font-medium rounded-[10px] transition-colors"
+      style={{
+        color: active ? 'var(--v7-cyan)' : 'var(--v7-text-dim)',
+        background: active ? 'var(--v7-cyan-soft)' : 'transparent',
+        padding: '8px 8px',
+      }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--v7-bg-raised-2)'; }}
+      onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+      title={active ? `Hide ${label.toLowerCase()} panel` : `Show ${label.toLowerCase()} panel`}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+      {active && <span className="w-1.5 h-1.5 rounded-full ml-auto" style={{ background: 'var(--v7-cyan)' }} />}
+    </button>
+  );
+}
 
 const EXAMPLE_PROMPTS = [
   "Map the causal chain for my business from the most significant market shifts right now",
@@ -112,6 +156,29 @@ function groupSavedByType(saved: ReturnType<typeof getSavedAnalyses>) {
   return groups;
 }
 
+// Shows the file selected via the composer's paperclip button, before it's
+// actually sent — an uploading spinner while the request is in flight, the
+// filename plus a remove button once it lands. Uploads happen immediately
+// on selection (see handleFileSelect), not at send time, so a bad file
+// (wrong type, too large) fails right away instead of only surfacing once
+// the whole message send fails.
+function AttachmentChip({ fileName, uploading, onRemove }: { fileName?: string; uploading: boolean; onRemove: () => void }) {
+  return (
+    <div
+      className="inline-flex items-center gap-2 text-[12px] font-medium px-2.5 py-1.5 rounded-lg mb-2"
+      style={{ background: 'var(--v7-bg-raised-2, var(--surface2))', color: 'var(--v7-text-dim, var(--dim))' }}
+    >
+      {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
+      <span className="truncate max-w-[220px]">{uploading ? 'Uploading…' : fileName}</span>
+      {!uploading && (
+        <button onClick={onRemove} title="Remove attachment">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function VenusPage() {
   const [, navigate] = useLocation();
   const { theme, toggle: toggleTheme } = useVenusTheme();
@@ -131,10 +198,27 @@ export function VenusPage() {
   const [groqKey, setGroqKey] = useState(() => localStorage.getItem('ve_groq_key') || '');
   const [input, setInput] = useState('');
   const [companyReports, setCompanyReports] = useState<Record<string, CompanyReportState>>(loadCompanyReportCache);
+  const [pendingAttachment, setPendingAttachment] = useState<UploadedAttachment | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadAttachment = useUploadAttachment();
   const endRef = useRef<HTMLDivElement | null>(null);
   const analyzeMutation = useVenusAnalyze();
   const createChatMutation = useCreateChat();
   const updateChatMutation = useUpdateChat();
+
+  // Uploads immediately on file selection (same interaction shape as
+  // Slack/ChatGPT) rather than waiting for send — the founder gets to see
+  // and remove it before committing, and a failed upload is caught right
+  // away instead of surfacing only when the whole message fails to send.
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    uploadAttachment.mutate(
+      { file, chatId: currentSession.serverChatId },
+      { onSuccess: (attachment) => setPendingAttachment(attachment) },
+    );
+  };
 
   const messages = currentSession.messages;
 
@@ -222,15 +306,21 @@ export function VenusPage() {
   };
 
   const handleSend = async (preset?: string) => {
-    const text = (preset || input).trim();
-    if (!text) return;
+    const baseText = (preset || input).trim();
+    if (!baseText && !pendingAttachment) return;
     // The Enter-key path (unlike the Send button's `disabled` prop) had no
     // guard against firing while a request is already in flight — two fast
     // Enter presses on the first message of a new chat could each read the
     // same not-yet-set `serverChatId` and independently call
     // ensureServerChat, creating two server-side chat rows for one session.
     if (analyzeMutation.isPending) return;
+    // The attachment already uploaded (and is tied to a chatId) the moment
+    // it was selected — folding its filename into the message text is the
+    // simplest honest way to give Venus's existing text-only pipeline any
+    // awareness of it at all, short of a deeper multimodal-input rework.
+    const text = pendingAttachment ? `${baseText}\n\n[Attached file: ${pendingAttachment.fileName}]`.trim() : baseText;
     setInput('');
+    setPendingAttachment(null);
 
     const newMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
     const updatedTitle = messages.length === 0 ? titleFromMessage(text) : currentSession.title;
@@ -402,6 +492,7 @@ export function VenusPage() {
             <PanelLeftOpen className="w-4 h-4" />
           </button>
           <VenusThemeToggle theme={theme} onToggle={toggleTheme} />
+          <NotificationBell />
         </div>
       ) : (
       <aside
@@ -458,6 +549,7 @@ export function VenusPage() {
           </button>
           <div className="flex items-center gap-1 shrink-0">
             <VenusThemeToggle theme={theme} onToggle={toggleTheme} />
+            <NotificationBell />
             <button
               onClick={toggleSidebar}
               title="Collapse sidebar"
@@ -471,10 +563,12 @@ export function VenusPage() {
           </div>
         </div>
 
-        {/* New Chat */}
+        {/* New Chat — the one hero CTA, first. Everything else below is a
+            single, consistently-styled compact nav list rather than a big
+            colored button plus a visually unrelated toggle row. */}
         <button
           onClick={handleNewChat}
-          className="flex items-center gap-[9px] font-bold text-[13.5px] transition-all mb-[22px]"
+          className="flex items-center gap-[9px] font-bold text-[13.5px] transition-all mb-[10px]"
           style={{
             background: 'var(--v7-cyan-soft)',
             border: '1px solid var(--v7-cyan-strong)',
@@ -489,37 +583,15 @@ export function VenusPage() {
           New Analysis
         </button>
 
-        {/* Panel visibility — whether Goal/Roadmap show above the chat at
-            all. Lives here (not as always-on bars in the chat header) so
-            wanting just the goal doesn't force the roadmap into view too,
-            and the choice persists instead of nagging on every visit. */}
-        <div className="flex items-center gap-[6px] mb-[18px]">
-          <button
-            onClick={toggleGoalPanel}
-            className="flex-1 flex items-center justify-center gap-[6px] text-[11px] font-semibold py-[7px] rounded-[10px] transition-colors"
-            style={{
-              color: showGoalPanel ? 'var(--v7-cyan)' : 'var(--v7-text-mute)',
-              background: showGoalPanel ? 'var(--v7-cyan-soft)' : 'var(--v7-bg-raised-2)',
-              border: `1px solid ${showGoalPanel ? 'var(--v7-cyan-strong)' : 'transparent'}`,
-            }}
-            title={showGoalPanel ? 'Hide goal panel' : 'Show goal panel'}
-          >
-            <Target className="w-3 h-3" />
-            Goal
-          </button>
-          <button
-            onClick={toggleRoadmap}
-            className="flex-1 flex items-center justify-center gap-[6px] text-[11px] font-semibold py-[7px] rounded-[10px] transition-colors"
-            style={{
-              color: showRoadmap ? 'var(--v7-cyan)' : 'var(--v7-text-mute)',
-              background: showRoadmap ? 'var(--v7-cyan-soft)' : 'var(--v7-bg-raised-2)',
-              border: `1px solid ${showRoadmap ? 'var(--v7-cyan-strong)' : 'transparent'}`,
-            }}
-            title={showRoadmap ? 'Hide roadmap panel' : 'Show roadmap panel'}
-          >
-            <MapIcon className="w-3 h-3" />
-            Roadmap
-          </button>
+        {/* Command Center, Workflows, then the Goal/Roadmap show/hide
+            toggles — in that order (see build-plan discussion: nav items
+            first, toggles last, room left for future nav items between
+            Workflows and Goals). */}
+        <div className="mb-[18px]" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => navigate('/venus/command-center')} />
+          <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/venus/workflows')} />
+          <SidebarToggleRow icon={Target} label="Goals" active={showGoalPanel} onClick={toggleGoalPanel} />
+          <SidebarToggleRow icon={MapIcon} label="Roadmap" active={showRoadmap} onClick={toggleRoadmap} />
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
@@ -685,6 +757,16 @@ export function VenusPage() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Shared by both composer forms below (empty-state and active-chat) —
+            a single hidden input, triggered by whichever paperclip button is
+            currently on screen. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          onChange={handleFileSelect}
+          accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"
+          className="hidden"
+        />
         <div style={{ padding: '14px 32px 0' }}>
           {showGoalPanel && <GoalPanel serverChatId={currentSession.serverChatId} onRequireServerChat={ensureServerChat} />}
           {showRoadmap && <RoadmapTracker chatId={currentSession.serverChatId} />}
@@ -752,6 +834,13 @@ export function VenusPage() {
                 Vera traces what's actually driving your numbers, so every decision has a reason behind it.
               </p>
 
+              {(pendingAttachment || uploadAttachment.isPending) && (
+                <AttachmentChip
+                  fileName={pendingAttachment?.fileName}
+                  uploading={uploadAttachment.isPending}
+                  onRemove={() => setPendingAttachment(null)}
+                />
+              )}
               <form
                 onSubmit={e => { e.preventDefault(); handleSend(); }}
                 className="flex items-center gap-[10px] w-full transition-all mb-8"
@@ -759,6 +848,17 @@ export function VenusPage() {
                 onFocus={e => { e.currentTarget.style.borderColor = 'var(--v7-cyan-strong)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--v7-cyan-soft)'; }}
                 onBlur={e => { e.currentTarget.style.borderColor = 'var(--v7-border-strong)'; e.currentTarget.style.boxShadow = 'none'; }}
               >
+                <button
+                  type="button"
+                  title="Attach an image or document"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="shrink-0 p-1.5 rounded-lg transition-colors"
+                  style={{ color: 'var(--v7-text-mute)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--v7-text-dim)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--v7-text-mute)')}
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
                 <textarea
                   value={input}
                   onChange={e => setInput(e.target.value)}
@@ -770,7 +870,7 @@ export function VenusPage() {
                 />
                 <button
                   type="submit"
-                  disabled={!input.trim() || analyzeMutation.isPending}
+                  disabled={(!input.trim() && !pendingAttachment) || analyzeMutation.isPending}
                   className="w-[38px] h-[38px] shrink-0 flex items-center justify-center transition-all disabled:opacity-40"
                   style={{ borderRadius: '12px', border: 'none', background: 'var(--v7-cyan)' }}
                 >
@@ -894,10 +994,28 @@ export function VenusPage() {
         {/* Input */}
         {messages.length > 0 && (
           <div className="p-4 border-t border-[var(--border)] bg-[var(--bg)] shrink-0">
+            {(pendingAttachment || uploadAttachment.isPending) && (
+              <div className="max-w-4xl mx-auto mb-2">
+                <AttachmentChip
+                  fileName={pendingAttachment?.fileName}
+                  uploading={uploadAttachment.isPending}
+                  onRemove={() => setPendingAttachment(null)}
+                />
+              </div>
+            )}
             <form
               onSubmit={e => { e.preventDefault(); handleSend(); }}
               className="flex items-end gap-2 bg-[var(--surface2)] border border-[var(--border)] rounded-xl p-2 focus-within:border-[var(--indigo)] transition-colors max-w-4xl mx-auto"
             >
+              <button
+                type="button"
+                title="Attach an image or document"
+                onClick={() => fileInputRef.current?.click()}
+                className="shrink-0 w-10 h-10 flex items-center justify-center rounded-lg transition-colors mb-0.5"
+                style={{ color: 'var(--dim)' }}
+              >
+                <Paperclip className="w-4 h-4" />
+              </button>
               <textarea
                 value={input}
                 onChange={e => setInput(e.target.value)}
@@ -908,7 +1026,7 @@ export function VenusPage() {
               />
               <button
                 type="submit"
-                disabled={!input.trim() || analyzeMutation.isPending}
+                disabled={(!input.trim() && !pendingAttachment) || analyzeMutation.isPending}
                 className="w-10 h-10 shrink-0 bg-[var(--indigo)] hover:bg-[var(--indigo-light)] disabled:opacity-40 text-white rounded-lg flex items-center justify-center transition-colors mb-0.5 mr-0.5"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

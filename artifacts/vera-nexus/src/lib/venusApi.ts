@@ -10,7 +10,17 @@ async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   });
-  if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+  if (!response.ok) {
+    // Surface the backend's own error message when there is one (e.g. "Connect
+    // LinkedIn first", "Gmail isn't connected — reconnect it to send this.") —
+    // several connector-backed actions can now fail for a real, actionable
+    // reason instead of just a generic HTTP status.
+    const message = await response
+      .json()
+      .then((body) => (typeof body?.error === 'string' ? body.error : null))
+      .catch(() => null);
+    throw new Error(message ?? `Request failed with status ${response.status}`);
+  }
   return response.json();
 }
 
@@ -205,6 +215,11 @@ export interface DailyBriefStats {
   goalsActive: number;
   daysActive: number;
   valueTrackedInr: number;
+  decisionsCaptured: number;
+  lessonsLearned: number;
+  automationsCompleted: number;
+  timeSavedMinutes: number;
+  queueStreakDays: number;
 }
 
 export interface DailyBrief {
@@ -219,5 +234,235 @@ export function useDailyBrief() {
   return useQuery({
     queryKey: ['/api/daily-brief'],
     queryFn: () => apiFetch<DailyBrief>('/api/daily-brief'),
+  });
+}
+
+// ---- Command Center queue ----
+
+export type QueueItemStatus = 'pending' | 'accepted' | 'edited' | 'rejected';
+
+export interface QueueItem {
+  id: number;
+  userId: string;
+  type: string;
+  source: string;
+  title: string;
+  body: string;
+  draftContent: string | null;
+  status: QueueItemStatus;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export function useQueue() {
+  return useQuery({
+    queryKey: ['/api/queue'],
+    queryFn: () => apiFetch<{ items: QueueItem[] }>('/api/queue'),
+    // The notification bell polls off this same query — a founder acting on
+    // an item in another tab (or a background job dropping in a new one)
+    // should clear/update the badge without a manual refresh.
+    refetchInterval: 60_000,
+  });
+}
+
+export function useQueueAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: number; action: 'accept' | 'edit' | 'reject'; editedContent?: string }) =>
+      apiFetch<{ item: QueueItem }>(`/api/queue/${input.id}/action`, {
+        method: 'POST',
+        body: JSON.stringify({ action: input.action, edited_content: input.editedContent }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/queue'] });
+    },
+  });
+}
+
+// ---- Connectors ----
+
+export interface ConnectorStatus {
+  type: string;
+  label: string;
+  implemented: boolean;
+  status: 'connected' | 'error' | 'disconnected';
+  lastSyncedAt: string | null;
+  lastError: string | null;
+}
+
+export function useConnectors() {
+  return useQuery({
+    queryKey: ['/api/connectors'],
+    queryFn: () => apiFetch<{ connectors: ConnectorStatus[] }>('/api/connectors'),
+  });
+}
+
+// A real browser navigation, not a fetch — the server responds with a 302
+// to Google's consent screen, which only works as a top-level page load.
+export function startConnectorAuth(type: string) {
+  window.location.href = `/api/connectors/${type}/auth`;
+}
+
+export function useSyncConnector() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (type: string) => apiFetch<{ created: number }>(`/api/connectors/${type}/sync`, { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/connectors'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/queue'] });
+    },
+  });
+}
+
+export function useDisconnectConnector() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (type: string) => apiFetch<{ ok: boolean }>(`/api/connectors/${type}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/connectors'] });
+    },
+  });
+}
+
+// WhatsApp has no OAuth redirect (see the backend's routes/connectors.ts
+// comment on /connectors/whatsapp/config) — the founder already holds a
+// permanent token + phone number id from their own Meta Business console,
+// so "connecting" is just submitting those two values.
+export function useConfigureWhatsapp() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { phoneNumberId: string; permanentToken: string }) =>
+      apiFetch<{ ok: boolean }>('/api/connectors/whatsapp/config', { method: 'POST', body: JSON.stringify(input) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/connectors'] });
+    },
+  });
+}
+
+// ---- Instant-Use Actions ----
+
+export type InstantActionType = 'draft_reply' | 'sell_this' | 'summarize' | 'follow_up';
+
+// ---- Workflows ----
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  requiredConnectors: string[];
+  defaultCron: string;
+  cronLabel: string;
+  activated: boolean;
+  connectorsReady: boolean;
+}
+
+export interface WorkflowRow {
+  id: number;
+  userId: string;
+  templateId: string;
+  name: string;
+  status: 'active' | 'paused';
+  connectorTypesJson: string;
+  scheduleCron: string;
+  lastRunAt: string | null;
+  createdAt: string;
+}
+
+export function useWorkflowTemplates() {
+  return useQuery({
+    queryKey: ['/api/workflows/templates'],
+    queryFn: () => apiFetch<{ templates: WorkflowTemplate[] }>('/api/workflows/templates'),
+  });
+}
+
+export function useWorkflows() {
+  return useQuery({
+    queryKey: ['/api/workflows'],
+    queryFn: () => apiFetch<{ workflows: WorkflowRow[] }>('/api/workflows'),
+  });
+}
+
+function invalidateWorkflowQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ['/api/workflows'] });
+  queryClient.invalidateQueries({ queryKey: ['/api/workflows/templates'] });
+}
+
+export function useActivateWorkflow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (templateId: string) =>
+      apiFetch<{ workflow: WorkflowRow }>('/api/workflows', { method: 'POST', body: JSON.stringify({ templateId }) }),
+    onSuccess: () => invalidateWorkflowQueries(queryClient),
+  });
+}
+
+export function useSetWorkflowStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: number; status: 'active' | 'paused' }) =>
+      apiFetch<{ workflow: WorkflowRow }>(`/api/workflows/${input.id}`, { method: 'PATCH', body: JSON.stringify({ status: input.status }) }),
+    onSuccess: () => invalidateWorkflowQueries(queryClient),
+  });
+}
+
+export function useDeleteWorkflow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiFetch<{ ok: boolean }>(`/api/workflows/${id}`, { method: 'DELETE' }),
+    onSuccess: () => invalidateWorkflowQueries(queryClient),
+  });
+}
+
+export function useRunWorkflowNow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => apiFetch<{ created: number }>(`/api/workflows/${id}/run`, { method: 'POST' }),
+    onSuccess: () => {
+      invalidateWorkflowQueries(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['/api/queue'] });
+    },
+  });
+}
+
+export function useRunInstantAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { type: InstantActionType; input: string; mode: 'instant' | 'queue'; postTo?: 'linkedin' }) =>
+      apiFetch<{ result?: string; queued?: boolean; item?: QueueItem }>(`/api/actions/${input.type}/run`, {
+        method: 'POST',
+        body: JSON.stringify({ input: input.input, mode: input.mode, postTo: input.postTo }),
+      }),
+    onSuccess: (_, variables) => {
+      if (variables.mode === 'queue') queryClient.invalidateQueries({ queryKey: ['/api/queue'] });
+    },
+  });
+}
+
+// ---- Chat attachments ----
+
+export interface UploadedAttachment {
+  id: number;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export function useUploadAttachment() {
+  return useMutation({
+    // Deliberately NOT using apiFetch here — multipart uploads need the
+    // browser to set its own `Content-Type: multipart/form-data; boundary=…`
+    // header, which apiFetch's hardcoded `application/json` would clobber.
+    mutationFn: async (input: { file: File; chatId?: number }) => {
+      const formData = new FormData();
+      formData.append('file', input.file);
+      if (input.chatId) formData.append('chatId', String(input.chatId));
+
+      const response = await fetch('/api/attachments', { method: 'POST', body: formData });
+      if (!response.ok) {
+        const message = await response.json().then((b) => b?.error).catch(() => null);
+        throw new Error(message ?? 'Upload failed');
+      }
+      return response.json() as Promise<UploadedAttachment>;
+    },
   });
 }

@@ -8,6 +8,10 @@ out-tsc
 .expo
 .expo-shared
 
+# locally-stored chat attachment uploads (see artifacts/api-server/src/routes/attachments.ts) —
+# these are user-uploaded files written to local disk, not build output, but must never be committed
+artifacts/api-server/uploads/
+
 # dependencies
 node_modules
 

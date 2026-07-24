@@ -1,0 +1,94 @@
+import { Router } from "express";
+import { z } from "zod/v4";
+import { db, queueItemsTable, connectorsTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
+import { requireAuth, requireUserId } from "../middlewares/auth";
+import { getGroqClient } from "../lib/groq";
+import { draftText } from "../lib/draftText";
+
+const router = Router();
+
+// Instant-Use Actions: zero-onboarding, single-input, single-output tools —
+// the founder pastes something in, gets a usable result back immediately.
+// No system prompt here reasons about the founder's business context or
+// asks a clarifying question first (that's the main Venus chat's job) —
+// these exist specifically for the "action -> result, done" path with
+// nothing in between.
+const ACTION_PROMPTS: Record<string, string> = {
+  draft_reply:
+    "You draft short, direct replies to a message a busy founder received. Write only the reply body — no subject line, no filler greeting, no sign-off unless natural. 2-5 sentences, plain professional tone.",
+  sell_this:
+    "You write short, punchy sales/marketing copy for whatever product, offer, or feature the founder describes. Open with a real hook (a concrete benefit or claim, never 'Excited to announce' or similar template openers). 3-6 sentences, ready to post or send as-is.",
+  summarize:
+    "You summarize the given text into a short, plain-language report a founder can skim in 10 seconds. 3-5 sentences, lead with the single most important takeaway, no headings or bullet lists.",
+  follow_up:
+    "You draft a short follow-up message for a founder re-opening a conversation that's gone quiet (a lead, a partner, a candidate). Direct, low-pressure, one clear next step. 2-4 sentences.",
+};
+
+const ACTION_TITLES: Record<string, string> = {
+  draft_reply: "Reply drafted",
+  sell_this: "Sales copy drafted",
+  summarize: "Summary drafted",
+  follow_up: "Follow-up drafted",
+};
+
+const RunActionBody = z.object({
+  input: z.string().min(1),
+  mode: z.enum(["instant", "queue"]),
+  // "sell_this" specifically can target LinkedIn instead of a generic queue
+  // item — the founder decides at the point of drafting, not after. Requires
+  // the LinkedIn connector already connected; accepting the resulting queue
+  // item is what actually publishes it (see lib/connectors/sendAction.ts).
+  postTo: z.enum(["linkedin"]).optional(),
+});
+
+router.post("/actions/:type/run", requireAuth, async (req, res) => {
+  const type = String(req.params.type);
+  const systemPrompt = ACTION_PROMPTS[type];
+  if (!systemPrompt) return res.status(404).json({ error: "Unknown action type" });
+
+  const body = RunActionBody.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ error: "'input' (string) and 'mode' (instant|queue) are required" });
+
+  try {
+    const userId = requireUserId(req);
+    const groq = await getGroqClient(userId);
+    if (!groq) return res.status(400).json({ error: "No Groq API key configured — add one in Settings" });
+
+    const result = await draftText(groq, systemPrompt, body.data.input);
+    if (!result) return res.status(502).json({ error: "Failed to generate a result — try again" });
+
+    if (body.data.mode === "instant") {
+      return res.json({ result });
+    }
+
+    if (body.data.postTo === "linkedin") {
+      const [connector] = await db
+        .select({ status: connectorsTable.status })
+        .from(connectorsTable)
+        .where(and(eq(connectorsTable.userId, userId), eq(connectorsTable.type, "linkedin")))
+        .limit(1);
+      if (!connector || connector.status !== "connected") {
+        return res.status(400).json({ error: "Connect LinkedIn first" });
+      }
+    }
+
+    const [item] = await db
+      .insert(queueItemsTable)
+      .values({
+        userId,
+        type,
+        source: body.data.postTo === "linkedin" ? "linkedin" : "instant_action",
+        title: body.data.postTo === "linkedin" ? "LinkedIn post drafted" : (ACTION_TITLES[type] ?? "Drafted result"),
+        body: body.data.input.slice(0, 200),
+        draftContent: result,
+      })
+      .returning();
+    return res.json({ queued: true, item });
+  } catch (err) {
+    req.log.error(err);
+    return res.status(500).json({ error: "Action failed" });
+  }
+});
+
+export default router;
