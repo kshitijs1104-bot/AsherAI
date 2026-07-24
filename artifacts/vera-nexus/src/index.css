@@ -668,6 +668,38 @@
   cursor: not-allowed;
 }
 
+/* Saved Analysis book page turn (SavedAnalysisBook.tsx). The incoming page
+   swings in on its left edge, which is where a real page is bound — the
+   parent supplies the `perspective` so the rotation reads as depth rather
+   than a horizontal squash. Kept to 520ms: long enough to register as a
+   page rather than a fade, short enough that it never sits between the
+   founder and what they clicked.
+
+   Anyone who's asked not to be shown motion gets the page immediately,
+   with no transform at all. */
+@keyframes venus-page-turn {
+  from {
+    transform: rotateY(-38deg);
+    opacity: 0.25;
+    box-shadow: -18px 24px 50px -30px rgba(0, 0, 0, 0.7);
+  }
+  to {
+    transform: rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+.venus-page-turn {
+  animation: venus-page-turn 520ms cubic-bezier(0.22, 0.68, 0.36, 1) both;
+  backface-visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .venus-page-turn {
+    animation: none;
+  }
+}
+
 /* Vera concept v7 — hero mark breathing glow, used on Venus.tsx empty state */
 @keyframes v7-breathe {
   0%, 100% { box-shadow: 0 0 30px -10px var(--v7-glow-shadow-a); }

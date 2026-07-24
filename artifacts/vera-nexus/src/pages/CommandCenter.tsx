@@ -1,6 +1,8 @@
-import { useRef, useState, type CSSProperties } from 'react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useLocation } from 'wouter';
-import { ArrowLeft, Flame } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Flame } from 'lucide-react';
+import { SavedAnalysisBook, typeColor as savedTypeColor, TYPE_ORDER as SAVED_TYPE_ORDER } from './SavedAnalysisBook';
+import { getSavedAnalyses, typeLabel, type SavedAnalysis, type SavedAnalysisType, type ChatMessage } from '../lib/venusHistory';
 import {
   useQueue, useQueueAction, useDailyBrief, useRunInstantAction,
   type QueueItem, type InstantActionType, type DailyBriefStats,
@@ -346,8 +348,8 @@ function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId:
             style={{ width: '100%', fontSize: '13px', color: palette.text, background: palette.paperEdge, border: `1px solid ${palette.line}`, borderRadius: '6px', padding: '8px 10px', marginBottom: '8px', outline: 'none', fontFamily: 'inherit' }}
           />
           <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
-            <a onClick={submit} style={linkStyle(palette, false)}>{run.isPending ? 'Working…' : 'Add to Blackboard'}</a>
-            <a onClick={() => { setActive(null); setInput(''); }} style={linkStyle(palette, true)}>Cancel</a>
+            <button type="button" onClick={submit} style={linkStyle(palette, false)}>{run.isPending ? 'Working…' : 'Add to Blackboard'}</button>
+            <button type="button" onClick={() => { setActive(null); setInput(''); }} style={linkStyle(palette, true)}>Cancel</button>
           </div>
           {run.isError && <div style={{ fontSize: '11px', marginTop: '6px', color: palette.coral }}>{run.error instanceof Error ? run.error.message : 'Failed — try again.'}</div>}
         </div>
@@ -356,12 +358,32 @@ function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId:
   );
 }
 
-export function CommandCenterSection({ theme, onBack }: { theme: VenusTheme; onBack: () => void }) {
+export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueInChat }: {
+  theme: VenusTheme;
+  onBack: () => void;
+  // Jump to the chat a saved analysis came out of.
+  onOpenThread?: (a: SavedAnalysis) => void;
+  // Hand a mini-Vera exchange over to a real chat thread.
+  onContinueInChat?: (messages: ChatMessage[]) => void;
+}) {
   const palette = theme === 'light' ? LIGHT : DARK;
+  const isLight = theme === 'light';
   const { data, isLoading } = useQueue();
   const dailyBrief = useDailyBrief();
   const [recentlyAdded, setRecentlyAdded] = useState<Set<number>>(new Set());
   const sectionRefs = useRef<Record<Category, HTMLDivElement | null>>({ drafts: null, decisions: null, workflows: null, notes: null });
+  // 'board' and 'book' are two spreads of the same notebook, not two routes —
+  // see SavedAnalysisBook.tsx. Reading saved work is a page turn away from
+  // the board rather than a navigation that would lose its scroll position.
+  const [view, setView] = useState<'board' | 'book'>('board');
+  const savedAnalyses = useMemo(() => getSavedAnalyses(), [view]);
+  // Counts per type, in the book's tab order so the board's dots and the
+  // book's tabs read in the same sequence.
+  const savedTypeCounts = useMemo(() => {
+    const counts = new Map<SavedAnalysisType, number>();
+    for (const s of savedAnalyses) counts.set(s.type, (counts.get(s.type) ?? 0) + 1);
+    return SAVED_TYPE_ORDER.filter((t) => counts.has(t)).map((t) => [t, counts.get(t)!] as const);
+  }, [savedAnalyses]);
 
   const items = data?.items ?? [];
   const grouped: Record<Category, QueueItem[]> = { drafts: [], decisions: [], workflows: [], notes: [] };
@@ -380,10 +402,19 @@ export function CommandCenterSection({ theme, onBack }: { theme: VenusTheme; onB
     <div
       style={{ background: palette.bg, minHeight: '100%', flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: '48px 20px 80px', fontFamily: "'Fraunces', serif", color: palette.text }}
     >
+      {view === 'book' ? (
+        <SavedAnalysisBook
+          palette={palette}
+          isLight={isLight}
+          onBack={() => setView('board')}
+          onOpenThread={onOpenThread}
+          onContinueInChat={onContinueInChat ?? (() => {})}
+        />
+      ) : (
       <div style={{ width: '100%', maxWidth: '640px' }}>
-        <a onClick={onBack} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: palette.muted, textDecoration: 'none', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '28px', cursor: 'pointer' }}>
+        <button type="button" onClick={onBack} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: palette.muted, background: 'transparent', border: 'none', padding: 0, textDecoration: 'none', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '28px', cursor: 'pointer' }}>
           <ArrowLeft style={{ width: 12, height: 12 }} /> Back to chat
-        </a>
+        </button>
 
         <div style={{ background: palette.paper, border: `1px solid ${palette.paperEdge}`, borderRadius: '4px 14px 14px 4px', padding: '34px 40px 40px 52px', position: 'relative', boxShadow: '0 30px 60px -30px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
           {/* margin rule — the vertical notebook-page line */}
@@ -452,8 +483,57 @@ export function CommandCenterSection({ theme, onBack }: { theme: VenusTheme; onB
               </div>
             ),
           )}
+
+          {/* SAVED ANALYSIS — the board's own section for work the founder
+              chose to keep, plus the way through to the full book. Sits
+              last because it's a reference shelf, not part of today's
+              queue: everything above wants clearing, this wants revisiting. */}
+          <div style={{ marginTop: '30px', paddingTop: '22px', borderTop: `1px solid ${palette.line}` }}>
+            <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', letterSpacing: '0.1em', color: palette.faint, margin: '0 0 10px' }}>
+              SAVED ANALYSIS
+            </p>
+
+            {savedAnalyses.length === 0 ? (
+              <p style={{ fontSize: '13px', color: palette.muted, fontStyle: 'italic', margin: 0 }}>
+                Nothing saved yet — hit “Save as Analysis” under any Vera response and it gets filed here by type.
+              </p>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
+                  {savedTypeCounts.map(([t, count]) => (
+                    <span
+                      key={t}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', letterSpacing: '0.03em',
+                        color: palette.muted, border: `1px solid ${palette.paperEdge}`,
+                        borderRadius: '20px', padding: '5px 10px',
+                      }}
+                    >
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: savedTypeColor(t, isLight) }} />
+                      {typeLabel(t)} · {count}
+                    </span>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setView('book')}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '7px',
+                    fontFamily: "'Fraunces', serif", fontSize: '13.5px', fontStyle: 'italic',
+                    background: 'transparent', border: 'none', padding: '0 0 2px',
+                    color: palette.teal, borderBottom: `1px solid ${palette.tealBorder}`, cursor: 'pointer',
+                  }}
+                >
+                  View saved analysis <ArrowRight style={{ width: 13, height: 13 }} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

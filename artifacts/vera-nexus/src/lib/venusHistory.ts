@@ -13,6 +13,13 @@ export interface SavedAnalysis {
   confidence?: 'verified' | 'exploratory';
   confidenceNote?: string;
   contextQuery?: string;
+  // The chat this analysis was saved OUT of, so the Saved Analysis book can
+  // offer "open the thread this came from" — reading a conclusion without
+  // being able to get back to the reasoning that produced it is most of
+  // what makes a saved item feel inert. Optional: analyses saved before
+  // this existed simply don't offer the jump.
+  sessionId?: string;
+  serverChatId?: number;
 }
 
 export interface ChatMessage {

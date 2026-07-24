@@ -5,7 +5,7 @@ import {
   getSessions, saveSession, deleteSession, createSession,
   getSavedAnalyses, saveAnalysis, deleteSavedAnalysis,
   detectAnalysisType, typeLabel, titleFromMessage,
-  type ChatSession, type ChatMessage, type SavedAnalysisType,
+  type ChatSession, type ChatMessage, type SavedAnalysisType, type SavedAnalysis,
 } from '../lib/venusHistory';
 import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil, LayoutGrid, Workflow as WorkflowIcon, Paperclip, X, Loader2, AlertCircle } from 'lucide-react';
 import { GoalPanel } from './GoalPanel';
@@ -524,6 +524,10 @@ export function VenusPage() {
       confidence: msg.confidence,
       confidenceNote: msg.confidenceNote,
       contextQuery: msg.contextQuery,
+      // Recorded so the Saved Analysis book can jump back to the thread
+      // this conclusion came out of.
+      sessionId: currentSession.id,
+      serverChatId: currentSession.serverChatId,
     });
     setSaved(getSavedAnalyses());
   };
@@ -548,6 +552,39 @@ export function VenusPage() {
     };
     setCurrentSession(reopened);
     persistSession(reopened);
+  };
+
+  // "Open original chat" from the Saved Analysis book. Opens the REAL thread
+  // the analysis came out of, so the founder gets the whole conversation
+  // that produced it — unlike handleOpenSaved above, which reconstructs a
+  // one-message read-only view from the saved copy. Falls back to that when
+  // the source session is gone (cleared localStorage, or an analysis saved
+  // before sessionId was recorded), which is why this is best-effort rather
+  // than an error path.
+  const handleOpenSavedThread = (item: SavedAnalysis) => {
+    const source = item.sessionId ? getSessions().find((s) => s.id === item.sessionId) : undefined;
+    if (source) {
+      setCurrentSession(source);
+      setMainView('chat');
+      return;
+    }
+    handleOpenSaved(item);
+    setMainView('chat');
+  };
+
+  // Mini Vera hands its exchange over here once it hits its turn limit: the
+  // messages become a real session with real history, rather than being
+  // thrown away when the panel closes.
+  const handleContinueFromMiniVera = (miniMessages: ChatMessage[]) => {
+    const firstUser = miniMessages.find((m) => m.role === 'user');
+    const continued: ChatSession = {
+      ...createSession(),
+      title: firstUser?.content ? titleFromMessage(firstUser.content) : 'Continued from saved analysis',
+      messages: miniMessages,
+    };
+    setCurrentSession(continued);
+    persistSession(continued);
+    setMainView('chat');
   };
 
   const handleGenerateCompanyReport = useCallback(async (companyName: string) => {
@@ -921,7 +958,12 @@ export function VenusPage() {
           route/page. */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {mainView === 'command-center' ? (
-          <CommandCenterSection theme={theme} onBack={() => setMainView('chat')} />
+          <CommandCenterSection
+            theme={theme}
+            onBack={() => setMainView('chat')}
+            onOpenThread={handleOpenSavedThread}
+            onContinueInChat={handleContinueFromMiniVera}
+          />
         ) : (
         <>
         {/* Shared by both composer forms below (empty-state and active-chat) —
