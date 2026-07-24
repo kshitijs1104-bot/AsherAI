@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react';
-import { useLocation } from 'wouter';
 import { Bell } from 'lucide-react';
 import { useQueue } from '../lib/venusApi';
 
@@ -12,8 +11,7 @@ import { useQueue } from '../lib/venusApi';
 // previews, it never lets you act (accept/edit/reject) from here — that
 // stays exclusively Command Center's job so there's one place state
 // actually changes, not two.
-export function NotificationBell({ className = '' }: { className?: string }) {
-  const [, navigate] = useLocation();
+export function NotificationBell({ className = '', onOpenCommandCenter }: { className?: string; onOpenCommandCenter: () => void }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { data } = useQueue();
@@ -32,7 +30,7 @@ export function NotificationBell({ className = '' }: { className?: string }) {
 
   const goToCommandCenter = () => {
     setOpen(false);
-    navigate('/venus/command-center');
+    onOpenCommandCenter();
   };
 
   return (

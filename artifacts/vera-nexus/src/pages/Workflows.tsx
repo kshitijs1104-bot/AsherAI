@@ -231,7 +231,7 @@ function CosmicBackground({ light }: { light: boolean }) {
 export function WorkflowsPage() {
   const [, navigate] = useLocation();
   const { theme, toggle: toggleTheme } = useVenusTheme();
-  const { data: templatesData, isLoading } = useWorkflowTemplates();
+  const { data: templatesData, isLoading, isError, error } = useWorkflowTemplates();
   const { data: workflowsData } = useWorkflows();
 
   const templates = templatesData?.templates ?? [];
@@ -269,6 +269,12 @@ export function WorkflowsPage() {
         </p>
 
         {isLoading && <div className="text-[13px]" style={{ color: 'var(--v7-text-mute)' }}>Loading…</div>}
+
+        {isError && (
+          <div className="text-[13px] rounded-xl p-4 mb-4" style={{ background: 'var(--v7-bg-raised, rgba(0,0,0,0.2))', color: 'var(--red, #e5555c)' }}>
+            {error instanceof Error ? error.message : 'Failed to load workflow templates'}
+          </div>
+        )}
 
         <div className="space-y-3">
           {templates.map((t) => (

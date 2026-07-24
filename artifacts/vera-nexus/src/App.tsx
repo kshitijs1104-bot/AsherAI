@@ -13,7 +13,6 @@ import { SightPage } from "@/pages/Sight";
 import { CryptPage } from "@/pages/Crypt";
 import { ThoughtsPage } from "@/pages/Thoughts";
 import { VenusPage } from "@/pages/Venus";
-import { CommandCenterPage } from "@/pages/CommandCenter";
 import { WorkflowsPage } from "@/pages/Workflows";
 import { GoalsOverview } from "@/pages/GoalsOverview";
 import { DecisionsOverview } from "@/pages/DecisionsOverview";
@@ -105,9 +104,6 @@ function Router() {
       </Route>
       <Route path="/venus">
         <AuthGate component={VenusPage} />
-      </Route>
-      <Route path="/venus/command-center">
-        <AuthGate component={CommandCenterPage} />
       </Route>
       <Route path="/venus/workflows">
         <AuthGate component={WorkflowsPage} />

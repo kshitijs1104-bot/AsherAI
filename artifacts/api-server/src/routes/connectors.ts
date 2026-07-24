@@ -18,11 +18,14 @@ function redirectUriFor(type: string, req: any): string {
   return process.env[envVar] ?? `${req.protocol}://${req.get("host")}/api/connectors/${type}/callback`;
 }
 
-// Where the browser lands after a successful/failed OAuth round trip —
-// Command Center is where connector status actually surfaces, so that's
-// the natural place to send a founder back to after connecting one.
+// Where the browser lands after a successful/failed OAuth round trip.
+// Command Center is an inline view inside /venus (client-side state, see
+// Venus.tsx's mainView), not its own route — the ?view=command-center
+// query param is how a fresh page load tells it which view to open into,
+// since there's no URL for that view to redirect to directly.
 function frontendReturnUrl(): string {
-  return process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/venus/command-center` : "/venus/command-center";
+  const base = process.env.FRONTEND_URL ?? "";
+  return `${base}/venus?view=command-center`;
 }
 
 router.get("/connectors", requireAuth, async (req, res) => {

@@ -55,4 +55,20 @@ app.use(clerkMiddleware());
 
 app.use("/api", router);
 
+// Without this, an error thrown by middleware BEFORE it reaches a route's
+// own try/catch (multer's fileFilter/size-limit rejection being the
+// concrete case that surfaced this — see routes/attachments.ts) falls
+// through to Express's default error handler, which renders an HTML page.
+// The frontend's apiFetch/fetch callers all assume a JSON error body and
+// silently fall back to a generic message when that assumption breaks —
+// this is what made a real, specific failure (wrong file type, DB table
+// missing, whatever) show up to founders as an unhelpful "Upload failed"/
+// "Request failed" with no way to tell what actually went wrong.
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) return next(err);
+  req.log?.error(err, "Unhandled error");
+  const status = typeof err?.status === "number" ? err.status : typeof err?.statusCode === "number" ? err.statusCode : 500;
+  res.status(status).json({ error: err?.message || "Internal server error" });
+});
+
 export default app;

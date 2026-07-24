@@ -13,6 +13,9 @@ import { RoadmapTracker } from './RoadmapTracker';
 import { TodayCard } from './TodayCard';
 import { VenusThemeToggle } from './VenusThemeToggle';
 import { NotificationBell } from './NotificationBell';
+import { CommandCenterSection } from './CommandCenter';
+import { AttachMenu } from './AttachMenu';
+import { ConnectorPicker } from './ConnectorPicker';
 import { useVenusTheme } from '../lib/venusTheme';
 import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
 
@@ -219,6 +222,16 @@ export function VenusPage() {
   const [showGoalPanel, setShowGoalPanel] = useState(() => loadPanelPref(SHOW_GOAL_PANEL_KEY));
   const [showRoadmap, setShowRoadmap] = useState(() => loadPanelPref(SHOW_ROADMAP_KEY));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadPanelPref(SIDEBAR_COLLAPSED_KEY, false));
+  // Command Center opens INTO this same view — same swap New Chat does —
+  // never a separate route. 'chat' is the default/only state a fresh
+  // session or session-switch returns to. The one exception: a fresh page
+  // load (not a client-side nav) can request it via ?view=command-center —
+  // the only way an OAuth callback redirect (see routes/connectors.ts's
+  // frontendReturnUrl) can land a founder back INTO this client-state view
+  // instead of just the plain chat.
+  const [mainView, setMainView] = useState<'chat' | 'command-center'>(() =>
+    new URLSearchParams(window.location.search).get('view') === 'command-center' ? 'command-center' : 'chat',
+  );
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [groqKey, setGroqKey] = useState(() => localStorage.getItem('ve_groq_key') || '');
@@ -302,6 +315,7 @@ export function VenusPage() {
   const handleNewChat = () => {
     const s = createSession();
     setCurrentSession(s);
+    setMainView('chat');
   };
 
   const toggleGoalPanel = () => setShowGoalPanel((v) => { const next = !v; savePanelPref(SHOW_GOAL_PANEL_KEY, next); return next; });
@@ -326,6 +340,7 @@ export function VenusPage() {
   const handleSelectSession = (s: ChatSession) => {
     setCurrentSession(s);
     setInput('');
+    setMainView('chat');
   };
 
   const handleDeleteSession = (id: string, e: React.MouseEvent) => {
@@ -522,7 +537,7 @@ export function VenusPage() {
             <PanelLeftOpen className="w-4 h-4" />
           </button>
           <VenusThemeToggle theme={theme} onToggle={toggleTheme} />
-          <NotificationBell />
+          <NotificationBell onOpenCommandCenter={() => setMainView('command-center')} />
         </div>
       ) : (
       <aside
@@ -617,7 +632,7 @@ export function VenusPage() {
             first, toggles last, room left for future nav items between
             Workflows and Goals). */}
         <div className="mb-[18px]" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => navigate('/venus/command-center')} badgeCount={pendingQueueCount} />
+          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={pendingQueueCount} />
           <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/venus/workflows')} />
           <SidebarToggleRow icon={Target} label="Goals" active={showGoalPanel} onClick={toggleGoalPanel} />
           <SidebarToggleRow icon={MapIcon} label="Roadmap" active={showRoadmap} onClick={toggleRoadmap} />
@@ -778,14 +793,25 @@ export function VenusPage() {
               <p className="text-[9px] mt-1.5 leading-relaxed" style={{ fontFamily: 'var(--v7-font-mono)', color: 'var(--v7-text-mute)' }}>
                 Get a free key at console.groq.com
               </p>
+
+              <div className="text-[10px] uppercase tracking-wider mb-2 mt-4 pt-3" style={{ fontFamily: 'var(--v7-font-mono)', color: 'var(--v7-text-mute)', borderTop: '1px solid var(--v7-border)' }}>
+                Connectors
+              </div>
+              <ConnectorPicker />
             </div>
           )}
         </div>
       </aside>
       )}
 
-      {/* Main Chat Area */}
+      {/* Main Chat Area — swaps to Command Center in place, same view New
+          Chat itself swaps into (see mainView state), never a separate
+          route/page. */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {mainView === 'command-center' ? (
+          <CommandCenterSection theme={theme} onBack={() => setMainView('chat')} />
+        ) : (
+        <>
         {/* Shared by both composer forms below (empty-state and active-chat) —
             a single hidden input, triggered by whichever paperclip button is
             currently on screen. */}
@@ -878,17 +904,11 @@ export function VenusPage() {
                 onFocus={e => { e.currentTarget.style.borderColor = 'var(--v7-cyan-strong)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--v7-cyan-soft)'; }}
                 onBlur={e => { e.currentTarget.style.borderColor = 'var(--v7-border-strong)'; e.currentTarget.style.boxShadow = 'none'; }}
               >
-                <button
-                  type="button"
-                  title="Attach an image or document"
-                  onClick={() => fileInputRef.current?.click()}
+                <AttachMenu
+                  onPickFiles={() => fileInputRef.current?.click()}
                   className="shrink-0 p-1.5 rounded-lg transition-colors"
                   style={{ color: 'var(--v7-text-mute)' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--v7-text-dim)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--v7-text-mute)')}
-                >
-                  <Paperclip className="w-4 h-4" />
-                </button>
+                />
                 <textarea
                   value={input}
                   onChange={e => setInput(e.target.value)}
@@ -1038,15 +1058,11 @@ export function VenusPage() {
               onSubmit={e => { e.preventDefault(); handleSend(); }}
               className="flex items-end gap-2 bg-[var(--surface2)] border border-[var(--border)] rounded-xl p-2 focus-within:border-[var(--indigo)] transition-colors max-w-4xl mx-auto"
             >
-              <button
-                type="button"
-                title="Attach an image or document"
-                onClick={() => fileInputRef.current?.click()}
+              <AttachMenu
+                onPickFiles={() => fileInputRef.current?.click()}
                 className="shrink-0 w-10 h-10 flex items-center justify-center rounded-lg transition-colors mb-0.5"
                 style={{ color: 'var(--dim)' }}
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
+              />
               <textarea
                 value={input}
                 onChange={e => setInput(e.target.value)}
@@ -1066,6 +1082,8 @@ export function VenusPage() {
               </button>
             </form>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

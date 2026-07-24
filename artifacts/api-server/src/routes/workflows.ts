@@ -29,7 +29,11 @@ router.get("/workflows/templates", requireAuth, async (req, res) => {
     return res.json({ templates });
   } catch (err) {
     req.log.error(err);
-    return res.status(500).json({ error: "Failed to load workflow templates" });
+    // Real message (e.g. "relation workflows does not exist" pre-migration)
+    // rather than a canned string — this exact failure mode is what showed
+    // up to a founder as a silently empty template list with no way to
+    // tell why, so the specific reason needs to actually reach the UI.
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load workflow templates" });
   }
 });
 
@@ -40,7 +44,7 @@ router.get("/workflows", requireAuth, async (req, res) => {
     return res.json({ workflows: rows });
   } catch (err) {
     req.log.error(err);
-    return res.status(500).json({ error: "Failed to load workflows" });
+    return res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load workflows" });
   }
 });
 
