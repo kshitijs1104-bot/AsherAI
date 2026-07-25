@@ -49,11 +49,25 @@ export interface QueryClassification {
   // meaningful when correctsPriorAnswer is true.
   detectedIssue: string | null;
   issueClass: IssueClass | null;
+  // True when classification did not actually succeed and these values are
+  // just defaults. Callers MUST treat this as "unknown", not as a real
+  // "consultation / no external facts needed" answer.
+  //
+  // Without this flag the fallback was fail-CLOSED in the worst possible
+  // direction: a failed classifier returned needsExternalFacts:false, which
+  // made isFactualExternal false, which suppressed the web search — silently
+  // restoring the exact fabrication behavior this whole change set exists to
+  // prevent, and doing it precisely when the system was already degraded.
+  // Grounding must fail OPEN: if we don't know whether a question needs real
+  // sources, search anyway. The cost of an unnecessary search is latency; the
+  // cost of a skipped one is an invented answer.
+  failed: boolean;
 }
 
-// Preserves today's behavior exactly when the classifier is unavailable:
-// treat it as a normal strategy question of ordinary depth. Never blocks a
-// response — a failed classification must degrade, not error.
+// Used when classification is unavailable. Never blocks a response — a failed
+// classification degrades, it doesn't error. `failed: true` is the important
+// field: it tells callers these are placeholders, so grounding decisions fail
+// OPEN (search anyway) rather than silently reverting to "no search needed".
 export const DEFAULT_CLASSIFICATION: QueryClassification = {
   kind: "consultation",
   complexity: "moderate",
@@ -61,6 +75,7 @@ export const DEFAULT_CLASSIFICATION: QueryClassification = {
   correctsPriorAnswer: false,
   detectedIssue: null,
   issueClass: null,
+  failed: true,
 };
 
 const CLASSIFIER_SYSTEM_PROMPT = `Classify a founder's message to a business-advisor AI on two INDEPENDENT axes. Return ONLY JSON.
@@ -154,6 +169,7 @@ export async function classifyQuery(
       issueClass: correctsPriorAnswer
         ? coerce(parsed.issueClass, ["fabricated_entity", "misread_intent", "wrong_topic", "other"] as const, "other")
         : null,
+      failed: false,
     };
   } catch (err) {
     console.error("[queryClassifier] classification failed, falling back to consultation/moderate", err);

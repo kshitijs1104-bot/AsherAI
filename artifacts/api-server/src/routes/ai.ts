@@ -1231,7 +1231,13 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     const isFactualExternal =
       classification.kind === "factual_lookup" ||
       classification.kind === "mixed" ||
-      classification.needsExternalFacts;
+      classification.needsExternalFacts ||
+      // FAIL OPEN. When classification didn't succeed, we do not know whether
+      // this question needs real sources — so search rather than assume it
+      // doesn't. Assuming it doesn't is what produces an invented answer, and
+      // it would do so exactly when the system is already degraded. An
+      // unnecessary search costs latency; a skipped one costs correctness.
+      classification.failed;
 
     // No verified precedent in the curated dataset doesn't mean "give up" — it
     // means go find real information instead. This is fully generic: whatever
@@ -2024,37 +2030,34 @@ router.post("/ai/company-report", requireAuth, async (req, res) => {
       });
     }
 
-    const searchQuery = `${companyName} company overview funding founders timeline`; 
-    const searchUrl = `https://duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
-    const searchResponse = await fetch(searchUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
-    const searchHtml = await searchResponse.text();
-    const resultUrls = Array.from(new Set((searchHtml.match(/uddg="([^"]+)"/g) ?? []).map(match => match.slice(6, -1)).filter(Boolean).slice(0, 5)));
+    // Was a second, hand-rolled copy of the DuckDuckGo scrape — carrying the
+    // SAME broken result-link regex (`/uddg="([^"]+)"/g`) that never matched
+    // real DDG markup. So this route silently found zero sources on every
+    // request and generated "company research reports" from an empty
+    // `articleSnippets` array — i.e. from nothing but the model's own
+    // recall, while the prompt below told it those snippets were "the only
+    // source material". Exactly the fabrication bug fixed in websearch.ts,
+    // in a second place, unfixed because the logic had been duplicated.
+    //
+    // Now uses the shared helper, so there is one implementation to keep
+    // correct instead of two that drift. A larger budget than the default is
+    // requested because this route's prompt is small (no VENUS_PROMPT), so it
+    // can afford real source text.
+    const searchQuery = `${companyName} company overview funding founders timeline`;
+    const companySearch = await webSearch(searchQuery, { maxSources: 5, totalCharBudget: 20000 });
+    const articleSnippets = companySearch.sources.map((s) => s.snippet);
 
-    const articleSnippets = [] as string[];
-    for (const url of resultUrls) {
-      try {
-        const target = /^https?:\/\//i.test(url) ? url : `https://${url}`;
-        const articleResponse = await fetch(`https://r.jina.ai/http://${new URL(target).host}${new URL(target).pathname}${new URL(target).search}`, {
-          headers: {
-            "User-Agent": "Mozilla/5.0",
-          },
-        });
-        const articleText = await articleResponse.text();
-        if (articleText) articleSnippets.push(articleText.slice(0, 5000));
-      } catch {
-        // ignore failing fetches and continue with the other sources
-      }
-    }
+    // An empty search must be stated as empty. Handing the model a prompt that
+    // calls the snippets "the only source material" and then supplying none is
+    // an instruction to invent — which is precisely what this route did on
+    // every request while its scraper was silently broken.
+    const sourceMaterial = articleSnippets.length > 0
+      ? `Search excerpts:\n${articleSnippets.join("\n\n").slice(0, 20000)}`
+      : `Search excerpts: NONE — the live search returned no usable sources for this company. You therefore have no source material. Set every snapshot field to "Unknown", return an empty timeline and an empty sources array, and make "analysis" a single plain sentence saying no verifiable information could be retrieved for this company. Do NOT fill any field from your own recall.`;
 
     const prompt = `You are researching the company "${companyName}" for a founder-facing brief. Use the search snippets below as the only source material. If the evidence is weak or contradictory, mark unknown values rather than inventing facts. Return ONLY valid JSON with this shape: {"companyName":"string","snapshot":{"foundedYear":"string","founders":["string"],"fundingRaised":"string","whatTheyBuilt":"string"},"timeline":[{"label":"string","detail":"string"}],"analysis":"2-4 sentences","sources":[{"title":"string","url":"string"}]}. Do not mention that you are an AI. Do not include markdown. Context: ${context ?? ""}
 
-Search excerpts:
-${articleSnippets.join("\n\n").slice(0, 20000)}`;
+${sourceMaterial}`;
 
     const { parsed } = await callGroqJSON(
       groq,
@@ -2081,7 +2084,7 @@ ${articleSnippets.join("\n\n").slice(0, 20000)}`;
           },
           timeline: Array.isArray(parsed.timeline) ? parsed.timeline : [],
           analysis: parsed.analysis ?? "No additional detail was available from the lookup sources.",
-          sources: Array.isArray(parsed.sources) ? parsed.sources : resultUrls.map(url => ({ title: url, url })),
+          sources: Array.isArray(parsed.sources) ? parsed.sources : companySearch.sources.map((s) => ({ title: s.url, url: s.url })),
           generatedAt: new Date().toISOString(),
         }
       : {
@@ -2089,7 +2092,7 @@ ${articleSnippets.join("\n\n").slice(0, 20000)}`;
           snapshot: { foundedYear: "Unknown", founders: [], fundingRaised: "Unknown", whatTheyBuilt: "Unknown" },
           timeline: [],
           analysis: "The lookup did not return a structured report.",
-          sources: resultUrls.map(url => ({ title: url, url })),
+          sources: companySearch.sources.map((s) => ({ title: s.url, url: s.url })),
           generatedAt: new Date().toISOString(),
         };
 

@@ -38,22 +38,131 @@ function withTimeout(ms: number): { signal: AbortSignal; cancel: () => void } {
 // (cookie notices, "subscribe" prompts) often duplicated across many lines.
 // Collapsing whitespace and dropping very short noise-lines buys back real
 // content within the character budget instead of spending it on junk.
+// Lines that are pure page furniture rather than content: markdown image
+// embeds, bare nav/filter labels, cookie and call-us banners. On a real
+// listing page these dominate the top of the document — measured on a live
+// result, the first ~1,500 characters were entirely logo embeds, menu items
+// and filter controls, with the actual listings only starting after them.
+const IMAGE_LINE = /^!\[[^\]]*\]\([^)]*\)$/;
+const MARKDOWN_LINK = /\[([^\]]*)\]\([^)]*\)/g;
+const UI_NOISE = /^(home|menu|search|login|sign ?in|sign ?up|register|apply|filters?|clear all|sort by|map view|read more|show (more|less)|next|prev(ious)?|share|follow us|subscribe|cookies?|accept|©.*|call now.*|\|)$/i;
+// Filter widgets and "browse by X" link lists. These are the densest
+// concentration of query terms on a typical listing page (a Mumbai schools
+// page has dozens of "Top Best <board> Schools in Mumbai" links and a
+// checkbox per locality), so without removing them they win the relevance
+// selection outright and crowd out the actual listings.
+const FILTER_WIDGET = /^[-*]\s*\[[ x]\]/i;
+const BROWSE_LINK = /^[-*#>\s]*(top|best|explore|discover|browse|view all|see more)\b.*\bin\s+[A-Z][a-z]+\s*$/i;
+
 function cleanScrapedText(text: string): string {
+  const seen = new Set<string>();
   return text
     .split("\n")
     .map((line) => line.trim())
-    .filter((line) => line.length > 0)
+    // Strip image embeds entirely, then flatten [label](url) to just the
+    // label — the URL is noise to the model but eats the char budget.
+    .filter((line) => !IMAGE_LINE.test(line))
+    .map((line) => line.replace(MARKDOWN_LINK, "$1").trim())
+    .filter((line) => line.length > 0 && !UI_NOISE.test(line) && !FILTER_WIDGET.test(line) && !BROWSE_LINK.test(line))
+    // Nav and footer links repeat many times per page; one copy is enough.
+    .filter((line) => {
+      if (line.length < 25) return true; // short lines are cheap, keep them
+      if (seen.has(line)) return false;
+      seen.add(line);
+      return true;
+    })
     .join("\n")
     .replace(/\n{2,}/g, "\n");
+}
+
+// Picks the most QUERY-RELEVANT window of a page rather than blindly taking
+// the head. This is what makes a per-source character budget actually useful:
+// on a real listing page, taking the first N characters yields navigation
+// chrome and filter widgets, while the content that answers the question sits
+// thousands of characters further down. Verified against a live result where
+// the head-slice contained zero of the school names the page is about.
+//
+// Deliberately simple (a two-pointer scan maximizing query-term hits per
+// window) rather than a semantic ranker — this runs on every search and must
+// stay cheap; the goal is only to avoid spending the whole budget on a menu.
+function selectRelevantWindow(text: string, query: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+
+  const terms = Array.from(
+    new Set(
+      query
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((t) => t.length > 2),
+    ),
+  );
+  if (terms.length === 0) return text.slice(0, maxChars);
+
+  const lines = text.split("\n");
+  const lowered = lines.map((l) => l.toLowerCase());
+
+  // Weight each query term by how RARE it is within this page (plain IDF).
+  // Counting raw hits doesn't work: on a page about Mumbai schools, the words
+  // "schools" and "mumbai" appear on nearly every line — including the
+  // navigation and "browse by locality" blocks — so an unweighted scan
+  // reliably selects a menu that mentions the query terms dozens of times
+  // over the section that actually answers the question. Terms that saturate
+  // the page contribute ~0; distinguishing terms ("cambridge", "igcse") drive
+  // the selection.
+  //
+  // Same underlying lesson as the stopword fix in retrieval.ts: vocabulary
+  // that appears everywhere in the corpus carries no signal. Here it's
+  // computed per-page instead of hardcoded, so it needs no word list and
+  // adapts to whatever the page is about.
+  const weights = terms.map((t) => {
+    const df = lowered.reduce((n, l) => (l.includes(t) ? n + 1 : n), 0);
+    return Math.log((lines.length + 1) / (df + 1));
+  });
+
+  const hits = lowered.map((l) => terms.reduce((n, t, idx) => (l.includes(t) ? n + weights[idx] : n), 0));
+  const lens = lines.map((l) => l.length + 1);
+
+  let bestStart = 0;
+  let bestScore = -1;
+  let start = 0;
+  let chars = 0;
+  let score = 0;
+  for (let end = 0; end < lines.length; end++) {
+    chars += lens[end];
+    score += hits[end];
+    while (chars > maxChars && start <= end) {
+      chars -= lens[start];
+      score -= hits[start];
+      start++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestStart = start;
+    }
+  }
+
+  // Rebuild the winning window from its start line.
+  let out = "";
+  for (let i = bestStart; i < lines.length && out.length + lines[i].length + 1 <= maxChars; i++) {
+    out += lines[i] + "\n";
+  }
+  return out.trim() || text.slice(0, maxChars);
 }
 
 // Splits a fixed total character budget across however many sources actually
 // came back, so the combined result is bounded no matter what the search
 // returned this time — 1 source or 4, short pages or long ones.
-function applySharedBudget(sources: { url: string; snippet: string }[], totalBudget: number): { url: string; snippet: string }[] {
+function applySharedBudget(
+  sources: { url: string; snippet: string }[],
+  totalBudget: number,
+  query: string,
+): { url: string; snippet: string }[] {
   if (sources.length === 0) return sources;
   const perSource = Math.floor(totalBudget / sources.length);
-  return sources.map((s) => ({ url: s.url, snippet: s.snippet.slice(0, perSource) }));
+  // Was `snippet.slice(0, perSource)` — a head-truncation that reliably
+  // handed the model a page's navigation menu instead of its content.
+  return sources.map((s) => ({ url: s.url, snippet: selectRelevantWindow(s.snippet, query, perSource) }));
 }
 
 /**
@@ -63,7 +172,17 @@ function applySharedBudget(sources: { url: string; snippet: string }[], totalBud
  * Never throws; a failed search just comes back with empty:true so the caller
  * can decide how to proceed (e.g. answer from general knowledge instead).
  */
-export async function webSearch(query: string): Promise<WebSearchResult> {
+export interface WebSearchOptions {
+  // Callers with a small surrounding prompt (e.g. /ai/company-report, which
+  // doesn't carry VENUS_PROMPT) can afford more source text than the default
+  // budget, which is sized for /ai/analyze's already-oversized prompt.
+  maxSources?: number;
+  totalCharBudget?: number;
+}
+
+export async function webSearch(query: string, opts?: WebSearchOptions): Promise<WebSearchResult> {
+  const maxSources = opts?.maxSources ?? MAX_SOURCES;
+  const totalBudget = opts?.totalCharBudget ?? TOTAL_SNIPPET_CHAR_BUDGET;
   try {
     const searchUrl = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
     const { signal, cancel } = withTimeout(SEARCH_TIMEOUT_MS);
@@ -102,7 +221,7 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
           })
           .filter((u): u is string => Boolean(u)),
       ),
-    ).slice(0, MAX_SOURCES);
+    ).slice(0, maxSources);
 
     if (resultUrls.length === 0) {
       return { query, sources: [], empty: true };
@@ -132,7 +251,7 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
     );
 
     const usable = sources.filter((s): s is { url: string; snippet: string } => s !== null && s.snippet.trim().length > 0);
-    const budgeted = applySharedBudget(usable, TOTAL_SNIPPET_CHAR_BUDGET);
+    const budgeted = applySharedBudget(usable, totalBudget, query);
     return { query, sources: budgeted, empty: budgeted.length === 0 };
   } catch {
     // network failure, DNS issue, etc — search itself failed entirely
