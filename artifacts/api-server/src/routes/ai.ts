@@ -27,6 +27,7 @@ import {
 } from "../lib/preferenceDetection";
 import { parseLengthConstraint, verifyLengthConstraint, describeLengthConstraint } from "../lib/lengthConstraint";
 import { classifyQuery } from "../lib/queryClassifier";
+import { recordCorrection } from "../lib/responseFeedback";
 
 const router = Router();
 
@@ -1131,13 +1132,39 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // network round-trip on a separate model, so sequencing them would add
     // its full latency to every request for no reason. Never rejects (see
     // classifyQuery's own catch), so Promise.all is safe here.
+    // The immediately-preceding assistant turn, needed so the classifier can
+    // tell whether THIS message is rejecting it. Reuses the same tolerant
+    // role convention as priorAssistantMessage above (the frontend labels
+    // Vera's turns "venus", not "assistant").
+    const lastAssistantTurn = [...(effectiveSessionHistory ?? [])].reverse().find((h) => h.role && h.role !== "user")?.content ?? "";
+    const lastUserTurn = [...(effectiveSessionHistory ?? [])].reverse().find((h) => h.role === "user")?.content ?? "";
+
     const [retrieval, classification] = await Promise.all([
       retrievePrecedents(body.data.message, { businessContext: effectiveBusinessContext }),
-      classifyQuery(groq, body.data.message),
+      classifyQuery(groq, body.data.message, lastAssistantTurn),
     ]);
     console.error(
-      `[queryClassifier] session=${sessionId} kind=${classification.kind} complexity=${classification.complexity} needsExternalFacts=${classification.needsExternalFacts} query="${body.data.message.slice(0, 120)}"`,
+      `[queryClassifier] session=${sessionId} kind=${classification.kind} complexity=${classification.complexity} needsExternalFacts=${classification.needsExternalFacts} corrects=${classification.correctsPriorAnswer} query="${body.data.message.slice(0, 120)}"`,
     );
+
+    // The founder just told Vera its last answer was wrong. Capture the full
+    // triple (question → answer → correction) as a permanent regression case.
+    // Fire-and-forget: this is the learning loop, not something the founder
+    // is waiting on, and it must never delay or break their actual reply.
+    if (classification.correctsPriorAnswer) {
+      console.error(
+        `[responseFeedback] session=${sessionId} issueClass=${classification.issueClass} issue="${classification.detectedIssue ?? ""}" correction="${body.data.message.slice(0, 160)}"`,
+      );
+      recordCorrection({
+        userId: sessionId,
+        chatId: body.data.chatId,
+        originalQuery: lastUserTurn,
+        originalResponse: lastAssistantTurn,
+        correctionText: body.data.message,
+        detectedIssue: classification.detectedIssue,
+        issueClass: classification.issueClass,
+      }).catch(() => {});
+    }
 
     // The founder's own resolved decision history — see retrieval.ts and
     // venus_decisions schema comments for why this is scoped per-session and

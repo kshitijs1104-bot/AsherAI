@@ -25,6 +25,10 @@ import { callGroqJSON } from "./groq";
 export type QueryKind = "factual_lookup" | "consultation" | "mixed";
 export type QueryComplexity = "simple" | "moderate" | "complex";
 
+// Coarse failure families, not specific bugs — a rate per class is what
+// generalizes across arbitrary future queries. See response_feedback schema.
+export type IssueClass = "fabricated_entity" | "misread_intent" | "wrong_topic" | "other";
+
 export interface QueryClassification {
   kind: QueryKind;
   complexity: QueryComplexity;
@@ -32,6 +36,19 @@ export interface QueryClassification {
   // (names, figures, dates, current state) that the model cannot verify from
   // its own weights. Drives the grounding requirement in ai.ts.
   needsExternalFacts: boolean;
+  // Whether this message is the founder telling Vera its PREVIOUS answer was
+  // wrong. Detected here rather than by a regex because real corrections
+  // don't follow a fixed shape — "these are false too" and "no such ones
+  // exist" both reject the prior answer while matching none of the
+  // rejection-word patterns preferenceDetection.ts looks for.
+  //
+  // Rides along on the classification call that already runs for every
+  // message, so catching corrections costs no extra round-trip.
+  correctsPriorAnswer: boolean;
+  // Short description of what was wrong, and its failure family — only
+  // meaningful when correctsPriorAnswer is true.
+  detectedIssue: string | null;
+  issueClass: IssueClass | null;
 }
 
 // Preserves today's behavior exactly when the classifier is unavailable:
@@ -41,6 +58,9 @@ export const DEFAULT_CLASSIFICATION: QueryClassification = {
   kind: "consultation",
   complexity: "moderate",
   needsExternalFacts: false,
+  correctsPriorAnswer: false,
+  detectedIssue: null,
+  issueClass: null,
 };
 
 const CLASSIFIER_SYSTEM_PROMPT = `Classify a founder's message to a business-advisor AI on two INDEPENDENT axes. Return ONLY JSON.
@@ -57,9 +77,20 @@ const CLASSIFIER_SYSTEM_PROMPT = `Classify a founder's message to a business-adv
 
 "needsExternalFacts": true if a correct answer must state specific real-world facts (proper nouns, figures, dates, current state) that could be wrong if guessed. False if the answer is reasoning, opinion, or about the user's own stated situation.
 
+"correctsPriorAnswer": true if the user is saying the assistant's PREVIOUS answer was wrong, false, made-up, or not what they asked for. Judge meaning, not phrasing — "these are false too", "no such ones exist", "that's not what I asked", "i dint ask for that" are ALL corrections even though they are worded completely differently. A follow-up question, a request to go deeper, or a new topic is NOT a correction. If there is no previous answer shown, this is always false.
+
+"detectedIssue": when correctsPriorAnswer is true, one short phrase naming what was actually wrong (e.g. "listed schools that do not exist", "answered about skills labs when asked about schools"). Otherwise null.
+
+"issueClass": when correctsPriorAnswer is true, exactly one of:
+- "fabricated_entity" — invented names, places, organizations, statistics, or other specifics that aren't real
+- "misread_intent" — answered a different question than the one asked (misread a word, an abbreviation, or the request)
+- "wrong_topic" — drifted to an unrelated subject, or acted on an earlier turn instead of the current one
+- "other" — a real correction that fits none of the above
+Otherwise null.
+
 Judge only what the message actually asks. Do not assume a business/startup topic — the user may ask about anything at all.
 
-Return exactly: {"kind":"...","complexity":"...","needsExternalFacts":true|false}`;
+Return exactly: {"kind":"...","complexity":"...","needsExternalFacts":true|false,"correctsPriorAnswer":true|false,"detectedIssue":"..."|null,"issueClass":"..."|null}`;
 
 function coerce<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
@@ -69,24 +100,37 @@ function coerce<T extends string>(value: unknown, allowed: readonly T[], fallbac
  * Never throws and never blocks: any failure returns DEFAULT_CLASSIFICATION,
  * which reproduces the pre-existing behavior rather than degrading it.
  */
-export async function classifyQuery(groq: Groq, message: string): Promise<QueryClassification> {
+export async function classifyQuery(
+  groq: Groq,
+  message: string,
+  priorAssistantMessage?: string,
+): Promise<QueryClassification> {
   try {
+    // The prior answer is truncated hard: correction detection only needs
+    // enough of it to tell what was being rejected, and this call's whole
+    // value proposition is that it stays cheap.
+    const priorBlock = priorAssistantMessage?.trim()
+      ? `Assistant's previous answer:\n"""${priorAssistantMessage.slice(0, 600)}"""\n\n`
+      : "";
     const { parsed } = await callGroqJSON(
       groq,
       {
         model: "openai/gpt-oss-20b",
         messages: [
           { role: "system", content: CLASSIFIER_SYSTEM_PROMPT },
-          { role: "user", content: message.slice(0, 1000) },
+          { role: "user", content: `${priorBlock}User's message to classify:\n"""${message.slice(0, 1000)}"""` },
         ],
         temperature: 0,
-        max_tokens: 150,
+        max_tokens: 250,
         reasoning_effort: "low",
         include_reasoning: false,
       },
       "queryClassifier",
     );
     if (!parsed) return DEFAULT_CLASSIFICATION;
+
+    const correctsPriorAnswer =
+      Boolean(priorBlock) && typeof parsed.correctsPriorAnswer === "boolean" ? parsed.correctsPriorAnswer : false;
 
     return {
       kind: coerce(parsed.kind, ["factual_lookup", "consultation", "mixed"] as const, DEFAULT_CLASSIFICATION.kind),
@@ -99,6 +143,17 @@ export async function classifyQuery(groq: Groq, message: string): Promise<QueryC
         typeof parsed.needsExternalFacts === "boolean"
           ? parsed.needsExternalFacts
           : DEFAULT_CLASSIFICATION.needsExternalFacts,
+      correctsPriorAnswer,
+      // Only ever populated alongside a real correction — a stray
+      // detectedIssue on a normal question would pollute the eval corpus
+      // with non-failures.
+      detectedIssue:
+        correctsPriorAnswer && typeof parsed.detectedIssue === "string" && parsed.detectedIssue.trim()
+          ? parsed.detectedIssue.trim().slice(0, 300)
+          : null,
+      issueClass: correctsPriorAnswer
+        ? coerce(parsed.issueClass, ["fabricated_entity", "misread_intent", "wrong_topic", "other"] as const, "other")
+        : null,
     };
   } catch (err) {
     console.error("[queryClassifier] classification failed, falling back to consultation/moderate", err);

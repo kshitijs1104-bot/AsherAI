@@ -16,3 +16,4 @@ export * from "./connectors";
 export * from "./workflows";
 export * from "./monthly_recaps";
 export * from "./attachments";
+export * from "./response_feedback";
