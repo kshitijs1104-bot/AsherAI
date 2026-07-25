@@ -78,8 +78,30 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
       cancel();
     }
 
+    // DuckDuckGo's HTML result links look like
+    // href="//duckduckgo.com/l/?uddg=<url-encoded-target>&amp;rut=<hash>" —
+    // the target URL is a query-param VALUE inside the href attribute, not
+    // its own standalone `uddg="..."` attribute. The previous regex
+    // (`/uddg="([^"]+)"/g`) assumed the latter and so never matched
+    // anything in real DDG markup (verified against live output — 0 of 10
+    // real results ever extracted, for every query, unconditionally).
+    // Silently returning `empty: true` on every single search is what let
+    // the "if web search came back empty, answer from general knowledge,
+    // be specific" instruction below fire on every out-of-dataset query,
+    // producing confident fabricated specifics with no real grounding ever
+    // having been attempted.
     const resultUrls = Array.from(
-      new Set((searchHtml.match(/uddg="([^"]+)"/g) ?? []).map((m) => m.slice(6, -1)).filter(Boolean)),
+      new Set(
+        Array.from(searchHtml.matchAll(/href="[^"]*[?&]uddg=([^&"]+)/g))
+          .map((m) => {
+            try {
+              return decodeURIComponent(m[1]);
+            } catch {
+              return null;
+            }
+          })
+          .filter((u): u is string => Boolean(u)),
+      ),
     ).slice(0, MAX_SOURCES);
 
     if (resultUrls.length === 0) {
