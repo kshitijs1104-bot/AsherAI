@@ -147,7 +147,18 @@ export function computeConfidence(retrieval: RetrievalResult, ownDecisions: OwnD
   const outcomeHistoryFactor = computeOutcomeHistoryFactor(ownDecisions);
 
   const score = clamp01(evidenceQuality + verificationBoost - contradictionPenalty + outcomeHistoryFactor);
-  const tier: ConfidenceResult["tier"] = score >= VERIFIED_THRESHOLD ? "verified" : "exploratory";
+  // "Verified precedent" now additionally requires the STRONG retrieval tier,
+  // not just a numeric score over the threshold. A moderate-tier match is,
+  // by retrieval.ts's own definition, "a small or adjacent set of precedents
+  // — a slightly thinner evidence base than a direct match", and the
+  // user-facing confidenceNote already says exactly that. Labelling it
+  // "Verified precedent" contradicted that note and was the overclaim behind
+  // a fabricated answer shipping under a green verified badge: the score
+  // cleared 0.3 purely on the +0.25 sector boost (see retrieval.ts). Adjacent
+  // evidence is real evidence and still grounds the answer — it just isn't
+  // "verified", so the badge now says exploratory and the note explains why.
+  const tier: ConfidenceResult["tier"] =
+    score >= VERIFIED_THRESHOLD && retrieval.tier === "strong" ? "verified" : "exploratory";
 
   return {
     score: Number(score.toFixed(3)),

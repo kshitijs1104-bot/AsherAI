@@ -26,6 +26,7 @@ import {
   enforceStylePreferences,
 } from "../lib/preferenceDetection";
 import { parseLengthConstraint, verifyLengthConstraint, describeLengthConstraint } from "../lib/lengthConstraint";
+import { classifyQuery } from "../lib/queryClassifier";
 
 const router = Router();
 
@@ -134,19 +135,14 @@ const BENCHMARKABLE_CATEGORY = /\b(price|pricing|priced|subscription|fee|fees|ch
 // from ever reaching the prompt in the first place.
 const DIAGNOSTIC_QUESTION = /\b(why|what'?s (causing|wrong|broken|happening|going on)|whats (causing|wrong|broken|happening|going on)|stalling|stalled|stuck|struggling|isn'?t (working|converting|growing|selling)|not (working|converting|growing|selling)|declin(ing|ed)|dropp(ing|ed)|falling|slipping)\b/i;
 
-// Item 5: a question that's actually asking about something real, current,
-// and externally checkable (a named product/tool/competitor's reputation,
-// reviews, recent news) rather than a strategic call about the founder's own
-// business. Before this existed, the ONLY thing that ever triggered a real
-// web search was `isNone && !isNarrowScope` (see webResult below) — a query
-// like "is Notion good for this" that happens to clear a "moderate"
-// precedent-tier match on generic startup vocabulary (see
-// .agents/memory/retrieval-gating-lexical-overlap.md — exactly the kind of
-// false-positive match that dataset is prone to), or that gets classified
-// narrow, never got a live search and was answered from the model's own
-// stale training knowledge instead. This regex is deliberately narrow/cheap,
-// same style as BENCHMARKABLE_CATEGORY/DIAGNOSTIC_QUESTION above.
-const FACTUAL_EXTERNAL_QUERY = /\b(is\s+\w[\w .]{0,30}\s+(good|bad|worth it|reliable|legit)|reviews?\s+(of|on|for)|what do people think of|who is\b.{0,30}\bcompetitor|competitors? of|how does\b.{0,40}\bcompare to|compare(d)? to|latest (news|update)s? on|opinions? on)\b/i;
+// REMOVED: FACTUAL_EXTERNAL_QUERY, a regex that enumerated phrasings
+// ("reviews of", "compare to", "latest news on") to decide whether a question
+// needed a live web search. It could never cover the unbounded space of real
+// user phrasings — "give me a list of real schools in Mumbai" matched none of
+// its alternatives, so the query was treated as strategy, never searched, and
+// answered with invented institutions. Replaced by lib/queryClassifier.ts,
+// which classifies what the question actually needs instead of pattern-
+// matching how it happens to be worded.
 
 function inferDecisionRouting(message: string) {
   const normalized = normalizeQueryText(message);
@@ -1131,7 +1127,17 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     }
     const effectiveSessionHistory = serverHistory ?? body.data.sessionHistory;
 
-    const retrieval = await retrievePrecedents(body.data.message, { businessContext: effectiveBusinessContext });
+    // Classification runs CONCURRENTLY with retrieval — it's a separate
+    // network round-trip on a separate model, so sequencing them would add
+    // its full latency to every request for no reason. Never rejects (see
+    // classifyQuery's own catch), so Promise.all is safe here.
+    const [retrieval, classification] = await Promise.all([
+      retrievePrecedents(body.data.message, { businessContext: effectiveBusinessContext }),
+      classifyQuery(groq, body.data.message),
+    ]);
+    console.error(
+      `[queryClassifier] session=${sessionId} kind=${classification.kind} complexity=${classification.complexity} needsExternalFacts=${classification.needsExternalFacts} query="${body.data.message.slice(0, 120)}"`,
+    );
 
     // The founder's own resolved decision history — see retrieval.ts and
     // venus_decisions schema comments for why this is scoped per-session and
@@ -1191,7 +1197,14 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // not genuine relevance to a product-review-style question), or because
     // it got classified narrow. Never overrides "strong" tier — a direct
     // curated-dataset match stays authoritative there.
-    const isFactualExternal = FACTUAL_EXTERNAL_QUERY.test(body.data.message);
+    // Was: FACTUAL_EXTERNAL_QUERY.test(...) — a keyword regex that could only
+    // match enumerated phrasings and missed the failure it was written to
+    // catch (see queryClassifier.ts). Now a real classification of what the
+    // question needs, which generalizes to phrasings nobody anticipated.
+    const isFactualExternal =
+      classification.kind === "factual_lookup" ||
+      classification.kind === "mixed" ||
+      classification.needsExternalFacts;
 
     // No verified precedent in the curated dataset doesn't mean "give up" — it
     // means go find real information instead. This is fully generic: whatever
@@ -1207,7 +1220,15 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // both the "moderate tier is good enough" and "narrow skips search"
     // defaults, since answering it from stale model memory instead of a live
     // source is exactly the failure this item exists to close.
-    const webResult = ((isNone || (isModerate && isFactualExternal)) && (!isNarrowScope || isFactualExternal))
+    // A factual lookup ALWAYS gets a live search, at every retrieval tier.
+    // The old gate only searched at tier "none" (or "moderate" + regex hit),
+    // which meant a precedent match — even one earned entirely on the
+    // founder's business context rather than the question (see retrieval.ts)
+    // — actively SUPPRESSED the search and left the model to invent the
+    // facts. Precedents are startup case studies; they can never be the
+    // source for "what real schools exist in Mumbai", so a precedent match is
+    // irrelevant to whether a factual question needs grounding.
+    const webResult = (isFactualExternal || (isNone && !isNarrowScope))
       ? await webSearch(body.data.message)
       : null;
     const webSearchBlock = webResult ? formatWebSearchForPrompt(webResult) : "";
@@ -1240,8 +1261,24 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // don't drop noticeably, evidenceConvergence wasn't the marginal cause
     // and this sampling isn't the fix that's needed.
     const EVIDENCE_CONVERGENCE_SAMPLE_RATE = 0.15;
-    const includeEvidenceConvergence = !isNarrowScope && Math.random() < EVIDENCE_CONVERGENCE_SAMPLE_RATE;
-    const shadowModeInstructions = `${isNarrowScope ? "" : EXTRACTED_FACTS_INSTRUCTION}${includeEvidenceConvergence ? EVIDENCE_CONVERGENCE_INSTRUCTION : ""}`;
+    // BOTH shadow-mode blocks are now suspended on the free tier. They are
+    // pure calibration overhead — the model spends tokens producing
+    // extractedFacts/evidenceConvergence, both of which are logged and then
+    // deleted from the response (see the delete/finally blocks below); no
+    // founder ever sees either. Measured, they cost ~166 and ~588 tokens.
+    //
+    // That was an acceptable trade when the budget had slack. It doesn't now:
+    // the static system prompt alone (~6,900 est. tokens) already exceeds the
+    // entire free-tier TPM budget (8,000 × 0.85 = 6,800), so every broad query
+    // is clamped to the MIN_USABLE_MAX_TOKENS floor and then shrink-retried,
+    // which cuts real grounding content and truncates the JSON answer. Paying
+    // calibration tokens out of that deficit directly degrades the answer the
+    // founder actually reads. Re-enables automatically on the paid tier, where
+    // the headroom exists again — no code change needed, just the env var.
+    const collectCalibrationData = process.env.GROQ_PAID_TIER === "true";
+    const includeEvidenceConvergence =
+      collectCalibrationData && !isNarrowScope && Math.random() < EVIDENCE_CONVERGENCE_SAMPLE_RATE;
+    const shadowModeInstructions = `${collectCalibrationData && !isNarrowScope ? EXTRACTED_FACTS_INSTRUCTION : ""}${includeEvidenceConvergence ? EVIDENCE_CONVERGENCE_INSTRUCTION : ""}`;
     // Deliberately NOT baked into venusPromptForTier (which sits right after
     // the protected VENUS_PROMPT head) — appended to the very end of the
     // whole systemPrompt below instead. groq.ts's shrinkMessages keeps the
@@ -1252,14 +1289,19 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // — not sit ahead of historyContext/precedentBlock, which actually
     // carry the grounding a response needs to be correct.
     const venusPromptForTier = isModerate ? `${VENUS_PROMPT}${MODERATE_TIER_PRECEDENT_NOTE}` : VENUS_PROMPT;
-    // Narrow queries get the last 3 turns instead of 8 — enough to resolve
-    // "what did you mean by that" without paying for a near-full history
-    // reinjection on every short clarification in a long-running chat.
-    const historyTurnCount = isNarrowScope ? 3 : 8;
-    const historyContext = effectiveSessionHistory && effectiveSessionHistory.length > 0
-      ? `Conversation context so far:\n${effectiveSessionHistory.slice(-historyTurnCount).map((h: { role?: string; content?: string }) => `${h.role === "user" ? "User" : "Assistant"}: ${h.content ?? ""}`).join("\n")}`
-      : "Conversation context so far: none.";
-    const followUpInstruction = `Conversation routing: narrow follow-up → answer directly and narrowly, at most one supporting card. Broad question → full template, cards only for facets that genuinely need one (not a default 2+). Either way, "Conversation context so far" is background only — never treat an earlier turn's request, including a past draft, as pending action this turn unless the current message asks for it.`;
+    // REMOVED: historyContext, which rendered the last 8 turns as a text blob
+    // inside the system prompt. The SAME turns are already sent as real,
+    // role-tagged chat messages further down (see messageHistoryTurnCount's
+    // push loop) — so every conversation was transmitted TWICE, once as
+    // flattened "User:/Assistant:" prose and once properly structured.
+    //
+    // Dropping the blob costs nothing semantically (not one turn of context is
+    // lost — the structured copy is strictly better, since the model reads
+    // role-tagged turns natively) and returns ~400-900 tokens per request to
+    // the budget the answer itself is starved for. Duplicated context also
+    // actively dilutes attention, so this should read as slightly sharper, not
+    // just cheaper.
+    const followUpInstruction = `Conversation routing: narrow follow-up → answer directly and narrowly, at most one supporting card. Broad question → full template, cards only for facets that genuinely need one (not a default 2+). Either way, earlier turns in this conversation are background only — never treat an earlier turn's request, including a past draft, as pending action this turn unless the current message asks for it.`;
     const decisionRoutingInstruction = buildDecisionRoutingInstruction(body.data.message);
     // Keyed on whether webResult actually ran, not on isNarrowScope directly
     // — Item 5's isFactualExternal override means a narrow query can still
@@ -1283,17 +1325,39 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // named entity (a name, address, statistic, date) must come from an
     // actual source (WEB SEARCH RESULTS, the precedent dataset, or
     // conversation context), never be invented to fill a gap.
-    const namedEntityGuard = `Specific factual claims about real-world named entities (a school/company/product/person's name, exact stats, addresses, dates) must come from an actual source — the web search results below, the precedent dataset, or something the user already told you. If you don't have a real source for the specific names or numbers a question needs, say plainly that you don't have verified data for that specific request (optionally suggest what a real search would need to include, e.g. narrowing by board/location) rather than inventing plausible-sounding specifics. This does not apply to general strategic reasoning, opinions, or frameworks, which should stay direct and concrete as usual — it applies only to concrete factual claims about specific real-world entities you cannot actually verify.`;
+    const namedEntityGuard = `GROUNDING OF NAMED ENTITIES (applies to every answer): a specific factual claim about a real-world named entity — the name of a school/company/product/person/place, an exact statistic, an address, a date, a current price — must come from an actual source available to you right now: the web search results in this prompt, the verified precedent dataset, or something the user themselves told you. If you do not have a real source for the specific names or figures the question needs, say so plainly and briefly, then offer what you CAN do (search for it, or reason about how to evaluate options once they have the list). Never fill the gap with plausible-sounding invented specifics — a confident wrong name is far worse than an honest "I don't have verified data on that." This governs concrete factual claims ONLY. Your strategic reasoning, causal analysis, opinions, and recommendations are NOT affected by this rule and must stay as direct, specific, and opinionated as always — hedging your advice is not the goal here, and "I'm not sure" is never an acceptable substitute for judgment on a question that calls for judgment.`;
+
+    // Grounding rules specific to a factual/lookup question (see
+    // queryClassifier.ts). Kept separate from namedEntityGuard so a
+    // consultation question never picks up "cite your sources" framing that
+    // would make ordinary strategic advice read like a research report.
+    const factualGroundingInstruction = isFactualExternal
+      ? `\n\nTHIS IS A FACTUAL LOOKUP: the founder is asking for real-world information, not (only) judgment. Ground every specific fact in the WEB SEARCH RESULTS provided, and attribute naturally in the prose where it matters ("per <source>…"). If the search results don't actually contain what was asked for, say exactly that — name what you did and didn't find — rather than filling the gap from memory. If sources disagree, say they disagree instead of silently picking one. Do not present a fact from your own training data as if it were retrieved and current.`
+      : "";
 
     const noPrecedentInstruction = !webResult
       ? `NO VERIFIED PRECEDENT MATCH IN CURATED DATASET: This request doesn't match anything in the verified precedent dataset — that's fine, it just means you can't cite a dataset company/outcome as verified precedent. It does NOT mean you should refuse, hedge into an error, or ask the user to rephrase. This looks like a quick clarification or definition-style question, so no web search was run for it — answer directly from your own general knowledge, staying specific and concrete rather than vague. ${namedEntityGuard} The confidence badge already shown elsewhere in the UI marks this response as exploratory/unverified, so you do NOT need to repeat a big warning inside your answer. Never fabricate a precedent-style company outcome as if it came from the curated dataset — anything you use from general knowledge is reasoning, not a "Precedent" card.`
       : `NO VERIFIED PRECEDENT MATCH IN CURATED DATASET: This request doesn't match anything in the verified precedent dataset — that's fine, it just means you can't cite a dataset company/outcome as verified precedent. It does NOT mean you should refuse, hedge into an error, or ask the user to rephrase. A live web search was run for this query (see WEB SEARCH RESULTS below); use whatever real information it surfaced — names, facts, figures, how something actually works — to give a direct, specific, useful answer. If the web search came back empty, fall back to general strategic reasoning instead — do NOT invent specific real-world names/figures to fill the gap. ${namedEntityGuard} The confidence badge already shown elsewhere in the UI marks this response as exploratory/unverified, so you do NOT need to repeat a big warning inside your answer — a brief natural mention that this isn't from the verified dataset is enough, stated plainly rather than as a disclaimer wall. Never fabricate a precedent-style company outcome as if it came from the curated dataset — anything you use from web search or general knowledge is reasoning, not a "Precedent" card.`;
 
+    // namedEntityGuard + factualGroundingInstruction now appear in EVERY
+    // branch. Previously the guard lived only inside noPrecedentInstruction,
+    // which is only assembled when tier === "none" — so a query that matched
+    // a precedent (including one matched purely on the founder's business
+    // context) got NO grounding guard at all. That was the exact hole the
+    // fabricated-schools answer went through: tier "moderate", guard absent,
+    // search suppressed.
+    const groundingInstructions = `${namedEntityGuard}${factualGroundingInstruction}`;
+    // webSearchBlock is no longer tied to the isNone branch either — a factual
+    // lookup now searches at any tier (see webResult above), so the results
+    // must be included wherever they exist or the model would be told a search
+    // ran and then never shown it.
+    const webBlockSection = webSearchBlock ? `\n\n${webSearchBlock}` : "";
+
     const systemPrompt = (isNone
-      ? `${venusPromptForTier}\n\n${followUpInstruction}\n\n${decisionRoutingInstruction}\n\n${noPrecedentInstruction}\n\n${webSearchBlock}\n\n${historyContext}${effectiveBusinessContext ? `\n\nBusiness Context: ${effectiveBusinessContext}` : ""}${ownHistoryBlock ? `\n\n${ownHistoryBlock}` : ""}${openSessionBlock ? `\n\n${openSessionBlock}` : ""}${goalBlock ? `\n\n${goalBlock}` : ""}${memoryBlock}`
+      ? `${venusPromptForTier}\n\n${followUpInstruction}\n\n${decisionRoutingInstruction}\n\n${noPrecedentInstruction}\n\n${groundingInstructions}${webBlockSection}${effectiveBusinessContext ? `\n\nBusiness Context: ${effectiveBusinessContext}` : ""}${ownHistoryBlock ? `\n\n${ownHistoryBlock}` : ""}${openSessionBlock ? `\n\n${openSessionBlock}` : ""}${goalBlock ? `\n\n${goalBlock}` : ""}${memoryBlock}`
       : effectiveBusinessContext
-        ? `${venusPromptForTier}\n\n${followUpInstruction}\n\n${decisionRoutingInstruction}\n\n${historyContext}\n\nBusiness Context: ${effectiveBusinessContext}\n\n${precedentBlock}${ownHistoryBlock ? `\n\n${ownHistoryBlock}` : ""}${openSessionBlock ? `\n\n${openSessionBlock}` : ""}${goalBlock ? `\n\n${goalBlock}` : ""}${memoryBlock}`
-        : `${venusPromptForTier}\n\n${followUpInstruction}\n\n${decisionRoutingInstruction}\n\n${historyContext}\n\n${precedentBlock}${ownHistoryBlock ? `\n\n${ownHistoryBlock}` : ""}${openSessionBlock ? `\n\n${openSessionBlock}` : ""}${goalBlock ? `\n\n${goalBlock}` : ""}${memoryBlock}`
+        ? `${venusPromptForTier}\n\n${followUpInstruction}\n\n${decisionRoutingInstruction}\n\n${groundingInstructions}${webBlockSection}\n\nBusiness Context: ${effectiveBusinessContext}\n\n${precedentBlock}${ownHistoryBlock ? `\n\n${ownHistoryBlock}` : ""}${openSessionBlock ? `\n\n${openSessionBlock}` : ""}${goalBlock ? `\n\n${goalBlock}` : ""}${memoryBlock}`
+        : `${venusPromptForTier}\n\n${followUpInstruction}\n\n${decisionRoutingInstruction}\n\n${groundingInstructions}${webBlockSection}\n\n${precedentBlock}${ownHistoryBlock ? `\n\n${ownHistoryBlock}` : ""}${openSessionBlock ? `\n\n${openSessionBlock}` : ""}${goalBlock ? `\n\n${goalBlock}` : ""}${memoryBlock}`
       ) + shadowModeInstructions; // appended LAST — see shrinkMessages: least protected, first cut on a shrink retry
 
     const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
@@ -1346,6 +1410,38 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // allow one — but never request more than what's actually available.
     const requestedMaxTokens = Math.min(isNarrowScope ? 1800 : 6000, realisticCeiling);
 
+    // ADAPTIVE REASONING DEPTH. groq.ts pins reasoning_effort to "low" for
+    // every call by default — a truncation workaround (hidden reasoning
+    // tokens are drawn from the SAME max_tokens budget as the visible JSON)
+    // that silently became a global reasoning-quality ceiling. A risk
+    // assessment and a one-line definition were being thought about equally
+    // hard, which is the direct cause of complex questions coming back
+    // shallow while simple ones look fine.
+    //
+    // Raising it is gated on ACTUAL HEADROOM, not just on the question being
+    // hard, because on the free tier the two goals genuinely conflict: with
+    // max_tokens clamped near MIN_USABLE_MAX_TOKENS, extra reasoning tokens
+    // come straight out of the JSON answer and truncate the cards. So depth
+    // only increases when there is real room to spend, and the headroom check
+    // is deliberately generous (2x the floor) so this can never be the cause
+    // of a truncated response. On the free tier that means it will rarely
+    // fire on broad queries today; once GROQ_PAID_TIER is live the headroom
+    // exists and complex questions start getting genuinely deeper reasoning
+    // with no further code change.
+    const REASONING_HEADROOM_TOKENS = MIN_USABLE_MAX_TOKENS * 2;
+    const hasReasoningHeadroom = requestedMaxTokens >= REASONING_HEADROOM_TOKENS;
+    const adaptiveReasoningEffort: "low" | "medium" | "high" =
+      !hasReasoningHeadroom || classification.complexity === "simple"
+        ? "low"
+        : classification.complexity === "complex"
+          ? "high"
+          : "medium";
+    if (adaptiveReasoningEffort !== "low") {
+      console.error(
+        `[reasoningDepth] session=${sessionId} effort=${adaptiveReasoningEffort} complexity=${classification.complexity} maxTokens=${requestedMaxTokens}`,
+      );
+    }
+
     const { parsed } = await callGroqJSON(
       groq,
       // 3000 was tuned against short prompts. A broad/descriptive query can
@@ -1357,7 +1453,13 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       // response; reasoning itself is now bounded separately (see
       // callGroqJSON's reasoning_effort default). Narrow queries request
       // less (see requestedMaxTokens above) since they don't need it.
-      { model: "openai/gpt-oss-120b", messages, temperature: 0.4, max_tokens: requestedMaxTokens },
+      {
+        model: "openai/gpt-oss-120b",
+        messages,
+        temperature: 0.4,
+        max_tokens: requestedMaxTokens,
+        reasoning_effort: adaptiveReasoningEffort,
+      },
       "ai/analyze",
     );
 
@@ -1557,8 +1659,17 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         // Currency-groundedness: shadow-mode only — new, unvalidated
         // heuristic (see groundedness.ts). Logged, never attached to the
         // response, until a validation period confirms it isn't noisy.
+        // historyContext (the duplicated conversation blob) no longer exists —
+        // the same turns are read straight off effectiveSessionHistory here,
+        // which is if anything a more complete grounding source since it isn't
+        // capped at the 8 turns that blob rendered. webSearchBlock is included
+        // now too: a currency that appears in live search results is genuinely
+        // grounded, and omitting it would flag correctly-sourced figures.
+        const historyGroundingText = (effectiveSessionHistory ?? [])
+          .map((h: { content?: string }) => h.content ?? "")
+          .join(" ");
         const groundingText = [
-          effectiveBusinessContext, historyContext, precedentBlock,
+          effectiveBusinessContext, historyGroundingText, webSearchBlock, precedentBlock,
           ownHistoryBlock, openSessionBlock, goalBlock, memoryBlock,
           body.data.message,
         ].filter(Boolean).join(" ");

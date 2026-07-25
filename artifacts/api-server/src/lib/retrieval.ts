@@ -118,10 +118,24 @@ export async function retrievePrecedents(query: string, opts?: { sector?: string
 
   const combinedQuery = [query, opts?.businessContext].filter(Boolean).join(" ");
   const queryTokens = new Set(tokenize(combinedQuery));
+  // The founder's stored business context is deliberately part of the scoring
+  // blend above (it's real signal about what they're asking *within*), but it
+  // must never be able to manufacture a match ON ITS OWN. Tracked separately
+  // here so the gates below can require that the ACTUAL QUESTION contributed
+  // at least some real topical signal.
+  //
+  // Found live: a founder running an edtech business asked for a list of real
+  // schools. The question's own tokens matched zero precedents, but the stored
+  // business context ("edtech… schools…") inferred sector "Edtech" and every
+  // Edtech precedent scored 0.306 — entirely from the +0.25 sector boost plus
+  // one coincidental context token. That cleared the moderate gate, which
+  // suppressed the web-search fallback and shipped a fabricated answer under a
+  // "verified precedent" badge. The question itself had contributed nothing.
+  const questionTokens = new Set(tokenize(query));
   const inferredSector = opts?.sector || inferSector(combinedQuery);
   const sectorCoverageCount = inferredSector ? all.filter((p: Precedent) => p.sector === inferredSector).length : 0;
 
-  const scored: (PrecedentMatch & { overlap: number })[] = all.map((p: Precedent) => {
+  const scored: (PrecedentMatch & { overlap: number; questionOverlap: number })[] = all.map((p: Precedent) => {
     const haystack = [
       p.embeddingSummary,
       p.decisionContext,
@@ -139,6 +153,12 @@ export async function retrievePrecedents(query: string, opts?: { sector?: string
     for (const t of queryTokens) {
       if (docTokenSet.has(t)) overlap++;
     }
+    // How much of the overlap came from the founder's ACTUAL QUESTION rather
+    // than their stored business context — see questionTokens above.
+    let questionOverlap = 0;
+    for (const t of questionTokens) {
+      if (docTokenSet.has(t)) questionOverlap++;
+    }
     const denom = Math.max(queryTokens.size, 1);
     let score = overlap / denom;
 
@@ -147,19 +167,43 @@ export async function retrievePrecedents(query: string, opts?: { sector?: string
     // genuine lexical overlap — otherwise a bare sector inference (from a
     // single loosely-matched keyword) could pass the gate with zero real
     // topical connection to the retrieved precedent's actual content.
-    if (inferredSector && p.sector === inferredSector) {
+    // Additionally requires the question itself to have contributed real
+    // signal. Without this, a sector inferred purely from stored business
+    // context hands +0.25 to every precedent in that sector — enough, on its
+    // own, to clear the moderate gate for a question with zero topical
+    // connection to any of them.
+    if (inferredSector && p.sector === inferredSector && questionOverlap > 0) {
       score += 0.25;
     }
+    // (questionOverlap === 0 → no boost: the sector was inferred from stored
+    // business context alone, so boosting would rank precedents for a question
+    // that never mentioned their subject. Ranking only — see the tier comment
+    // below for why this is not used to reject matches outright.)
 
-    return { precedent: p, score, overlap };
+    return { precedent: p, score, overlap, questionOverlap };
   });
 
   scored.sort((a, b) => b.score - a.score);
 
+  // NOTE: questionOverlap deliberately does NOT gate tier selection here.
+  // Measured against the real dataset, requiring it caused a genuine
+  // regression: "should we raise a seed round now" and "why is our churn
+  // climbing" both dropped from moderate to none, losing their precedent
+  // grounding entirely. Cause — the stopword list above already strips
+  // "raise"/"funding"/"series"/"churn"-adjacent generic vocabulary, so a
+  // legitimate in-domain strategy question can legitimately have near-zero
+  // surviving content tokens, and gating on them punishes exactly the
+  // causal-consultation questions this product exists to answer.
+  //
+  // Whether a question needs external grounding is not something lexical
+  // overlap against startup case-studies can tell us — that judgment now
+  // lives in lib/queryClassifier.ts, which forces a live web search and
+  // source-grounding rules for factual lookups at ANY tier. This file's job
+  // is only to rank precedents honestly; it is not the fabrication gate.
   const strongCandidates = scored.filter((s) => s.score >= MATCH_THRESHOLD && s.overlap >= MIN_RAW_OVERLAP);
 
   let tier: ConfidenceTier;
-  let selected: (PrecedentMatch & { overlap: number })[];
+  let selected: (PrecedentMatch & { overlap: number; questionOverlap: number })[];
 
   if (strongCandidates.length >= STRONG_TIER_MIN_COUNT) {
     tier = "strong";
