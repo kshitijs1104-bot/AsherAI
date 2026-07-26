@@ -18,7 +18,6 @@ import { NotificationBell } from './NotificationBell';
 import { CommandCenterSection } from './CommandCenter';
 import { AttachMenu } from './AttachMenu';
 import { ConnectorPicker } from './ConnectorPicker';
-import { QuickActions } from './QuickActions';
 import { useVenusTheme } from '../lib/venusTheme';
 import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
 
@@ -1057,17 +1056,6 @@ export function VenusPage() {
                 </button>
               </form>
 
-              {/* QuickActions existed as a complete, working 164-line module
-                  that nothing imported — it had no entry point anywhere in the
-                  app, so the four instant actions and their whole backend
-                  (/api/actions/:type/run) were unreachable. The landing view is
-                  where it belongs: these are the "I don't need an analysis, I
-                  need one thing done" path, sitting below the example prompts
-                  that start the analysis path. */}
-              <div className="w-full mb-7">
-                <QuickActions />
-              </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-[10px] w-full">
                 {EXAMPLE_PROMPTS.map((prompt, i) => (
                   <button
@@ -1111,9 +1099,6 @@ export function VenusPage() {
                           <VeraAvatar />
                           <span className="text-[10px] font-mono uppercase text-[var(--muted-text)]">Vera</span>
                         </div>
-                        {msg.role === 'venus' && !(msg as any).isError && (
-                          <ConfidenceBadge confidence={msg.confidence} note={msg.confidenceNote} contradictions={msg.contradictions} />
-                        )}
                       </div>
 
                       {/* A response that IS the deliverable (a post, an
@@ -1641,33 +1626,6 @@ function EvidenceStrip({
         </div>
       )}
     </div>
-  );
-}
-
-function ConfidenceBadge({ confidence, note, contradictions }: { confidence?: 'verified' | 'exploratory'; note?: string; contradictions?: ContradictionEntry[] }) {
-  // No confidence value means this message isn't a real analysis — a plain
-  // acknowledgment ("noted your context") or a clarifying question ("which
-  // business do you mean"). Previously this fell through to the "false"
-  // branch below and rendered a "Verified precedent" badge on messages that
-  // were never any kind of precedent-backed answer at all, which was
-  // confusing and made a plain follow-up question look like a confident
-  // analytical claim. Render nothing in that case.
-  const state = confidenceState(confidence, contradictions);
-  if (!state) return null;
-
-  return (
-    <span
-      className="shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider"
-      style={{
-        color: state.color,
-        border: `1px solid color-mix(in srgb, ${state.color} 40%, transparent)`,
-        background: `color-mix(in srgb, ${state.color} 10%, transparent)`,
-      }}
-      title={note}
-    >
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: state.color }} />
-      {state.label}
-    </span>
   );
 }
 

@@ -353,11 +353,17 @@ function linkStyle(palette: Palette, quiet: boolean, flagged?: boolean): CSSProp
   };
 }
 
+// Labels state what you get back, not a verb phrase you have to interpret —
+// "Sell this" and "Summarize" said nothing about what a founder would
+// actually get, so they sat here unused. Same four instant actions, now
+// worded the way QuickActions.tsx settled on before that module was
+// retired: this is its one home, not the New Chat landing view, which was
+// already crowded with the composer and example prompts.
 const QUICK_ACTIONS: { type: InstantActionType; label: string; placeholder: string }[] = [
-  { type: 'draft_reply', label: 'Draft a reply', placeholder: 'Paste the message you got…' },
-  { type: 'sell_this', label: 'Sell this', placeholder: 'Describe what you’re selling…' },
-  { type: 'summarize', label: 'Summarize', placeholder: 'Paste the text to summarize…' },
-  { type: 'follow_up', label: 'Follow up', placeholder: 'Who/what is this following up on…' },
+  { type: 'sell_this', label: 'Pressure-test it', placeholder: "The plan or assumption you're about to commit to…" },
+  { type: 'summarize', label: 'Cut to the point', placeholder: 'Paste the thread, doc or report…' },
+  { type: 'draft_reply', label: 'Draft a reply', placeholder: 'Paste the message you need to answer…' },
+  { type: 'follow_up', label: 'Restart a thread', placeholder: 'Who went quiet, and what it was about…' },
 ];
 
 function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId: number) => void }) {
