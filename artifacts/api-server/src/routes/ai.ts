@@ -1115,9 +1115,15 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     let serverHistory: { role?: string; content?: string }[] | undefined;
     if (body.data.chatId) {
       try {
+        // keepRecent/topKRelevant tightened from 3/2 to 2/1 on the narrow
+        // path — the free-tier TPM ceiling (8,000) is now smaller than
+        // VENUS_SYSTEM_PROMPT alone (~6,900 est. tokens), so every token a
+        // narrow follow-up spends on replayed history is a token the actual
+        // answer can't have. A short follow-up needs enough of the last turn
+        // to stay coherent, not a broader relevance-scored slice.
         const relevant = await getRelevantMessages(sessionId, body.data.chatId, body.data.message, {
-          keepRecent: isNarrowScope ? 3 : 8,
-          topKRelevant: isNarrowScope ? 2 : 6,
+          keepRecent: isNarrowScope ? 2 : 8,
+          topKRelevant: isNarrowScope ? 1 : 6,
         });
         if (relevant.length > 0) {
           serverHistory = relevant.map((m) => ({ role: m.role, content: m.content }));
@@ -1189,7 +1195,13 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       ? `OPEN RECOMMENDATIONS EARLIER THIS SESSION (not yet resolved — if the current message revises, contradicts, or proposes an alternative to one of these, you must reconcile explicitly rather than silently re-deriving a fresh verdict; if none of these relate to the current question, ignore this block):\n\n${formatOpenSessionDecisionsForPrompt(openSessionDecisions)}`
       : "";
 
-    const goalBlock = await buildGoalPromptBlock(body.data.chatId);
+    // Skipped on a narrow query, same reasoning as companyFacts/goalHistory
+    // below: a quick follow-up doesn't need the full goal framing re-injected
+    // on every turn — recent history already carries what's relevant. This
+    // was previously the one memory/context block NOT gated by isNarrowScope,
+    // meaning it was paid in full on every single message in a chat with an
+    // active goal, including one-word replies.
+    const goalBlock = isNarrowScope ? "" : await buildGoalPromptBlock(body.data.chatId);
 
     // Everything stored about this founder that was previously write-only —
     // company_facts got written on every business-context statement (see
@@ -1368,9 +1380,15 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       ? `\n\nTHIS IS A FACTUAL LOOKUP: the founder is asking for real-world information, not (only) judgment. Ground every specific fact in the WEB SEARCH RESULTS provided, and attribute naturally in the prose where it matters ("per <source>…"). If the search results don't actually contain what was asked for, say exactly that — name what you did and didn't find — rather than filling the gap from memory. If sources disagree, say they disagree instead of silently picking one. Do not present a fact from your own training data as if it were retrieved and current.`
       : "";
 
+    // namedEntityGuard is NOT interpolated into either branch below anymore
+    // — it used to be baked in here AND appended again via
+    // groundingInstructions right after (see that constant's comment), so
+    // every isNone-tier query paid for the same ~283-token block twice for
+    // zero behavioral benefit. groundingInstructions alone now carries it,
+    // exactly once, in every branch (isNone included).
     const noPrecedentInstruction = !webResult
-      ? `NO VERIFIED PRECEDENT MATCH IN CURATED DATASET: This request doesn't match anything in the verified precedent dataset — that's fine, it just means you can't cite a dataset company/outcome as verified precedent. It does NOT mean you should refuse, hedge into an error, or ask the user to rephrase. This looks like a quick clarification or definition-style question, so no web search was run for it — answer directly from your own general knowledge, staying specific and concrete rather than vague. ${namedEntityGuard} The confidence badge already shown elsewhere in the UI marks this response as exploratory/unverified, so you do NOT need to repeat a big warning inside your answer. Never fabricate a precedent-style company outcome as if it came from the curated dataset — anything you use from general knowledge is reasoning, not a "Precedent" card.`
-      : `NO VERIFIED PRECEDENT MATCH IN CURATED DATASET: This request doesn't match anything in the verified precedent dataset — that's fine, it just means you can't cite a dataset company/outcome as verified precedent. It does NOT mean you should refuse, hedge into an error, or ask the user to rephrase. A live web search was run for this query (see WEB SEARCH RESULTS below); use whatever real information it surfaced — names, facts, figures, how something actually works — to give a direct, specific, useful answer. If the web search came back empty, fall back to general strategic reasoning instead — do NOT invent specific real-world names/figures to fill the gap. ${namedEntityGuard} The confidence badge already shown elsewhere in the UI marks this response as exploratory/unverified, so you do NOT need to repeat a big warning inside your answer — a brief natural mention that this isn't from the verified dataset is enough, stated plainly rather than as a disclaimer wall. Never fabricate a precedent-style company outcome as if it came from the curated dataset — anything you use from web search or general knowledge is reasoning, not a "Precedent" card.`;
+      ? `NO VERIFIED PRECEDENT MATCH IN CURATED DATASET: This request doesn't match anything in the verified precedent dataset — that's fine, it just means you can't cite a dataset company/outcome as verified precedent. It does NOT mean you should refuse, hedge into an error, or ask the user to rephrase. This looks like a quick clarification or definition-style question, so no web search was run for it — answer directly from your own general knowledge, staying specific and concrete rather than vague. The confidence badge already shown elsewhere in the UI marks this response as exploratory/unverified, so you do NOT need to repeat a big warning inside your answer. Never fabricate a precedent-style company outcome as if it came from the curated dataset — anything you use from general knowledge is reasoning, not a "Precedent" card.`
+      : `NO VERIFIED PRECEDENT MATCH IN CURATED DATASET: This request doesn't match anything in the verified precedent dataset — that's fine, it just means you can't cite a dataset company/outcome as verified precedent. It does NOT mean you should refuse, hedge into an error, or ask the user to rephrase. A live web search was run for this query (see WEB SEARCH RESULTS below); use whatever real information it surfaced — names, facts, figures, how something actually works — to give a direct, specific, useful answer. If the web search came back empty, fall back to general strategic reasoning instead — do NOT invent specific real-world names/figures to fill the gap. The confidence badge already shown elsewhere in the UI marks this response as exploratory/unverified, so you do NOT need to repeat a big warning inside your answer — a brief natural mention that this isn't from the verified dataset is enough, stated plainly rather than as a disclaimer wall. Never fabricate a precedent-style company outcome as if it came from the curated dataset — anything you use from web search or general knowledge is reasoning, not a "Precedent" card.`;
 
     // namedEntityGuard + factualGroundingInstruction now appear in EVERY
     // branch. Previously the guard lived only inside noPrecedentInstruction,
@@ -1401,7 +1419,10 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // actual chat turns shrinks the same way the text summary in
     // historyContext does, for the same reason: a narrow follow-up doesn't
     // need 10 prior turns replayed as messages to be answered correctly.
-    const messageHistoryTurnCount = isNarrowScope ? 4 : 10;
+    // 4 -> 2: same free-tier budget pressure as the getRelevantMessages
+    // tightening above — each replayed turn is real tokens the narrow-path
+    // budget doesn't have room for anymore.
+    const messageHistoryTurnCount = isNarrowScope ? 2 : 10;
     if (effectiveSessionHistory && effectiveSessionHistory.length > 0) {
       for (const h of effectiveSessionHistory.slice(-messageHistoryTurnCount)) {
         if (h.content) {

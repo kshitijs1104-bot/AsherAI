@@ -1,26 +1,28 @@
 /**
- * Venus A/B test: Groq openai/gpt-oss-120b (CURRENT production model, 8K TPM)
- * vs Groq qwen/qwen3.6-27b (candidate, TPM unconfirmed — see below).
+ * Venus A/B test: Groq openai/gpt-oss-120b (CURRENT production model, 8K TPM
+ * free tier) vs Groq llama-3.3-70b-versatile (candidate, 12K TPM free tier).
  *
- * IMPORTANT: gpt-oss-120b, not llama-3.3-70b-versatile or llama-4-scout, is
- * what Venus actually calls in production today — see
- * artifacts/api-server/src/routes/ai.ts,
+ * IMPORTANT: gpt-oss-120b is what Venus actually calls in production today —
+ * see artifacts/api-server/src/routes/ai.ts,
  * .agents/memory/groq-model-deprecation-2026.md, and
- * .agents/memory/groq-scout-deprecation-2026-07.md. Groq deprecated
- * llama-3.3-70b-versatile on 2026-06-17 (migrated to gpt-oss-120b), then
- * separately deprecated llama-4-scout-17b-16e-instruct — announced
- * 2026-06-17, started hard-404ing in production on 2026-07-18 (migrated back
- * to gpt-oss-120b, the pre-Scout baseline). Testing against either deprecated
- * model here would compare against something you can no longer actually call.
+ * .agents/memory/groq-scout-deprecation-2026-07.md.
  *
- * Why qwen/qwen3.6-27b specifically: it's Groq's own recommended alternative
- * to llama-4-scout (alongside gpt-oss-120b, which is already the current
- * baseline) per their deprecation notice. UNLIKE the original scout
- * migration, this repo does NOT yet have a confirmed Groq-specific TPM
- * figure for qwen3.6-27b — check Groq's /docs/rate-limits page directly
- * before trusting any number you find elsewhere, and treat this A/B test's
- * point of comparison as "is the reasoning quality at least as good", not
- * "is the TPM headroom worth it" until that number is actually confirmed.
+ * NOTE ON llama-3.3-70b-versatile'S STATUS: this repo's own memory file
+ * (groq-model-deprecation-2026.md) previously recorded this model as
+ * deprecated by Groq on 2026-06-17. Re-checked directly against
+ * console.groq.com/docs/deprecations on 2026-07-26: it is currently ACTIVE,
+ * not deprecated, with no shutdown date listed — that memory entry appears
+ * stale/wrong and should be corrected once this test is done. Re-verify on
+ * Groq's own /docs/deprecations page before trusting this if more time has
+ * passed, in case status changes again.
+ *
+ * Why llama-3.3-70b-versatile specifically: the free-tier TPM ceiling
+ * (12K, confirmed via Groq's /docs/rate-limits page on 2026-07-26) is 50%
+ * higher than gpt-oss-120b's 8K, which is the actual bottleneck causing
+ * clamped/truncated responses today. It does NOT support the
+ * `reasoning_effort` parameter gpt-oss-120b uses (see groq.ts) — it's a
+ * strong general dense model, not the same "reasoning model" class — so
+ * output character may differ, not just budget. Judge accordingly below.
  * Do not migrate production traffic off this script's output alone — also
  * hammer the candidate model with realistic back-to-back load and watch for
  * 429s before trusting a burst test's TPM ceiling.
@@ -79,8 +81,7 @@ if (!GROQ_API_KEY) {
 }
 
 const MODEL_A = "openai/gpt-oss-120b"; // current production model, 8K TPM free tier
-const MODEL_B = "qwen/qwen3.6-27b"; // candidate — Groq's recommended alternative to
-// the now-deprecated llama-4-scout; TPM ceiling not yet confirmed, see file header
+const MODEL_B = "llama-3.3-70b-versatile"; // candidate — 12K TPM free tier, see file header
 
 // Same fake-but-realistic business context for every query, so both models
 // see identical input — this is the only fair way to compare.
@@ -153,7 +154,7 @@ async function main() {
     console.log(`\n--- MODEL A: ${MODEL_A} (current production, 8K TPM) ---`);
     console.log(tryPrettyPrintJson(resultA));
 
-    console.log(`\n--- MODEL B: ${MODEL_B} (TPM ceiling unconfirmed — check Groq /docs/rate-limits) ---`);
+    console.log(`\n--- MODEL B: ${MODEL_B} (12K TPM free tier, confirmed 2026-07-26) ---`);
     console.log(tryPrettyPrintJson(resultB));
   }
 
