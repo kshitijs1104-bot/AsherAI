@@ -122,7 +122,12 @@ async function callGroq(model: string, userMessage: string): Promise<string> {
     const errText = await res.text();
     return `[GROQ ERROR ${res.status}] ${errText}`;
   }
-  const data = await res.json();
+  // res.json() is `unknown` under this tsconfig, so the chained property
+  // access below was a hard typecheck error — the third and last thing making
+  // `pnpm run build` fail on main.
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
   return data.choices?.[0]?.message?.content || "[GROQ: empty response]";
 }
 

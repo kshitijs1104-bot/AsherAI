@@ -24,13 +24,20 @@ import { CheckoutGate } from "@/pages/enterprise/Checkout";
 
 const queryClient = new QueryClient();
 
-const CLERK_PUBLISHABLE_KEY = import.meta.env["VITE_CLERK_PUBLISHABLE_KEY"] as string | undefined;
+// Narrowed via a local const rather than read straight off import.meta.env at
+// the usage site: TypeScript does not carry the `throw` guard below through to
+// a separate module-level binding read later in JSX, so `publishableKey` was a
+// `string | undefined` type error — one of the two errors that made
+// `pnpm run build` (which gates on typecheck) fail on main.
+const rawClerkKey = import.meta.env["VITE_CLERK_PUBLISHABLE_KEY"] as string | undefined;
 
-if (!CLERK_PUBLISHABLE_KEY) {
+if (!rawClerkKey) {
   throw new Error(
     "VITE_CLERK_PUBLISHABLE_KEY is not set. Add it in Replit Secrets — see .env.example.",
   );
 }
+
+const CLERK_PUBLISHABLE_KEY: string = rawClerkKey;
 
 // Registers Clerk's getToken() as the bearer-token source for every request
 // made through the generated api-client-react hooks (useVenusAnalyze, etc).

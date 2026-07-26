@@ -22,6 +22,25 @@ export interface SavedAnalysis {
   serverChatId?: number;
 }
 
+// What actually grounded an answer. /ai/analyze has always returned these
+// (lib/confidence.ts), but they were absent from the OpenAPI contract, so the
+// generated client dropped them and Venus.tsx never saw them — the chat
+// showed a single "Verified precedent" pill and discarded the list of
+// precedents behind it along with any recorded disagreement between them.
+// Persisted alongside the message so reopening a saved analysis still shows
+// what it was based on.
+export interface EvidenceRefEntry {
+  type: 'precedent' | 'own_decision';
+  id: number;
+  label: string;
+  weight?: number;
+}
+
+export interface ContradictionEntry {
+  description: string;
+  precedentIds?: number[];
+}
+
 export interface ChatMessage {
   role: 'user' | 'venus';
   content?: string;
@@ -29,6 +48,8 @@ export interface ChatMessage {
   confidence?: 'verified' | 'exploratory';
   confidenceNote?: string;
   contextQuery?: string;
+  evidenceRefs?: EvidenceRefEntry[];
+  contradictions?: ContradictionEntry[];
 }
 
 export interface ChatSession {
@@ -108,16 +129,28 @@ export function deleteSavedAnalysis(id: string) {
   } catch {}
 }
 
+// Card types are a real structural signal and are trusted first. The prose
+// keywords below are only a last resort, and are deliberately much narrower
+// than they used to be: the old list matched any occurrence of "milestone" or
+// "quarter" anywhere in the summary, so a diagnosis of a retention problem
+// that happened to mention "hit the first-value milestone within 30 days" was
+// offered to the founder as "Save as Roadmap". Mislabelling what a saved
+// analysis IS makes the saved library harder to search the more it fills up,
+// which is exactly backwards.
+//
+// Now the prose fallback requires the phrase to be about the artefact itself,
+// not merely to contain a word associated with it.
 export function detectAnalysisType(content: string, cards?: any[]): SavedAnalysisType {
   if (cards?.some(c => c.type === 'risk')) return 'risk';
   if (cards?.some(c => c.type === 'roadmap')) return 'roadmap';
-  if (cards?.some(c => c.type === 'market')) return 'fundraising';
+  if (cards?.some(c => c.type === 'precedent')) return 'pattern';
+  if (cards?.some(c => c.type === 'market')) return 'competitive';
   const lower = content?.toLowerCase() ?? '';
-  if (lower.includes('risk') || lower.includes('threat') || lower.includes('mitigation')) return 'risk';
-  if (lower.includes('roadmap') || lower.includes('quarter') || lower.includes('milestone')) return 'roadmap';
-  if (lower.includes('fundrais') || lower.includes('investor') || lower.includes('term sheet')) return 'fundraising';
-  if (lower.includes('competitor') || lower.includes('competitive') || lower.includes('market share')) return 'competitive';
-  if (lower.includes('failure') || lower.includes('precedent') || lower.includes('pattern')) return 'pattern';
+  if (/\broadmap\b/.test(lower)) return 'roadmap';
+  if (/\b(fundrais\w*|term sheet|cap table|investor fit)\b/.test(lower)) return 'fundraising';
+  if (/\b(competitive landscape|competitor\w*|market share)\b/.test(lower)) return 'competitive';
+  if (/\b(risk register|biggest risk|key risks)\b/.test(lower)) return 'risk';
+  if (/\b(precedent\w*|post-?mortem)\b/.test(lower)) return 'pattern';
   return 'analysis';
 }
 

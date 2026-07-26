@@ -217,6 +217,26 @@
   --v7-font-round: 'M PLUS Rounded 1c', sans-serif;
   --v7-font-mono: 'IBM Plex Mono', monospace;
 
+  /* ---- Response-card surface system (dark) --------------------------------
+     One named pair for "a card" and one for "a block nested inside a card",
+     replacing the per-card-type mix of --surface2/--surface/60/--surface/70
+     that VenusCard used to hand-roll. Those alpha variants were the actual
+     source of the "cards look inconsistent" problem: --surface/60 over
+     --surface2 resolves to a 2-point delta in dark and a 6-point delta in
+     light, so the intended card -> section -> item hierarchy collapsed to a
+     single flat plane, and each card type picked a different alpha, radius
+     and padding for what is conceptually the same object.
+
+     These are opaque, so a block reads as a real step regardless of what it
+     sits on, and both themes define the same four names — no component needs
+     to know which theme is active. Radius/padding live in the .vera-card /
+     .vera-block utilities below so geometry can't drift per card type. */
+  --vera-card-bg: #16171d;
+  --vera-card-border: rgba(255, 255, 255, 0.09);
+  --vera-inset-bg: #1e2028;
+  --vera-inset-border: rgba(255, 255, 255, 0.07);
+  --vera-label-color: #8a91a3;
+
   --app-font-sans: 'Inter', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
@@ -368,6 +388,55 @@
   --shadow-xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
 
+  --vera-card-bg: #16171d;
+  --vera-card-border: rgba(255, 255, 255, 0.09);
+  --vera-inset-bg: #1e2028;
+  --vera-inset-border: rgba(255, 255, 255, 0.07);
+  --vera-label-color: #8a91a3;
+}
+
+/* ---- Response-card primitives -------------------------------------------
+   VenusCard previously styled each of its eleven card types by hand, and the
+   values drifted: nested blocks came in at 4px, 12px and mixed
+   "4px 8px 8px 4px" radii, at 10px/12px/16px padding, on three different
+   backgrounds (opaque --surface, --surface/60 and --surface/70). Funnel and
+   solution blocks even carried a LARGER radius (12px) than the card
+   containing them (8px), which reads as broken nesting.
+
+   These two classes are the only geometry a card is allowed to use, so
+   adding a twelfth card type can't invent a twelfth look. Radius steps DOWN
+   from card to block, which is what makes nesting read correctly. */
+.vera-card {
+  background: var(--vera-card-bg);
+  border: 1px solid var(--vera-card-border);
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.vera-block {
+  background: var(--vera-inset-bg);
+  border: 1px solid var(--vera-inset-border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+/* The one micro-label style. Card bodies previously mixed --dim, --mint and
+   --muted-text for labels that all sit at the same level of the hierarchy,
+   so colour carried no meaning: a field name, a section heading and a status
+   note were indistinguishable. Labels are now uniformly quiet; colour is
+   reserved for the card's own type accent and for genuine semantics. */
+.vera-label {
+  font-family: var(--v7-font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  /* Deliberately NOT --dim. --dim is #6b7086 in dark, which lands at ~3.6:1 on
+     the card surface — under the 4.5:1 AA floor for text this size. That was
+     already true of the ad-hoc labels this class replaced, but routing every
+     micro-label in the card system through one token makes it one fix instead
+     of thirty, so it gets its own value rather than inheriting the failure. */
+  color: var(--vera-label-color);
 }
 
 /* Vera (Venus) light mode — scoped to a `.v7-light` class applied only on
@@ -449,41 +518,97 @@
        dusty tones (6.86 and 6.15) in exchange for the chroma that makes
        them read as distinct hues at all, and both stay far above AA. */
 .v7-light {
-  --v7-bg: #f4f2ee;
-  --v7-bg-raised: #ffffff;
-  --v7-bg-raised-2: #e7e3dc;
-  --v7-border: #cfc8bb;
-  --v7-border-strong: #a89e8c;
-  --v7-text: #161512;
-  --v7-text-dim: #403c34;
-  --v7-text-mute: #605949;
-  --v7-cyan: #1d4ed8;
-  --v7-pink: #c2410c;
-  --v7-cyan-soft: #dce6fd;
-  --v7-cyan-strong: #1d4ed8;
-  --v7-pink-soft: #fde4d3;
-  --v7-tint: #ffffff;
-  --v7-tint-border: #bdb4a3;
-  --v7-glow-1: rgba(29,78,216,0.09);
-  --v7-glow-2: rgba(126,34,206,0.07);
-  --v7-glow-shadow-a: rgba(29,78,216,0.20);
-  --v7-glow-shadow-b: rgba(29,78,216,0.32);
+  /* NEUTRALS — cool, not warm. The previous ramp was a warm beige/tan set
+     (#f4f2ee page, #ebe7e0 card, #cfc8bb border, #b5ab99 border2). Two things
+     were wrong with it, and neither was contrast in isolation:
 
-  --bg: #f4f2ee;
+     1. HUE. Vera's dark theme is #0e0f14 — a near-black with a blue
+        undertone — and the brand accents are indigo and mint. A yellow-tinted
+        tan ground fights both: it reads as aged paper next to cold accents,
+        which is what made light mode feel like a different, older product
+        than dark mode rather than the same product in daylight.
+
+     2. ELEVATION DIRECTION. Dark mode goes bg(#0e0f14) < raised(#181a21) <
+        raised-2(#20232c) — up means lighter. Light mode had
+        bg(#f4f2ee) > raised-2(#e7e3dc), i.e. "raised-2" was DARKER than the
+        page, so the same token meant "one step up" in dark and "two steps
+        down" in light. Every shared component that used it for a hover state
+        (sidebar rows, nav) therefore brightened on hover in dark and dimmed
+        in light. Worse, response cards painted --surface2 (#ebe7e0), which
+        was darker than the page they sat on, so a card read as a hole rather
+        than a raised object — the "hierarchy feels wrong" symptom exactly.
+
+     The ramp below restores the universal light-mode model — recessed gray
+     page, white raised surfaces, light-gray insets — with a consistent cool
+     undertone so the two themes read as one design. */
+  --v7-bg: #f4f5f7;
+  --v7-bg-raised: #ffffff;
+  --v7-bg-raised-2: #eceef2;
+  --v7-border: #e3e6ec;
+  --v7-border-strong: #cbd0da;
+  --v7-text: #14171f;
+  --v7-text-dim: #4a5162;
+  --v7-text-mute: #656d7e;
+
+  /* ACCENTS — every value below is validated against BOTH backgrounds it can
+     land on (white cards and the #f4f5f7 page), not just pure white. The old
+     palette was tuned "on white" per its own comment, but response cards were
+     painted #ebe7e0, which dropped precedent green to 4.07:1 and decision
+     terracotta to 4.20:1 — both under AA — on the surface they actually
+     rendered on. Measured ratios are on white / on #eceef2 inset. */
+  --v7-cyan: #3538cd;          /* primary action — 8.29 / 7.44 */
+  --v7-pink: #b03e0a;          /* secondary identity — 5.58 / 5.01 */
+  --v7-cyan-soft: #e7e8fb;
+  --v7-cyan-strong: #3538cd;
+  --v7-pink-soft: #fbe7dc;
+
+  /* Was #ffffff, which made the "you" chat bubble and the primary-card
+     emphasis ring both pure white on a light page — the bubble lost its
+     identity entirely and the ring read as a rendering artifact. A real
+     indigo tint keeps the same meaning it carries in dark mode. */
+  --v7-tint: #eceefc;
+  --v7-tint-border: #c3c6f0;
+
+  --v7-glow-1: rgba(53, 56, 205, 0.08);
+  --v7-glow-2: rgba(109, 40, 217, 0.06);
+  --v7-glow-shadow-a: rgba(53, 56, 205, 0.18);
+  --v7-glow-shadow-b: rgba(53, 56, 205, 0.30);
+
+  --bg: #f4f5f7;
   --surface: #ffffff;
-  --surface2: #ebe7e0;
-  --surface3: #ddd7cb;
-  --border: #cfc8bb;
-  --border2: #b5ab99;
-  --text: #161512;
-  --muted: #403c34;
-  --muted-text: #403c34;
-  --dim: #605949;
-  --indigo: #1d4ed8;
-  --indigo-light: #7e22ce;
-  --mint: #15803d;
-  --green: #c2410c;
-  font-weight: 500;
+  --surface2: #ffffff;
+  --surface3: #eceef2;
+  --border: #e3e6ec;
+  --border2: #d5dae2;
+  --text: #14171f;
+  --muted: #4a5162;
+  --muted-text: #4a5162;
+  --dim: #656d7e;
+  --indigo: #3538cd;
+  --indigo-light: #6d28d9;      /* analysis/funnel/hypothesis — 7.55 / 6.78 */
+  --mint: #0f766e;              /* market/precedent — 5.31 / 4.77 */
+  --green: #b03e0a;             /* decision/solution/funding — 5.58 / 5.01 */
+
+  /* --red and --amber were never remapped for light mode at all: card titles
+     kept the dark-theme neon values, so "Risk" rendered #ef4444 at 3.05:1 and
+     "Roadmap" rendered #f59e0b at 1.74:1 — the roadmap heading was very nearly
+     invisible. These are the light-mode equivalents at the same semantic
+     meaning. */
+  --red: #c62828;               /* 5.54 / 4.97 */
+  --amber: #9a6206;             /* 5.48 / 4.92 */
+
+  --vera-card-bg: #ffffff;
+  --vera-card-border: #e3e6ec;
+  --vera-inset-bg: #f4f5f7;
+  --vera-inset-border: #e6e9ef;
+  --vera-label-color: #656d7e;
+
+  /* The old rule set font-weight:500 on this element, which pushed EVERY
+     descendant to medium in light mode only — including 10px uppercase mono
+     micro-labels, where it reads as smudged. It was compensating for the
+     washed-out beige neutrals; with real text colors (14.9:1 body) normal
+     weight holds its own, and the two themes now share one typographic
+     rhythm instead of diverging. */
 }
 
 @layer base {

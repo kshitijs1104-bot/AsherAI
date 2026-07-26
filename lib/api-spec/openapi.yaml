@@ -715,6 +715,11 @@ components:
         causalChain:
           type: array
           items: { type: string }
+        # routes/events.ts returns this on both fallback paths so the client can
+        # offer a Retry, but it was never declared here — so the generated type
+        # didn't have it and Line.tsx's `rippleMutation.data.generationFailed`
+        # was a hard typecheck error, which is why `pnpm run build` failed.
+        generationFailed: { type: boolean }
 
     Report:
       type: object
@@ -1034,6 +1039,38 @@ components:
         confidence: { type: string, enum: [verified, exploratory] }
         confidenceNote: { type: string }
         confidenceTier: { type: string }
+        # /ai/analyze has always computed and returned these (see
+        # lib/confidence.ts computeConfidence) but they were never declared in
+        # this contract, so the generated client dropped them and the UI could
+        # not see them at all. The result: Vera did the work of naming which
+        # precedents grounded an answer and detecting when they disagree, then
+        # rendered a single green "Verified precedent" pill and threw the rest
+        # away. Declaring them is what lets the chat show its evidence.
+        confidenceScore: { type: number }
+        evidenceRefs:
+          type: array
+          items: { $ref: "#/components/schemas/EvidenceRef" }
+        contradictions:
+          type: array
+          items: { $ref: "#/components/schemas/ContradictionSignal" }
+
+    EvidenceRef:
+      type: object
+      required: [type, id, label]
+      properties:
+        type: { type: string, enum: [precedent, own_decision] }
+        id: { type: integer }
+        label: { type: string }
+        weight: { type: number }
+
+    ContradictionSignal:
+      type: object
+      required: [description]
+      properties:
+        description: { type: string }
+        precedentIds:
+          type: array
+          items: { type: integer }
 
     ArticleSummaryInput:
       type: object

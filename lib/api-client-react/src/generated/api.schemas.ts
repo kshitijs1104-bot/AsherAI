@@ -51,6 +51,7 @@ export interface RippleAnalysis {
   flowchart?: RippleFlowchart | null;
   affectedSectors?: string[];
   causalChain?: string[];
+  generationFailed?: boolean;
 }
 
 export interface Report {
@@ -371,12 +372,35 @@ export const VenusResponseConfidence = {
   exploratory: 'exploratory',
 } as const;
 
+export type EvidenceRefType = typeof EvidenceRefType[keyof typeof EvidenceRefType];
+
+
+export const EvidenceRefType = {
+  precedent: 'precedent',
+  own_decision: 'own_decision',
+} as const;
+
+export interface EvidenceRef {
+  type: EvidenceRefType;
+  id: number;
+  label: string;
+  weight?: number;
+}
+
+export interface ContradictionSignal {
+  description: string;
+  precedentIds?: number[];
+}
+
 export interface VenusResponse {
   summary: string;
   cards: VenusCard[];
   confidence?: VenusResponseConfidence;
   confidenceNote?: string;
   confidenceTier?: string;
+  confidenceScore?: number;
+  evidenceRefs?: EvidenceRef[];
+  contradictions?: ContradictionSignal[];
 }
 
 export interface ArticleSummaryInput {

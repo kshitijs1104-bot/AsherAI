@@ -85,7 +85,8 @@ export const AnalyzeRippleResponse = zod.object({
 })).optional()
 }),zod.null()]).optional(),
   "affectedSectors": zod.array(zod.string()).optional(),
-  "causalChain": zod.array(zod.string()).optional()
+  "causalChain": zod.array(zod.string()).optional(),
+  "generationFailed": zod.boolean().optional()
 })
 
 
@@ -676,7 +677,18 @@ export const VenusAnalyzeResponse = zod.object({
 })),
   "confidence": zod.enum(['verified', 'exploratory']).optional(),
   "confidenceNote": zod.string().optional(),
-  "confidenceTier": zod.string().optional()
+  "confidenceTier": zod.string().optional(),
+  "confidenceScore": zod.number().optional(),
+  "evidenceRefs": zod.array(zod.object({
+  "type": zod.enum(['precedent', 'own_decision']),
+  "id": zod.number(),
+  "label": zod.string(),
+  "weight": zod.number().optional()
+})).optional(),
+  "contradictions": zod.array(zod.object({
+  "description": zod.string(),
+  "precedentIds": zod.array(zod.number()).optional()
+})).optional()
 })
 
 
@@ -702,7 +714,18 @@ export const IdeaReviewResponse = zod.object({
 })),
   "confidence": zod.enum(['verified', 'exploratory']).optional(),
   "confidenceNote": zod.string().optional(),
-  "confidenceTier": zod.string().optional()
+  "confidenceTier": zod.string().optional(),
+  "confidenceScore": zod.number().optional(),
+  "evidenceRefs": zod.array(zod.object({
+  "type": zod.enum(['precedent', 'own_decision']),
+  "id": zod.number(),
+  "label": zod.string(),
+  "weight": zod.number().optional()
+})).optional(),
+  "contradictions": zod.array(zod.object({
+  "description": zod.string(),
+  "precedentIds": zod.array(zod.number()).optional()
+})).optional()
 })
 
 

@@ -1,17 +1,52 @@
 import { useState } from 'react';
-import { Reply, Megaphone, FileText, Send, Copy, Check, Inbox, Linkedin } from 'lucide-react';
+import { Reply, Crosshair, FileText, Send, Copy, Check, Inbox, Linkedin } from 'lucide-react';
 import { useRunInstantAction, type InstantActionType } from '../lib/venusApi';
 
 // Zero-onboarding by design: pick an action, paste one thing in, get one
-// result back. No multi-step wizard, no explainer — the two output buttons
-// ARE the entire interaction surface (see section 3 of the build plan:
-// "action -> result", instant copy-paste OR sent to the queue as a pending
-// item, per attempt rather than a fixed setting per action type).
-const ACTIONS: { type: InstantActionType; label: string; placeholder: string; Icon: typeof Reply }[] = [
-  { type: 'draft_reply', label: 'Draft a reply', placeholder: 'Paste the message you got…', Icon: Reply },
-  { type: 'sell_this', label: 'Sell this', placeholder: 'Describe what you’re selling…', Icon: Megaphone },
-  { type: 'summarize', label: 'Summarize', placeholder: 'Paste the text to summarize…', Icon: FileText },
-  { type: 'follow_up', label: 'Follow up', placeholder: 'Who/what is this following up on…', Icon: Send },
+// result back. No multi-step wizard, no explainer.
+//
+// Labels state what you get back, not a verb phrase you have to interpret.
+// "Sell this" in particular said nothing — a founder could not tell whether it
+// wrote a landing page, an email, a pitch or a tweet, and generic marketing
+// copy is the weakest possible thing for a causal-analysis product to offer.
+// It now maps to the one instant action that is actually Vera's job: hand it a
+// plan you're about to commit to and it tries to break it. Each entry also
+// carries a one-line `hint` so the grid explains itself without a tooltip.
+const ACTIONS: {
+  type: InstantActionType;
+  label: string;
+  hint: string;
+  placeholder: string;
+  Icon: typeof Reply;
+}[] = [
+  {
+    type: 'sell_this',
+    label: 'Pressure-test it',
+    hint: 'The strongest reason this is wrong, and the cheapest test to find out',
+    placeholder: "The plan or assumption you're about to commit to…",
+    Icon: Crosshair,
+  },
+  {
+    type: 'summarize',
+    label: 'Cut to the point',
+    hint: 'A long thread, doc or report down to what actually matters',
+    placeholder: 'Paste the thread, doc or report…',
+    Icon: FileText,
+  },
+  {
+    type: 'draft_reply',
+    label: 'Draft a reply',
+    hint: 'A short, direct response to something in your inbox',
+    placeholder: 'Paste the message you need to answer…',
+    Icon: Reply,
+  },
+  {
+    type: 'follow_up',
+    label: 'Restart a thread',
+    hint: 'A low-pressure nudge for a deal or intro that went quiet',
+    placeholder: 'Who went quiet, and what it was about…',
+    Icon: Send,
+  },
 ];
 
 function ActionForm({ type, placeholder, onClose }: { type: InstantActionType; placeholder: string; onClose: () => void }) {
@@ -143,16 +178,22 @@ export function QuickActions() {
       </div>
 
       {!activeMeta ? (
-        <div className="flex flex-wrap gap-1.5">
-          {ACTIONS.map(({ type, label, Icon }) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {ACTIONS.map(({ type, label, hint, Icon }) => (
             <button
               key={type}
               onClick={() => setActive(type)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-medium"
-              style={{ background: 'var(--v7-bg-raised)', color: 'var(--v7-text-dim)' }}
+              className="vera-block text-left transition-colors"
+              onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--v7-cyan-strong)')}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = '')}
             >
-              <Icon className="w-3.5 h-3.5" style={{ color: 'var(--v7-cyan)' }} />
-              {label}
+              <span className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: 'var(--v7-text)' }}>
+                <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--v7-cyan)' }} />
+                {label}
+              </span>
+              <span className="block mt-1 text-[11.5px] leading-snug" style={{ color: 'var(--v7-text-mute)' }}>
+                {hint}
+              </span>
             </button>
           ))}
         </div>

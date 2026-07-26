@@ -13,4 +13,5 @@ export interface RippleAnalysis {
   flowchart?: RippleFlowchart | null;
   affectedSectors?: string[];
   causalChain?: string[];
+  generationFailed?: boolean;
 }

@@ -6,6 +6,7 @@ import {
   getSavedAnalyses, saveAnalysis, deleteSavedAnalysis,
   detectAnalysisType, typeLabel, titleFromMessage,
   type ChatSession, type ChatMessage, type SavedAnalysisType, type SavedAnalysis,
+  type EvidenceRefEntry, type ContradictionEntry,
 } from '../lib/venusHistory';
 import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil, LayoutGrid, Workflow as WorkflowIcon, Paperclip, X, Loader2, AlertCircle } from 'lucide-react';
 import { DraftWorkspace, detectDraftChannel } from './DraftWorkspace';
@@ -17,6 +18,7 @@ import { NotificationBell } from './NotificationBell';
 import { CommandCenterSection } from './CommandCenter';
 import { AttachMenu } from './AttachMenu';
 import { ConnectorPicker } from './ConnectorPicker';
+import { QuickActions } from './QuickActions';
 import { useVenusTheme } from '../lib/venusTheme';
 import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
 
@@ -154,6 +156,32 @@ function useIsNarrowViewport(): boolean {
   }, []);
 
   return isNarrow;
+}
+
+// Both composers were `rows={1}` with a max-height and no auto-grow, so the
+// textarea stayed one 38px line no matter how much was typed and scrolled the
+// content out of sight. Measured on the deployed build: a 302-character
+// question had scrollHeight 125px inside a 38px box — the founder could see
+// roughly the last twelve words of what they had written, on the primary
+// input of the entire product. Every serious composer (ChatGPT, Claude,
+// Linear, Slack) grows to a cap and then scrolls; this does the same.
+//
+// Height is reset to 'auto' before reading scrollHeight because scrollHeight
+// never shrinks below the element's current height — without the reset the
+// box would grow but never shrink back when text is deleted.
+function useAutoGrow(value: string, maxHeight = 200) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const next = Math.min(el.scrollHeight, maxHeight);
+    el.style.height = `${next}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
+  }, [value, maxHeight]);
+
+  return ref;
 }
 
 function loadPanelPref(key: string, defaultValue = true): boolean {
@@ -300,6 +328,11 @@ export function VenusPage() {
   const { data: queueData } = useQueue();
   const pendingQueueCount = queueData?.items.filter(i => i.status === 'pending').length ?? 0;
   const endRef = useRef<HTMLDivElement | null>(null);
+  // One hook per composer — only one of the two is mounted at a time (empty
+  // state vs. active thread), but they are separate elements so each needs
+  // its own ref.
+  const heroComposerRef = useAutoGrow(input);
+  const threadComposerRef = useAutoGrow(input);
   const analyzeMutation = useVenusAnalyze();
   const createChatMutation = useCreateChat();
   const updateChatMutation = useUpdateChat();
@@ -475,6 +508,8 @@ export function VenusPage() {
             cards: res.cards,
             confidence: res.confidence,
             confidenceNote: res.confidenceNote,
+            evidenceRefs: res.evidenceRefs,
+            contradictions: res.contradictions,
             contextQuery: text,
           };
           // Merge onto sessionRef.current (see its declaration above), not
@@ -758,11 +793,19 @@ export function VenusPage() {
             toggles — in that order (see build-plan discussion: nav items
             first, toggles last, room left for future nav items between
             Workflows and Goals). */}
+        {/* "Goals" used to appear twice in this sidebar with two different
+            meanings — once here as a show/hide toggle for the panel above the
+            chat, and again in the bottom group as a link to the full
+            cross-chat goals page. Two identical labels, two unrelated
+            behaviours, about 400px apart. The toggles now say what they
+            actually control (a panel in this view) and sit under their own
+            heading; the destinations below are named as destinations. */}
         <div className="mb-[18px]" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
           <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={pendingQueueCount} />
           <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/venus/workflows')} />
-          <SidebarToggleRow icon={Target} label="Goals" active={showGoalPanel} onClick={toggleGoalPanel} />
-          <SidebarToggleRow icon={MapIcon} label="Roadmap" active={showRoadmap} onClick={toggleRoadmap} />
+          <div className="vera-label" style={{ padding: '10px 8px 4px' }}>Show above chat</div>
+          <SidebarToggleRow icon={Target} label="Goal panel" active={showGoalPanel} onClick={toggleGoalPanel} />
+          <SidebarToggleRow icon={MapIcon} label="Roadmap panel" active={showRoadmap} onClick={toggleRoadmap} />
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
@@ -839,7 +882,7 @@ export function VenusPage() {
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--v7-text-dim)')}
           >
             <Target className="w-3.5 h-3.5" />
-            Goals
+            All goals
           </button>
           <button
             onClick={() => navigate('/venus/decisions')}
@@ -849,7 +892,7 @@ export function VenusPage() {
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--v7-text-dim)')}
           >
             <ListChecks className="w-3.5 h-3.5" />
-            Decisions
+            All decisions
           </button>
           <button
             onClick={() => setShowSettings(v => !v)}
@@ -993,12 +1036,13 @@ export function VenusPage() {
                   style={{ color: 'var(--v7-text-mute)' }}
                 />
                 <textarea
+                  ref={heroComposerRef}
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                   placeholder="Tell Vera what's really going on…"
                   rows={1}
-                  className="flex-1 bg-transparent border-none outline-none resize-none max-h-32 min-h-[38px] py-2 font-medium text-[14.5px]"
+                  className="flex-1 bg-transparent border-none outline-none resize-none min-h-[38px] py-2 font-medium text-[14.5px]"
                   style={{ color: 'var(--v7-text)', fontFamily: 'var(--v7-font-round)' }}
                 />
                 <button
@@ -1012,6 +1056,17 @@ export function VenusPage() {
                   </svg>
                 </button>
               </form>
+
+              {/* QuickActions existed as a complete, working 164-line module
+                  that nothing imported — it had no entry point anywhere in the
+                  app, so the four instant actions and their whole backend
+                  (/api/actions/:type/run) were unreachable. The landing view is
+                  where it belongs: these are the "I don't need an analysis, I
+                  need one thing done" path, sitting below the example prompts
+                  that start the analysis path. */}
+              <div className="w-full mb-7">
+                <QuickActions />
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-[10px] w-full">
                 {EXAMPLE_PROMPTS.map((prompt, i) => (
@@ -1056,7 +1111,9 @@ export function VenusPage() {
                           <VeraAvatar />
                           <span className="text-[10px] font-mono uppercase text-[var(--muted-text)]">Vera</span>
                         </div>
-                        {msg.role === 'venus' && !(msg as any).isError && <ConfidenceBadge confidence={msg.confidence} note={msg.confidenceNote} />}
+                        {msg.role === 'venus' && !(msg as any).isError && (
+                          <ConfidenceBadge confidence={msg.confidence} note={msg.confidenceNote} contradictions={msg.contradictions} />
+                        )}
                       </div>
 
                       {/* A response that IS the deliverable (a post, an
@@ -1103,13 +1160,14 @@ export function VenusPage() {
 
                         return (
                           <>
-                            <ResponseJumpNav cards={displayCards} />
+                            <ResponseJumpNav cards={displayCards} messageIndex={i} />
                             <div className="grid grid-cols-1 gap-3 mt-2">
                               {displayCards.map((card: any, ci: number) => (
                                 <VenusCard
                                   key={`${ci}-${card.title ?? 'card'}`}
                                   card={card}
                                   index={ci}
+                                  messageIndex={i}
                                   contextQuery={msg.contextQuery || priorUserQuery}
                                   previousContextQuery={priorUserQuery}
                                   isPrimary={card.role === 'primary' || (primaryCards.length === 0 && ci === 0)}
@@ -1122,7 +1180,16 @@ export function VenusPage() {
                         );
                       })()}
 
-                      {/* Response actions: copy markdown, download .md, save */}
+                      {msg.role === 'venus' && !(msg as any).isError && (
+                        <EvidenceStrip
+                          confidence={msg.confidence}
+                          note={msg.confidenceNote}
+                          evidenceRefs={msg.evidenceRefs}
+                          contradictions={msg.contradictions}
+                        />
+                      )}
+
+                      {/* Response actions: copy, download, save */}
                       <VenusResponseActions msg={msg} onSave={() => handleSaveResponse(msg)} />
                     </div>
                   )}
@@ -1170,12 +1237,13 @@ export function VenusPage() {
                 style={{ color: 'var(--dim)' }}
               />
               <textarea
+                ref={threadComposerRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                 placeholder="Ask Vera for unvarnished analysis..."
                 rows={1}
-                className="flex-1 bg-transparent border-none outline-none resize-none max-h-32 min-h-[44px] py-3 px-4 text-sm text-[var(--text)] placeholder-[var(--dim)]"
+                className="flex-1 bg-transparent border-none outline-none resize-none min-h-[44px] py-3 px-4 text-sm text-[var(--text)] placeholder-[var(--dim)]"
               />
               <button
                 type="submit"
@@ -1243,7 +1311,11 @@ function VenusMessage({ content, confidence }: { content: string; confidence?: '
     <div className="space-y-1.5 text-sm text-[var(--text)] leading-relaxed">
       {lines.map((line, i) => {
         if (line.startsWith('### ')) {
-          return <h3 key={i} className="text-xs font-mono text-[var(--mint)] uppercase tracking-wider pt-3 first:pt-0">{line.slice(4)}</h3>;
+          // Was --mint in mono uppercase — byte-for-byte the same treatment
+          // highlightFigures gives inline numbers, so a section heading and a
+          // metric inside a sentence were indistinguishable and the accent
+          // stopped meaning anything. Headings are structure, not data.
+          return <h3 key={i} className="vera-label pt-3 first:pt-0">{line.slice(4)}</h3>;
         }
         if (line.startsWith('## ')) {
           return <h2 key={i} className="text-sm font-syne font-bold text-[var(--text)] pt-3 first:pt-0">{line.slice(3)}</h2>;
@@ -1275,8 +1347,18 @@ function VenusMessage({ content, confidence }: { content: string; confidence?: '
   );
 }
 
-const FIGURE_SPLIT_RE = /(\$\d[\d,.]*\s?[KMBT]?|\d[\d,.]*\s?%|\b\d[\d,.]*x\b|\b(?:19|20)\d{2}\b)/g;
-const FIGURE_TEST_RE = /^(\$\d[\d,.]*\s?[KMBT]?|\d[\d,.]*\s?%|\d[\d,.]*x|(?:19|20)\d{2})$/;
+// Two fixes over the previous pattern:
+//
+// 1. The magnitude suffix was `[KMBT]` — uppercase only. Models write "$4.1k"
+//    far more often than "$4.1K", so the match ended at "$4.1" and the "k" was
+//    left behind as ordinary text: the figure rendered visibly split, half
+//    accented and half not, mid-word. Now case-insensitive.
+// 2. Bare four-digit years were highlighted as figures. A year is not a
+//    metric, and in an analysis full of dates it meant most of the accent on
+//    screen was carrying no meaning — the speckled "ransom note" effect. Years
+//    inside a real figure (e.g. "2024%") still match the other branches.
+const FIGURE_SPLIT_RE = /(\$\d[\d,.]*\s?[kmbtKMBT]?\b|\d[\d,.]*\s?%|\b\d[\d,.]*x\b)/g;
+const FIGURE_TEST_RE = /^(\$\d[\d,.]*\s?[kmbtKMBT]?|\d[\d,.]*\s?%|\d[\d,.]*x)$/;
 
 function highlightFigures(text: string): React.ReactNode {
   const parts = text.split(FIGURE_SPLIT_RE);
@@ -1357,9 +1439,9 @@ function renderStructuredValue(value: unknown, depth = 0): React.ReactNode {
     return (
       <div className="space-y-2">
         {entries.map(([key, entryValue]) => (
-          <div key={key} className="rounded border border-[var(--border)] bg-[var(--surface)]/70 p-2.5">
-            <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--muted-text)] mb-1">{key.replace(/_/g, ' ')}</div>
-            <div className="text-sm text-[var(--text)]">{renderStructuredValue(entryValue, depth + 1)}</div>
+          <div key={key} className="vera-block">
+            <div className="vera-label mb-1">{key.replace(/_/g, ' ')}</div>
+            <div className="text-[13px] text-[var(--text)] leading-relaxed">{renderStructuredValue(entryValue, depth + 1)}</div>
           </div>
         ))}
       </div>
@@ -1445,7 +1527,124 @@ function CompetitorList({ competitors }: { competitors: unknown }) {
   );
 }
 
-function ConfidenceBadge({ confidence, note }: { confidence?: 'verified' | 'exploratory'; note?: string }) {
+// Three states, not two. The backend already distinguishes them — it records
+// a ContradictionSignal whenever the precedents grounding an answer disagree
+// on outcome — but the old badge collapsed that into the same green
+// "Verified precedent" pill it showed for unanimous evidence, and buried the
+// caveat in a hover tooltip that occluded the answer text and does not exist
+// at all on touch. On the very first real query run against this build, an
+// answer grounded in four precedents (three failed, one acquired) was
+// labelled VERIFIED. For a product whose whole claim is causal honesty, that
+// is the most expensive defect in it: it manufactures confidence the engine
+// itself did not have.
+function confidenceState(confidence?: 'verified' | 'exploratory', contradictions?: ContradictionEntry[]) {
+  if (!confidence) return null;
+  if (contradictions && contradictions.length > 0) {
+    return { label: 'Split precedent', color: 'var(--amber)', tone: 'warn' as const };
+  }
+  if (confidence === 'exploratory') {
+    return { label: 'Exploratory — no precedent match', color: 'var(--amber)', tone: 'warn' as const };
+  }
+  return { label: 'Verified precedent', color: 'var(--mint)', tone: 'ok' as const };
+}
+
+// The evidence itself, rendered inline and always visible rather than hidden
+// behind a hover. Naming the precedents an answer stands on is the single
+// thing Vera can show that a general-purpose chat assistant cannot — it was
+// being computed on every request and then thrown away by the client.
+function EvidenceStrip({
+  confidence,
+  note,
+  evidenceRefs,
+  contradictions,
+}: {
+  confidence?: 'verified' | 'exploratory';
+  note?: string;
+  evidenceRefs?: EvidenceRefEntry[];
+  contradictions?: ContradictionEntry[];
+}) {
+  const [open, setOpen] = useState(false);
+  const state = confidenceState(confidence, contradictions);
+  const precedents = (evidenceRefs ?? []).filter((r) => r.type === 'precedent');
+  const ownDecisions = (evidenceRefs ?? []).filter((r) => r.type === 'own_decision');
+  const conflict = contradictions?.[0]?.description;
+
+  if (!state && precedents.length === 0) return null;
+
+  return (
+    <div className="vera-block mt-3" style={{ padding: '12px 14px' }}>
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        {state && (
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider" style={{ color: state.color }}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: state.color }} />
+            {state.label}
+          </span>
+        )}
+        {precedents.length > 0 && (
+          <span className="vera-label">
+            {precedents.length} precedent{precedents.length === 1 ? '' : 's'}
+            {ownDecisions.length > 0 ? ` · ${ownDecisions.length} of your past decisions` : ''}
+          </span>
+        )}
+        {(precedents.length > 0 || note) && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="vera-label ml-auto flex items-center gap-1 hover:text-[var(--text)]"
+            aria-expanded={open}
+          >
+            {open ? 'Hide basis' : 'Show basis'}
+            <ChevronDown className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
+        )}
+      </div>
+
+      {/* A recorded disagreement is never hidden behind a disclosure — it is
+          the part of the answer most likely to change what the founder does. */}
+      {conflict && (
+        <p className="mt-2 text-[12.5px] leading-relaxed" style={{ color: 'var(--amber)' }}>
+          {conflict}
+        </p>
+      )}
+
+      {open && (
+        <div className="mt-2.5 space-y-2">
+          {note && <p className="text-[12.5px] leading-relaxed text-[var(--muted-text)]">{note}</p>}
+          {precedents.length > 0 && (
+            <div>
+              <div className="vera-label mb-1">Precedents used</div>
+              <div className="flex flex-wrap gap-1.5">
+                {precedents.map((ref) => (
+                  <span
+                    key={`${ref.type}-${ref.id}`}
+                    className="text-[11px] px-2 py-0.5 rounded-full"
+                    style={{ border: '1px solid var(--border2)', color: 'var(--muted-text)' }}
+                  >
+                    {ref.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {ownDecisions.length > 0 && (
+            <div>
+              <div className="vera-label mb-1">Your past decisions</div>
+              <ul className="space-y-1">
+                {ownDecisions.map((ref) => (
+                  <li key={`${ref.type}-${ref.id}`} className="text-[12px] text-[var(--muted-text)] leading-snug">
+                    {ref.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfidenceBadge({ confidence, note, contradictions }: { confidence?: 'verified' | 'exploratory'; note?: string; contradictions?: ContradictionEntry[] }) {
   // No confidence value means this message isn't a real analysis — a plain
   // acknowledgment ("noted your context") or a clarifying question ("which
   // business do you mean"). Previously this fell through to the "false"
@@ -1453,40 +1652,42 @@ function ConfidenceBadge({ confidence, note }: { confidence?: 'verified' | 'expl
   // were never any kind of precedent-backed answer at all, which was
   // confusing and made a plain follow-up question look like a confident
   // analytical claim. Render nothing in that case.
-  if (!confidence) return null;
-
-  const isExploratory = confidence === 'exploratory';
-  const label = isExploratory ? 'Exploratory — no precedent match' : 'Verified precedent';
-  const classes = isExploratory
-    ? 'border-[var(--v7-tint-border)] bg-[var(--v7-tint)] text-[var(--amber)]'
-    : 'border-[var(--v7-tint-border)] bg-[var(--v7-tint)] text-[var(--mint)]';
+  const state = confidenceState(confidence, contradictions);
+  if (!state) return null;
 
   return (
-    <div className="relative group shrink-0">
-      <button type="button" className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-colors ${classes}`}>
-        <span className={`h-1.5 w-1.5 rounded-full ${isExploratory ? 'bg-[var(--amber)]' : 'bg-[var(--mint)]'}`} />
-        {label}
-      </button>
-      {note && (
-        <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-64 rounded-lg border border-[var(--border)] bg-[var(--surface2)] p-2.5 text-[11px] leading-relaxed text-[var(--muted-text)] shadow-lg group-hover:block group-focus-within:block">
-          {note}
-        </div>
-      )}
-    </div>
+    <span
+      className="shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider"
+      style={{
+        color: state.color,
+        border: `1px solid color-mix(in srgb, ${state.color} 40%, transparent)`,
+        background: `color-mix(in srgb, ${state.color} 10%, transparent)`,
+      }}
+      title={note}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: state.color }} />
+      {state.label}
+    </span>
   );
 }
 
-function ResponseJumpNav({ cards }: { cards: any[] }) {
-  // With a single card the "nav" is one chip sitting directly above the very
-  // heading it links to — the title rendered twice, two lines apart, for no
-  // navigational gain. Jumping only earns its space once there's somewhere
-  // to jump to.
-  if (cards.length < 2) return null;
+function ResponseJumpNav({ cards, messageIndex }: { cards: any[]; messageIndex: number }) {
+  // With one or two cards the "nav" is a row of chips sitting directly above
+  // the very headings it links to — the titles rendered twice, a few lines
+  // apart, for no navigational gain, and a boxed strip of uppercase mono
+  // competing with the card headings themselves. It only earns its space
+  // once the stack is genuinely long enough to lose your place in.
+  if (cards.length < 4) return null;
 
   return (
-    <div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface2)]/80 p-2">
+    <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <span className="vera-label">Jump to</span>
       {cards.map((card, index) => (
-        <a key={index} href={`#venus-card-${index}`} className="rounded-full border border-[var(--border)] px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--dim)] hover:border-[var(--indigo)] hover:text-[var(--text)]">
+        <a
+          key={index}
+          href={`#${cardAnchorId(messageIndex, index)}`}
+          className="text-[11px] text-[var(--dim)] underline decoration-dotted underline-offset-[3px] hover:text-[var(--text)] hover:decoration-solid"
+        >
           {card.title?.replace(/\s+/g, ' ').trim() || `Section ${index + 1}`}
         </a>
       ))}
@@ -1500,26 +1701,44 @@ function ResponseJumpNav({ cards }: { cards: any[] }) {
 // so clicking "Show report" on one company (e.g. Ask Jeeves) also revealed the report
 // panel for every other unrelated company in the same card (e.g. Zume). Each entry now
 // owns its own state so toggling one never affects the others.
-function PrecedentEntry({ precedent: p, companyReports, onGenerateCompanyReport }: { precedent: any; companyReports: Record<string, CompanyReportState>; onGenerateCompanyReport: (companyName: string) => Promise<void> }) {
+// Every precedent outcome previously rendered in --mint, the success colour —
+// so a company that FAILED was labelled in green, directly contradicting the
+// word inside the chip. Outcome is the single most load-bearing field on a
+// precedent (it's what makes it a warning or a template), so it gets honest
+// semantics: red for failure, green for survival/acquisition, neutral for
+// anything the model returns that isn't clearly either.
+function OutcomePill({ outcome }: { outcome: unknown }) {
+  const raw = String(outcome ?? '').trim();
+  if (!raw) return null;
+  const negative = /fail|shut|dead|bankrupt|wound|collapse|defunct/i.test(raw);
+  const positive = /acquir|ipo|surviv|profitab|scaled|success|active/i.test(raw);
+  const color = negative ? 'var(--red)' : positive ? 'var(--mint)' : 'var(--dim)';
+  return (
+    <span
+      className="text-[9.5px] uppercase font-mono px-2 py-0.5 rounded-full tracking-wider shrink-0"
+      style={{ color, border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`, background: `color-mix(in srgb, ${color} 10%, transparent)` }}
+    >
+      {raw}
+    </span>
+  );
+}
+
+function PrecedentEntry({ precedent: p, companyReports, onGenerateCompanyReport }:{ precedent: any; companyReports: Record<string, CompanyReportState>; onGenerateCompanyReport: (companyName: string) => Promise<void> }) {
   const [reportExpanded, setReportExpanded] = useState(false);
   const reportKey = p.company ? normalizeCompanyKey(String(p.company)) : null;
   const reportState = reportKey ? companyReports[reportKey] : undefined;
 
   return (
-    <div className="relative bg-[var(--surface)] border-l-2 border border-[var(--mint)]/40 border-l-[var(--mint)] rounded-r-lg rounded-l-sm p-4 pl-[18px]">
+    <div className="vera-block relative" style={{ boxShadow: 'inset 2px 0 0 0 var(--mint)' }}>
       <div className="flex items-baseline justify-between gap-3 mb-1.5 flex-wrap">
         <div className="flex items-baseline gap-2">
-          <span className="font-syne font-bold text-[15px] text-[var(--text)]">{p.company}</span>
-          <span className="font-mono text-[11px] text-[var(--mint)]">{p.year}</span>
+          <span className="font-bold text-[15px] text-[var(--text)]">{p.company}</span>
+          <span className="font-mono text-[11px] text-[var(--dim)]">{p.year}</span>
         </div>
-        {p.outcome && (
-          <span className="text-[9.5px] uppercase font-mono px-2 py-0.5 rounded bg-[var(--v7-tint)] text-[var(--mint)] tracking-wider">
-            {p.outcome}
-          </span>
-        )}
+        {p.outcome && <OutcomePill outcome={p.outcome} />}
       </div>
-      <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)] mb-1">Causal lesson</div>
-      <p className="text-[13px] text-[var(--muted-text)] leading-relaxed">{renderInline(p.lesson)}</p>
+      <div className="vera-label mb-1">Causal lesson</div>
+      <p className="text-[13px] text-[var(--muted-text)] leading-relaxed">{renderInline(String(p.lesson ?? ''))}</p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
@@ -1534,7 +1753,7 @@ function PrecedentEntry({ precedent: p, companyReports, onGenerateCompanyReport 
             setReportExpanded(true);
             await onGenerateCompanyReport(String(p.company));
           }}
-          className="rounded border border-[var(--v7-tint-border)] bg-[var(--v7-tint)] px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--mint)] disabled:cursor-wait disabled:opacity-70"
+          className="rounded-full border border-[var(--v7-tint-border)] bg-[var(--v7-tint)] px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--indigo)] disabled:cursor-wait disabled:opacity-70"
           disabled={reportState?.status === 'loading'}
         >
           {reportState?.status === 'loading' ? 'Researching…' : reportState?.status === 'ready' ? (reportExpanded ? 'Hide report' : 'Show report') : 'Generate Report'}
@@ -1542,13 +1761,13 @@ function PrecedentEntry({ precedent: p, companyReports, onGenerateCompanyReport 
       </div>
 
       {reportExpanded && reportState && (
-        <div className="mt-3 rounded border border-[var(--border)] bg-[var(--surface)]/70 p-3">
+        <div className="vera-block mt-3" style={{ background: 'var(--vera-card-bg)' }}>
           {reportState.status === 'loading' && <div className="text-sm text-[var(--muted-text)]">Gathering public details and sources…</div>}
           {reportState.status === 'error' && <div className="text-sm text-[var(--red)]">{reportState.error ?? 'Report generation failed.'}</div>}
           {reportState.status === 'ready' && reportState.report && (
             <div className="space-y-3">
               <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)] mb-1">Snapshot</div>
+                <div className="vera-label mb-1">Snapshot</div>
                 <div className="space-y-1 text-sm text-[var(--muted-text)]">
                   {reportState.report.snapshot.foundedYear && <div>Founded: {renderInline(reportState.report.snapshot.foundedYear)}</div>}
                   {reportState.report.snapshot.founders && reportState.report.snapshot.founders.length > 0 && <div>Founders: {renderInline(reportState.report.snapshot.founders.join(', '))}</div>}
@@ -1557,7 +1776,7 @@ function PrecedentEntry({ precedent: p, companyReports, onGenerateCompanyReport 
                 </div>
               </div>
               <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)] mb-1">Timeline</div>
+                <div className="vera-label mb-1">Timeline</div>
                 <ul className="space-y-1.5 list-disc pl-5 text-sm text-[var(--muted-text)]">
                   {reportState.report.timeline.map((entry, entryIndex) => (
                     <li key={`${entry.label}-${entryIndex}`}><span className="text-[var(--text)]">{entry.label}</span>: {renderInline(entry.detail)}</li>
@@ -1565,12 +1784,12 @@ function PrecedentEntry({ precedent: p, companyReports, onGenerateCompanyReport 
                 </ul>
               </div>
               <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)] mb-1">What happened</div>
+                <div className="vera-label mb-1">What happened</div>
                 <p className="text-sm text-[var(--muted-text)] leading-relaxed">{renderInline(reportState.report.analysis)}</p>
               </div>
               {reportState.report.sources.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)] mb-1">Sources</div>
+                  <div className="vera-label mb-1">Sources</div>
                   <ul className="space-y-1 text-sm">
                     {reportState.report.sources.map((source, sourceIndex) => (
                       <li key={`${source.url}-${sourceIndex}`}>
@@ -1612,7 +1831,21 @@ const CARD_TYPE_COLORS: Record<string, string> = {
   hypothesis: 'var(--indigo-light)',
 };
 
-const NEON_PALETTE = ['#2ce8d6', '#ff7ad1', '#f6c945', '#5b9df9', '#ff8a5c', '#7cf6a0', '#c084fc', '#38e0c8', '#ffb454'];
+// Unrecognized card types used to be coloured from a hard-coded neon list
+// (#2ce8d6, #ff7ad1, #f6c945, …). Those are dark-theme values with no light
+// equivalent, so in light mode a new card type rendered its title in neon
+// cyan on white — around 1.6:1, effectively unreadable — while every KNOWN
+// type correctly used a theme token. Hashing into the same token set the
+// known types already draw from keeps the "same topic always gets the same
+// colour" property that made hashing worthwhile, without a second, untheme-d
+// palette that only works on one background.
+const CARD_TYPE_FALLBACK = [
+  'var(--indigo-light)',
+  'var(--mint)',
+  'var(--green)',
+  'var(--indigo)',
+  'var(--amber)',
+];
 
 function hashCardType(s: string): number {
   let h = 0;
@@ -1623,49 +1856,121 @@ function hashCardType(s: string): number {
 function getCardColor(type: string): string {
   const key = (type || '').toLowerCase().trim();
   if (CARD_TYPE_COLORS[key]) return CARD_TYPE_COLORS[key];
-  return NEON_PALETTE[hashCardType(key) % NEON_PALETTE.length];
+  return CARD_TYPE_FALLBACK[hashCardType(key) % CARD_TYPE_FALLBACK.length];
 }
 
-function VenusCard({ card, index = 0, contextQuery = '', previousContextQuery = '', isPrimary = false, companyReports, onGenerateCompanyReport }: { card: any; index?: number; contextQuery?: string; previousContextQuery?: string; isPrimary?: boolean; companyReports: Record<string, CompanyReportState>; onGenerateCompanyReport: (companyName: string) => Promise<void> }) {
-  const [expanded, setExpanded] = useState(isPrimary);
+// Risk severity used to render as a solid red chip for EVERY value — a "low"
+// risk and a "high" risk were the same alarming red, so the one field whose
+// entire job is to rank the list by severity carried no information at all.
+// Now the three levels are visually ordered: filled red for high, tinted
+// amber for medium, quiet outline for low.
+function ImpactPill({ impact }: { impact?: unknown }) {
+  const raw = String(impact ?? '').trim();
+  if (!raw) return null;
+  const level = /high|critical|severe/i.test(raw) ? 'high' : /med|moderate/i.test(raw) ? 'medium' : 'low';
+  const style =
+    level === 'high'
+      ? { background: 'var(--red)', color: '#fff', border: '1px solid var(--red)' }
+      : level === 'medium'
+        ? { background: 'color-mix(in srgb, var(--amber) 14%, transparent)', color: 'var(--amber)', border: '1px solid color-mix(in srgb, var(--amber) 45%, transparent)' }
+        : { background: 'transparent', color: 'var(--dim)', border: '1px solid var(--border2)' };
+  return (
+    <span
+      className="shrink-0 text-[9.5px] uppercase font-mono tracking-wider px-2 py-0.5 rounded-full leading-[1.6]"
+      style={style}
+    >
+      {raw}
+    </span>
+  );
+}
+
+// Anchors used to be `venus-card-${index}` where index is the card's position
+// WITHIN its message — so every response in a thread emitted its own
+// `venus-card-0`, `venus-card-1`, … Duplicate ids are invalid HTML and
+// `href="#venus-card-0"` resolves to the FIRST match in the document, so a
+// jump chip in the third answer scrolled the founder back to the first
+// answer. Scoping the id to the message makes it unique for the whole thread.
+function cardAnchorId(messageIndex: number, cardIndex: number): string {
+  return `venus-card-${messageIndex}-${cardIndex}`;
+}
+
+// One line of a card's own content, for the collapsed state.
+function cardPreviewLine(type: string, content: Record<string, any>): string {
+  const first = (arr: unknown, pick: (item: Record<string, any>) => unknown) => {
+    if (!Array.isArray(arr) || arr.length === 0) return '';
+    const item = parseMaybeJson(arr[0]);
+    const value = isRecord(item) ? pick(item) : item;
+    return value == null ? '' : String(value);
+  };
+  const text = (() => {
+    switch (type) {
+      case 'analysis': return first(content.points, (p) => p.label ?? p.value);
+      case 'risk': return first(content.risks, (r) => r.name);
+      case 'roadmap': return first(content.phases ?? content.milestones, (m) => m.title ?? m.goal ?? m.period);
+      case 'precedent': return first(content.precedents, (p) => p.company ? `${p.company} — ${p.lesson ?? ''}` : p.lesson);
+      case 'market': return content.whitespace ? String(content.whitespace) : first(content.competitors, (c) => c.name);
+      case 'decision': return content.recommendation ? String(content.recommendation) : first(content.options, (o) => o.name);
+      case 'funnel': return first(content.stages ?? content.steps, (s) => s.stage_title ?? s.title ?? s.name);
+      case 'solution': return first(content.solutions ?? content.options, (s) => s.title ?? s.name);
+      default: {
+        const firstString = Object.values(content).find((v) => typeof v === 'string' && v.trim());
+        return typeof firstString === 'string' ? firstString : '';
+      }
+    }
+  })();
+  return text.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function VenusCard({ card, index = 0, messageIndex = 0, contextQuery = '', previousContextQuery = '', isPrimary = false, companyReports, onGenerateCompanyReport }:{ card: any; index?: number; messageIndex?: number; contextQuery?: string; previousContextQuery?: string; isPrimary?: boolean; companyReports: Record<string, CompanyReportState>; onGenerateCompanyReport: (companyName: string) => Promise<void> }) {
+  // A market card whose query didn't mention market/competitor/TAM keywords
+  // used to be DELETED outright (`if (!shouldRenderMarket) return null`).
+  // That silently threw away analysis the model produced and the backend
+  // paid for, with nothing on screen to say it existed — and because the
+  // parent still counted it when building the jump nav, it also left a chip
+  // pointing at an anchor that was never rendered. Off-topic supporting
+  // material is a reason to start it collapsed, not to destroy it.
+  const offTopic = card.type === 'market' && !isMarketQueryRelevant(contextQuery);
+  const [expanded, setExpanded] = useState(isPrimary && !offTopic);
   const color = getCardColor(card.type);
   const content = parseMaybeJson(card.content);
   const normalizedContent: Record<string, any> = isRecord(content) ? content : { value: content };
-  const shouldRenderMarket = card.type !== 'market' || isMarketQueryRelevant(contextQuery);
   const changedScopeNote = previousContextQuery && contextQuery && previousContextQuery !== contextQuery ? 'Refined for current scope' : null;
-  const primary = Boolean(isPrimary || card.role === 'primary');
+  const primary = Boolean(isPrimary || card.role === 'primary') && !offTopic;
+  const anchorId = cardAnchorId(messageIndex, index);
+  const previewLine = cardPreviewLine(card.type, normalizedContent);
   const precedentCompany = card.type === 'precedent' ? (typeof normalizedContent.precedents?.[0]?.company === 'string' ? normalizedContent.precedents[0].company : null) : null;
   const companyReportKey = precedentCompany ? normalizeCompanyKey(precedentCompany) : null;
   const companyReportState = companyReportKey ? companyReports[companyReportKey] : undefined;
 
-  if (!shouldRenderMarket) return null;
-
   const body = (
     <div className="mt-4 space-y-4">
-      {changedScopeNote && (
-        <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--mint)]">{changedScopeNote}</div>
+      {/* Was --mint (the success colour) for what is a neutral piece of
+          metadata, and shown on the very first answer of a chat where there
+          is no previous scope to have been refined from. */}
+      {changedScopeNote && !primary && (
+        <div className="vera-label">{changedScopeNote}</div>
       )}
 
       {card.type === 'analysis' && (
         <ul className="space-y-3">
           {(normalizedContent.points ?? []).map((pt: any, i: number) => (
-            <li key={i} className="flex flex-col gap-1 text-sm border-b border-[var(--border)] border-dashed pb-3 last:border-0">
-              <span className="text-[var(--dim)] text-[11px] font-mono uppercase tracking-wide">{pt.label}</span>
-              <span className="text-[var(--text)] leading-relaxed">{pt.value}</span>
+            <li key={i} className="flex flex-col gap-1 pb-3 last:pb-0" style={{ borderBottom: '1px solid var(--vera-inset-border)' }}>
+              <span className="vera-label">{pt.label}</span>
+              <span className="text-[13px] text-[var(--text)] leading-relaxed">{renderInline(String(pt.value ?? ''))}</span>
             </li>
           ))}
         </ul>
       )}
 
       {card.type === 'risk' && (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {(normalizedContent.risks ?? []).map((risk: any, i: number) => (
-            <div key={i} className="bg-[var(--surface)] p-3 rounded border border-[var(--border)]">
-              <div className="flex justify-between items-center mb-1.5">
-                <span className="text-sm font-bold text-[var(--text)]">{risk.name}</span>
-                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-[var(--red)] text-white">{risk.impact}</span>
+            <div key={i} className="vera-block">
+              <div className="flex justify-between items-start gap-3 mb-1.5">
+                <span className="text-sm font-semibold text-[var(--text)]">{risk.name}</span>
+                <ImpactPill impact={risk.impact} />
               </div>
-              <p className="text-xs text-[var(--muted-text)]">{risk.mitigation}</p>
+              <p className="text-[13px] text-[var(--muted-text)] leading-relaxed">{renderInline(String(risk.mitigation ?? ''))}</p>
             </div>
           ))}
         </div>
@@ -1695,14 +2000,14 @@ function VenusCard({ card, index = 0, contextQuery = '', previousContextQuery = 
             const summaryLine = m.goal ?? m.description ?? (hasExpectedFields ? null : renderStructuredValue(m));
             const metricValue = m.metric != null ? (typeof m.metric === 'string' ? m.metric : JSON.stringify(m.metric)) : null;
             return (
-              <div key={i} className="rounded border border-[var(--border)] bg-[var(--surface)]/60 p-3">
-                <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
-                  <div className="font-mono text-[var(--amber)] text-xs">{m.period ?? m.phase ?? `Phase ${i + 1}`}</div>
+              <div key={i} className="vera-block">
+                <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 mb-2">
+                  <div className="vera-label shrink-0">{m.period ?? m.phase ?? `Phase ${i + 1}`}</div>
                   {m.title && <div className="text-sm font-semibold text-[var(--text)]">{m.title}</div>}
                 </div>
-                {summaryLine && <div className="text-sm text-[var(--text)] mb-2">{summaryLine}</div>}
+                {summaryLine && <div className="text-[13px] text-[var(--muted-text)] leading-relaxed mb-2">{summaryLine}</div>}
                 {m.actions && Array.isArray(m.actions) && m.actions.length > 0 && (
-                  <ul className="space-y-1.5 list-disc pl-5 text-sm text-[var(--text)] mt-2">
+                  <ul className="space-y-1.5 list-disc pl-5 text-[13px] text-[var(--text)] mt-2 marker:text-[var(--dim)]">
                     {m.actions.map((action: unknown, actionIndex: number) => {
                       const parsedAction = parseMaybeJson(action);
                       const text = typeof parsedAction === 'string' ? parsedAction : isRecord(parsedAction) ? (parsedAction.text ?? parsedAction.action ?? JSON.stringify(parsedAction)) : String(action);
@@ -1710,7 +2015,12 @@ function VenusCard({ card, index = 0, contextQuery = '', previousContextQuery = 
                     })}
                   </ul>
                 )}
-                {metricValue && <div className="mt-2 text-[11px] font-mono text-[var(--mint)]">Metric: {renderInline(metricValue)}</div>}
+                {metricValue && (
+                  <div className="mt-2.5 pt-2.5 flex items-baseline gap-2" style={{ borderTop: '1px solid var(--vera-inset-border)' }}>
+                    <span className="vera-label shrink-0">Metric</span>
+                    <span className="text-[12px] text-[var(--text)]">{renderInline(metricValue)}</span>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1739,22 +2049,22 @@ function VenusCard({ card, index = 0, contextQuery = '', previousContextQuery = 
               ['SOM', normalizedContent.som],
               ['Growth', normalizedContent.growth],
             ].filter(([, value]) => value != null && value !== '').map(([label, value]) => (
-              <div key={label} className="rounded border border-[var(--border)] bg-[var(--surface)]/70 p-2.5">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)] mb-1">{label}</div>
+              <div key={label} className="vera-block">
+                <div className="vera-label mb-1">{label}</div>
                 <div className="text-sm text-[var(--text)] font-mono">{String(value)}</div>
               </div>
             ))}
           </div>
           {normalizedContent.competitors != null && (
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)] mb-2">Competitors</div>
+              <div className="vera-label mb-2">Competitors</div>
               <CompetitorList competitors={normalizedContent.competitors} />
             </div>
           )}
           {normalizedContent.whitespace && (
             <div>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)] mb-2">Whitespace</div>
-              <div className="text-sm text-[var(--muted-text)]">{renderInline(String(normalizedContent.whitespace))}</div>
+              <div className="vera-label mb-2">Whitespace</div>
+              <div className="text-[13px] text-[var(--muted-text)] leading-relaxed">{renderInline(String(normalizedContent.whitespace))}</div>
             </div>
           )}
         </div>
@@ -1763,9 +2073,9 @@ function VenusCard({ card, index = 0, contextQuery = '', previousContextQuery = 
       {card.type === 'decision' && (
         <div className="space-y-3">
           {normalizedContent.recommendation && (
-            <div className="rounded border border-[var(--v7-tint-border)] bg-[var(--v7-tint)] p-3">
-              <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--mint)] mb-1">Recommendation</div>
-              <div className="text-sm text-[var(--muted-text)]">{renderInline(String(normalizedContent.recommendation))}</div>
+            <div className="vera-block" style={{ background: 'var(--v7-tint)', borderColor: 'var(--v7-tint-border)' }}>
+              <div className="vera-label mb-1">Recommendation</div>
+              <div className="text-[13px] text-[var(--text)] leading-relaxed">{renderInline(String(normalizedContent.recommendation))}</div>
             </div>
           )}
           {(normalizedContent.options ?? []).map((option: any, i: number) => {
@@ -1774,22 +2084,26 @@ function VenusCard({ card, index = 0, contextQuery = '', previousContextQuery = 
             // older one-line schema so existing/cached responses still render.
             const reasoningText = option.reasoning ?? option.verdict;
             return (
-              <div key={i} className="rounded border border-[var(--border)] bg-[var(--surface)]/60 p-3">
+              <div
+                key={i}
+                className="vera-block"
+                style={option.chosen === true ? { borderColor: 'var(--v7-tint-border)', boxShadow: 'inset 2px 0 0 0 var(--indigo)' } : undefined}
+              >
                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <div className="font-semibold text-[var(--text)]">{option.name ?? `Option ${i + 1}`}</div>
+                  <div className="text-sm font-semibold text-[var(--text)]">{option.name ?? `Option ${i + 1}`}</div>
                   {option.chosen === true && (
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--mint)] rounded border border-[var(--v7-tint-border)] bg-[var(--v7-tint)] px-1.5 py-0.5">Recommended</span>
+                    <span className="text-[9.5px] font-mono uppercase tracking-wider text-[var(--indigo)] rounded-full border border-[var(--v7-tint-border)] bg-[var(--v7-tint)] px-2 py-0.5">Recommended</span>
                   )}
                 </div>
                 {reasoningText && (
-                  <div className="text-sm text-[var(--text)] leading-relaxed">{renderInline(String(reasoningText))}</div>
+                  <div className="text-[13px] text-[var(--muted-text)] leading-relaxed">{renderInline(String(reasoningText))}</div>
                 )}
                 {option.scores && isRecord(option.scores) && (
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 pt-2 border-t border-[var(--border)]/60">
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 pt-2.5" style={{ borderTop: '1px solid var(--vera-inset-border)' }}>
                     {Object.entries(option.scores).map(([scoreKey, scoreValue]) => (
-                      <div key={scoreKey} className="flex items-baseline gap-1">
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)]">{scoreKey.replace(/_/g, ' ')}</span>
-                        <span className="text-xs font-mono text-[var(--dim)]">{String(scoreValue)}</span>
+                      <div key={scoreKey} className="flex items-baseline gap-1.5">
+                        <span className="vera-label">{scoreKey.replace(/_/g, ' ')}</span>
+                        <span className="text-xs font-mono text-[var(--text)]">{String(scoreValue)}</span>
                       </div>
                     ))}
                   </div>
@@ -1803,12 +2117,12 @@ function VenusCard({ card, index = 0, contextQuery = '', previousContextQuery = 
       {card.type === 'funnel' && (
         <div className="space-y-2">
           {(normalizedContent.stages ?? normalizedContent.steps ?? []).map((stage: any, stageIndex: number) => (
-            <div key={stageIndex} className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3">
-              <div className="flex items-start gap-2">
-                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--v7-tint)] text-[10px] font-mono text-[var(--indigo-light)]">{stageIndex + 1}</div>
+            <div key={stageIndex} className="vera-block">
+              <div className="flex items-start gap-2.5">
+                <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--v7-tint)] border border-[var(--v7-tint-border)] text-[10px] font-mono text-[var(--indigo)]">{stageIndex + 1}</div>
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-[var(--text)]">{renderInline(String(stage.stage_title ?? stage.title ?? stage.name ?? 'Stage'))}</div>
-                  <div className="mt-1 text-sm text-[var(--muted-text)] leading-snug">{renderInline(String(stage.stage_detail ?? stage.detail ?? stage.description ?? ''))}</div>
+                  <div className="mt-1 text-[13px] text-[var(--muted-text)] leading-relaxed">{renderInline(String(stage.stage_detail ?? stage.detail ?? stage.description ?? ''))}</div>
                 </div>
               </div>
             </div>
@@ -1819,9 +2133,9 @@ function VenusCard({ card, index = 0, contextQuery = '', previousContextQuery = 
       {card.type === 'solution' && (
         <div className="space-y-2">
           {(normalizedContent.solutions ?? normalizedContent.options ?? []).map((solution: any, solutionIndex: number) => (
-            <div key={solutionIndex} className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3">
+            <div key={solutionIndex} className="vera-block">
               <div className="text-sm font-semibold text-[var(--text)]">{renderInline(String(solution.stage_title ?? solution.title ?? solution.name ?? 'Solution'))}</div>
-              <div className="mt-1 text-sm text-[var(--muted-text)] leading-snug">{renderInline(String(solution.stage_detail ?? solution.detail ?? solution.description ?? ''))}</div>
+              <div className="mt-1 text-[13px] text-[var(--muted-text)] leading-relaxed">{renderInline(String(solution.stage_detail ?? solution.detail ?? solution.description ?? ''))}</div>
             </div>
           ))}
         </div>
@@ -1835,28 +2149,44 @@ function VenusCard({ card, index = 0, contextQuery = '', previousContextQuery = 
     </div>
   );
 
+  const heading = (
+    <div className="flex items-start justify-between gap-3 text-left">
+      <div className="flex items-baseline gap-2 min-w-0">
+        <span className="w-1.5 h-1.5 rounded-full shrink-0 translate-y-[-2px]" style={{ background: color }} />
+        <h4 className="text-[11px] font-mono uppercase tracking-[0.07em] leading-[1.5]" style={{ color }}>
+          {card.title?.trim() || `Section ${index + 1}`}
+        </h4>
+      </div>
+      {primary ? (
+        <span className="vera-label shrink-0">Primary answer</span>
+      ) : (
+        <span className="vera-label shrink-0 flex items-center gap-1">
+          {expanded ? 'Hide' : 'Show'}
+          <ChevronDown className={`w-3 h-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        </span>
+      )}
+    </div>
+  );
+
   return (
-    <div id={`venus-card-${index}`} className={`bg-[var(--surface2)] border border-[var(--border2)] rounded-lg p-5 overflow-hidden ${primary ? 'ring-1 ring-[var(--v7-tint)] border-[var(--v7-tint-border)]' : ''}`}>
+    <div id={anchorId} className="vera-card overflow-hidden" style={primary ? { borderColor: 'var(--v7-tint-border)', boxShadow: 'inset 0 0 0 1px var(--v7-tint)' } : undefined}>
       {primary ? (
         <div>
-          <div className="flex items-start justify-between gap-3 text-left">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
-              <h4 className="text-xs font-mono uppercase tracking-wider" style={{ color }}>{card.title?.trim() || `Section ${index + 1}`}</h4>
-            </div>
-            <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)]">Primary answer</span>
-          </div>
+          {heading}
           {body}
         </div>
       ) : (
         <>
-          <button type="button" onClick={() => setExpanded(v => !v)} className="flex w-full items-start justify-between gap-3 text-left">
-            <div className="flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
-              <h4 className="text-xs font-mono uppercase tracking-wider" style={{ color }}>{card.title?.trim() || `Section ${index + 1}`}</h4>
-            </div>
-            <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--dim)]">{expanded ? 'Hide' : 'Show'}</span>
+          <button type="button" onClick={() => setExpanded(v => !v)} className="w-full" aria-expanded={expanded}>
+            {heading}
           </button>
+          {/* A collapsed card used to show its title and nothing else, so with
+              eight of them a founder had to open every one to find out which
+              was worth reading. One line of the card's own content costs
+              nothing and turns the stack into something scannable. */}
+          {!expanded && previewLine && (
+            <p className="mt-2 text-[13px] leading-relaxed text-[var(--dim)] line-clamp-2 text-left">{previewLine}</p>
+          )}
           {expanded && body}
         </>
       )}
@@ -2011,10 +2341,16 @@ function VenusResponseActions({ msg, onSave }: { msg: ChatMessage; onSave: () =>
   };
 
   const btn =
-    'flex items-center gap-1.5 text-[10px] font-mono text-[var(--dim)] hover:text-[var(--mint)] transition-colors border border-[var(--border)] hover:border-[var(--mint)]/40 px-2.5 py-1 rounded';
+    'flex items-center gap-1.5 text-[11px] text-[var(--dim)] hover:text-[var(--text)] hover:border-[var(--border2)] transition-colors border border-transparent px-2 py-1 rounded-md';
 
+  // These were `opacity-0 group-hover:opacity-100` — the only way to copy,
+  // export or save an answer was to know it appeared on hover, which means it
+  // did not exist at all on a touch device and was undiscoverable on desktop.
+  // Saving an analysis is a core loop of this product (Command Center is built
+  // around the saved library), so its entry point is now permanently visible,
+  // just quiet until you reach for it.
   return (
-    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity pt-1">
+    <div className="flex items-center gap-1 pt-1 -ml-2">
       <button onClick={handleCopy} className={btn} title="Copy">
         {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         {copied ? 'Copied' : 'Copy'}

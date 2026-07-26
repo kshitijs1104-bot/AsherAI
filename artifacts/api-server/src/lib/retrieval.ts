@@ -279,6 +279,12 @@ export interface OwnDecisionMatch {
 
 const OWN_DECISION_TOP_K = 3;
 
+// Minimum blended overlap for a founder's own past decision to be used as
+// evidence. Now that evidenceRefs are rendered in the chat by name, a weak
+// match is worse than no match: it visibly attributes an answer to something
+// unrelated, which reads as the product not understanding its own reasoning.
+const OWN_DECISION_MIN_SCORE = 0.08;
+
 export async function retrieveOwnResolvedDecisions(
   sessionId: string,
   query: string,
@@ -308,28 +314,54 @@ export async function retrieveOwnResolvedDecisions(
 
   const combinedQuery = [query, opts?.businessContext].filter(Boolean).join(" ");
   const queryTokens = new Set(tokenize(combinedQuery));
+  // Scored separately from the blended set for the same reason retrievePrecedents
+  // tracks questionTokens (see the gate above): the stored business context is
+  // real signal about what's being asked *within*, but it must never be able to
+  // manufacture a match on its own. Every founder's context mentions their
+  // company, stage and sector, so context-only overlap matches nearly every
+  // decision they have ever recorded.
+  const questionTokens = new Set(tokenize(query));
 
-  const scored: OwnDecisionMatch[] = rows.map((decision: VenusDecision) => {
+  const scored: (OwnDecisionMatch & { questionOverlap: number })[] = rows.map((decision: VenusDecision) => {
     const haystack = [decision.query, decision.recommendationSummary, decision.outcome ?? "", decision.lesson ?? ""].join(" ");
     const docTokens = new Set(tokenize(haystack));
     let overlap = 0;
     for (const t of queryTokens) {
       if (docTokens.has(t)) overlap++;
     }
+    let questionOverlap = 0;
+    for (const t of questionTokens) {
+      if (docTokens.has(t)) questionOverlap++;
+    }
+    const base = overlap / Math.max(queryTokens.size, 1);
     // Recency counts here in a way it doesn't for the third-party precedent
     // dataset: a founder's own decision from last week is more relevant to
     // "what should I do now" than one from months ago, even at similar topical
     // overlap, since it reflects the current state of their business.
+    //
+    // It is now a MULTIPLIER on real topical overlap, not an additive term.
+    // As an additive term it was applied before the `score > 0` filter below,
+    // so any decision resolved in the last 30 days scored 0.15 with ZERO
+    // token overlap and was surfaced as evidence regardless of subject. Found
+    // live: an NRR/CAC-payback question was grounded partly on "Should I hire
+    // a part-time bookkeeper or use an automated tool at this stage?" — that
+    // decision matched nothing in the question; it was simply recent.
     const ageDays = decision.resolvedAt ? (Date.now() - new Date(decision.resolvedAt).getTime()) / 86_400_000 : 9999;
-    const recencyBoost = ageDays < 30 ? 0.15 : ageDays < 90 ? 0.05 : 0;
-    const score = overlap / Math.max(queryTokens.size, 1) + recencyBoost;
-    return { decision, score };
+    const recencyMultiplier = ageDays < 30 ? 1.3 : ageDays < 90 ? 1.1 : 1;
+    return { decision, score: base * recencyMultiplier, questionOverlap };
   });
 
   return scored
-    .filter((s) => s.score > 0) // never surface a zero-overlap decision just to fill the slot
+    // Two real gates, not one. The question itself must have contributed at
+    // least one topical token (recency and business context can no longer
+    // carry a match alone), and the blended overlap must clear a floor so a
+    // single incidental shared word — "the", "our", "stage" survive
+    // tokenization in short queries — can't promote an unrelated decision
+    // into the evidence list the UI now shows the founder by name.
+    .filter((s) => s.questionOverlap > 0 && s.score >= OWN_DECISION_MIN_SCORE)
     .sort((a, b) => b.score - a.score)
-    .slice(0, OWN_DECISION_TOP_K);
+    .slice(0, OWN_DECISION_TOP_K)
+    .map(({ decision, score }) => ({ decision, score }));
 }
 
 export function formatOwnDecisionsForPrompt(matches: OwnDecisionMatch[]): string {

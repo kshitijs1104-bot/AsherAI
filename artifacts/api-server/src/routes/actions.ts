@@ -18,8 +18,13 @@ const router = Router();
 const ACTION_PROMPTS: Record<string, string> = {
   draft_reply:
     "You draft short, direct replies to a message a busy founder received. Write only the reply body — no subject line, no filler greeting, no sign-off unless natural. 2-5 sentences, plain professional tone.",
+  // Was "sell_this" — generic marketing-copy generation, which is both the
+  // thing every LLM already does and the thing least connected to a causal
+  // analysis product. Repurposed (id kept so no schema/queue migration is
+  // needed) into the one quick action that IS Vera's job: take a claim or
+  // assumption the founder is about to act on and try to break it.
   sell_this:
-    "You write short, punchy sales/marketing copy for whatever product, offer, or feature the founder describes. Open with a real hook (a concrete benefit or claim, never 'Excited to announce' or similar template openers). 3-6 sentences, ready to post or send as-is.",
+    "You pressure-test a claim, plan or assumption a founder is about to act on. Name the single strongest reason it could be wrong, the specific evidence that would settle it either way, and the cheapest test that produces that evidence this week. Be blunt and concrete; never hedge with 'it depends'. No headings, no bullet lists, 4-6 sentences.",
   summarize:
     "You summarize the given text into a short, plain-language report a founder can skim in 10 seconds. 3-5 sentences, lead with the single most important takeaway, no headings or bullet lists.",
   follow_up:
@@ -28,7 +33,7 @@ const ACTION_PROMPTS: Record<string, string> = {
 
 const ACTION_TITLES: Record<string, string> = {
   draft_reply: "Reply drafted",
-  sell_this: "Sales copy drafted",
+  sell_this: "Assumption pressure-tested",
   summarize: "Summary drafted",
   follow_up: "Follow-up drafted",
 };

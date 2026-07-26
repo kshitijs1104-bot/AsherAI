@@ -5,6 +5,8 @@
  * Vera Nexus API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ContradictionSignal } from './contradictionSignal';
+import type { EvidenceRef } from './evidenceRef';
 import type { VenusCard } from './venusCard';
 import type { VenusResponseConfidence } from './venusResponseConfidence';
 
@@ -14,4 +16,7 @@ export interface VenusResponse {
   confidence?: VenusResponseConfidence;
   confidenceNote?: string;
   confidenceTier?: string;
+  confidenceScore?: number;
+  evidenceRefs?: EvidenceRef[];
+  contradictions?: ContradictionSignal[];
 }
