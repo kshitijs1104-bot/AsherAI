@@ -524,6 +524,8 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
   // Hand a mini-Vera exchange over to a real chat thread.
   onContinueInChat?: (messages: ChatMessage[]) => void;
 }) {
+  const { skin } = useVeraSkin();
+  const skinned = skin !== 'classic';
   const palette = theme === 'light' ? LIGHT : DARK;
   const isLight = theme === 'light';
   const { data, isLoading } = useQueue();
@@ -547,6 +549,12 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
   const grouped: Record<Category, QueueItem[]> = { drafts: [], decisions: [], workflows: [], notes: [] };
   for (const item of items) grouped[categorize(item)].push(item);
 
+  // Which section gets the single lifted tile. Derived rather than hardcoded
+  // to 'drafts', because an empty drafts section is skipped entirely — pinning
+  // the lift to a section that never renders would leave the whole board flat
+  // with nothing to look at first.
+  const firstPopulatedIndex = (Object.keys(CATEGORY_META) as Category[]).findIndex((c) => grouped[c].length > 0);
+
   const streak = dailyBrief.data?.stats.queueStreakDays ?? 0;
   const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const boardName = theme === 'light' ? 'Whiteboard' : 'Blackboard';
@@ -569,7 +577,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
           onContinueInChat={onContinueInChat ?? (() => {})}
         />
       ) : (
-      <div style={{ width: '100%', maxWidth: '640px' }}>
+      <div style={{ width: '100%', maxWidth: skinned ? '1040px' : '640px' }}>
         <button type="button" onClick={onBack} style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '12px', color: palette.muted, background: 'transparent', border: 'none', padding: 0, textDecoration: 'none', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '28px', cursor: 'pointer' }}>
           <ArrowLeft style={{ width: 12, height: 12 }} /> Back to chat
         </button>
@@ -582,6 +590,128 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
           <LivingContextBar />
         </div>
 
+        {skinned ? (
+          /* ---- Bento board -------------------------------------------
+             The queue is genuinely dense — several pieces of pre-drafted
+             work each competing for one decision — so it earns a grid,
+             unlike the chat entry screen. 8 + 4: pending work in the main
+             column, standing state in the rail.
+
+             Exactly one tile carries the lifted tier, and it is the first
+             pending item. That is the entire hierarchy: what to look at is
+             answered by depth before anything is read. Classic keeps the
+             notebook page below, untouched. */
+          <div className="vera-bento">
+            <div className="vera-bento-main">
+              <div className="vera-tile" style={{ padding: '20px 22px' }}>
+                <p className="vera-t-support" style={{ margin: '0 0 2px' }}>{dateLabel}</p>
+                <h1 className="vera-t-title" style={{ margin: '0 0 6px' }}>Today's {boardName}</h1>
+                <p className="vera-label" style={{ margin: 0 }}>
+                  EVERYTHING VERA DRAFTED, DECIDED, OR FOUND WHILE YOU WERE AWAY
+                </p>
+                <div style={{ marginTop: '16px' }}>
+                  <QuickAddRow
+                    palette={palette}
+                    onAdded={(itemId) => {
+                      setRecentlyAdded((prev) => new Set(prev).add(itemId));
+                      setTimeout(() => setRecentlyAdded((prev) => { const next = new Set(prev); next.delete(itemId); return next; }), 4000);
+                    }}
+                  />
+                </div>
+              </div>
+
+              {isLoading && <div className="vera-tile vera-tile-body vera-t-support">Loading…</div>}
+
+              {!isLoading && items.length === 0 && (
+                <div className="vera-tile vera-tile-body vera-t-support">
+                  Nothing on the board yet — it fills up as Vera drafts, decides, and finds things for you.
+                </div>
+              )}
+
+              {(Object.keys(CATEGORY_META) as Category[]).map((cat, catIndex) =>
+                grouped[cat].length === 0 ? null : (
+                  <div
+                    key={cat}
+                    ref={(el) => { sectionRefs.current[cat] = el; }}
+                    /* Only the very first populated section is lifted — see
+                       the one-E2-per-screen rule. */
+                    className={`vera-tile${catIndex === firstPopulatedIndex ? ' vera-lift' : ''}`}
+                  >
+                    <div className="vera-tile-head">
+                      <span className="vera-label">{CATEGORY_META[cat].label}</span>
+                      {grouped[cat].filter((i) => i.status === 'pending').length > 0 && (
+                        <span className="vera-tally">
+                          {grouped[cat].filter((i) => i.status === 'pending').length} pending
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ padding: '4px 16px 10px' }}>
+                      {grouped[cat].map((item) => (
+                        <Entry key={item.id} item={item} palette={palette} category={cat} fresh={recentlyAdded.has(item.id)} />
+                      ))}
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+
+            <div className="vera-bento-rail">
+              {dailyBrief.data?.stats && (
+                <div className="vera-tile">
+                  <div className="vera-tile-head">
+                    <span className="vera-label">Output</span>
+                    {streak > 0 && <span className="vera-tally">{streak} days</span>}
+                  </div>
+                  {/* The accumulating record, as structured data rather than
+                      prose — this is the one place on the board where every
+                      value is directly comparable, so it gets the key/value
+                      system instead of a sentence. */}
+                  <div className="vera-kv">
+                    <div className="vera-kv-row"><span className="k">Decisions</span><span className="v">{dailyBrief.data.stats.decisionsCaptured}</span></div>
+                    <div className="vera-kv-row"><span className="k">Lessons</span><span className="v">{dailyBrief.data.stats.lessonsLearned}</span></div>
+                    <div className="vera-kv-row"><span className="k">Automations</span><span className="v">{dailyBrief.data.stats.automationsCompleted}</span></div>
+                    <div className="vera-kv-row"><span className="k">Active goals</span><span className="v">{dailyBrief.data.stats.goalsActive}</span></div>
+                    <div className="vera-kv-row"><span className="k">Free time</span><span className="v">{freeTimeLabel(dailyBrief.data.stats.timeSavedMinutes)}</span></div>
+                  </div>
+                </div>
+              )}
+
+              <div className="vera-tile">
+                <div className="vera-tile-head">
+                  <span className="vera-label">Kept</span>
+                  {savedAnalyses.length > 0 && <span className="vera-tally">{savedAnalyses.length}</span>}
+                </div>
+                <div className="vera-tile-body">
+                  {savedAnalyses.length === 0 ? (
+                    <p className="vera-t-support" style={{ margin: 0 }}>Nothing kept yet.</p>
+                  ) : (
+                    <>
+                      {/* Share of the shelf by type — the magnitude bars are
+                          the one place the accent appears in a data card. */}
+                      {savedTypeCounts.map(([t, count]) => (
+                        <div key={t} className="vera-bar-row" style={{ padding: '6px 0' }}>
+                          <span style={{ display: 'grid', gap: '4px', minWidth: 0 }}>
+                            <span className="vera-t-support" style={{ color: 'var(--v7-text-dim)' }}>{typeLabel(t)}</span>
+                            <span className="vera-bar-track">
+                              <span
+                                className="vera-bar-fill"
+                                style={{ width: `${Math.round((count / savedAnalyses.length) * 100)}%`, background: savedTypeColor(t, isLight) }}
+                              />
+                            </span>
+                          </span>
+                          <span className="vera-bar-val">{count}</span>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setView('book')} className="vera-key vera-key-2" style={{ marginTop: '12px', width: '100%', justifyContent: 'center' }}>
+                        Open saved work <ArrowRight style={{ width: 13, height: 13 }} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div style={{ background: palette.paper, border: `1px solid ${palette.paperEdge}`, borderRadius: '4px 14px 14px 4px', padding: '34px 40px 40px 52px', position: 'relative', boxShadow: '0 30px 60px -30px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
           {/* margin rule — the vertical notebook-page line */}
           <div style={{ position: 'absolute', left: 34, top: 0, bottom: 0, width: 1, background: palette.marginRule }} />
@@ -697,6 +827,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
           )}
 
         </div>
+        )}
       </div>
       )}
     </div>

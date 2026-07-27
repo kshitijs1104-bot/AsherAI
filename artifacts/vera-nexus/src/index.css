@@ -1880,3 +1880,117 @@ html[data-skin="alloy"] .vera-hero-axis::before {
   html[data-skin] .vera-key-3 { flex: 0 0 auto; }
   html[data-skin] .vera-ctx-m { padding: 10px 12px; }
 }
+
+/* ---------- cmnd centre bento -----------------------------------------
+   The board is genuinely information-dense — pre-drafted work competing for
+   one decision each — so it is one of the surfaces that earns a grid. 8 + 4:
+   a main column of things awaiting approval, and a rail of standing state
+   that doesn't change hour to hour.
+
+   Only the FIRST item carries the lifted tier. That is the whole hierarchy:
+   "what do I look at" is answered by depth before a word is read, and it is
+   enforceable in review by counting .vera-lift on the page. */
+html[data-skin] .vera-bento {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+html[data-skin] .vera-bento-main { grid-column: span 8; display: grid; gap: 16px; min-width: 0; }
+html[data-skin] .vera-bento-rail { grid-column: span 4; display: grid; gap: 16px; min-width: 0; }
+
+html[data-skin] .vera-tile {
+  background: var(--v7-bg-raised);
+  border: 1px solid var(--v7-border);
+  border-radius: var(--vera-r-card);
+  box-shadow: var(--vera-e1), var(--vera-e1-bevel);
+  overflow: hidden;
+}
+html[data-skin] .vera-tile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--v7-border);
+}
+html[data-skin] .vera-tile-body { padding: 14px 16px; }
+html[data-skin] .vera-tally {
+  font-family: var(--v7-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--v7-cyan);
+  background: var(--v7-cyan-soft);
+  border: 1px solid var(--v7-cyan-strong);
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* Tablet: the rail drops below the queue as a 2-up. The queue is what the
+   founder came for, so it keeps the full width rather than being squeezed
+   to sit beside standing state. */
+@media (max-width: 1000px) {
+  html[data-skin] .vera-bento-main,
+  html[data-skin] .vera-bento-rail { grid-column: span 12; }
+  html[data-skin] .vera-bento-rail { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 620px) {
+  html[data-skin] .vera-bento { gap: 12px; }
+  html[data-skin] .vera-bento-rail { grid-template-columns: 1fr; }
+}
+
+/* ---------- Structured output -----------------------------------------
+   One system for every structured result, replacing per-card ad-hoc
+   styling. Mono keys in a right-aligned gutter, values in mono when they
+   are measured and body when they are prose, one hairline per row. Nesting
+   shows as an indent plus a recessed well, never a second border style. */
+html[data-skin] .vera-kv { display: grid; }
+html[data-skin] .vera-kv-row {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  align-items: baseline;
+  gap: 16px;
+  padding: 9px 16px;
+}
+html[data-skin] .vera-kv-row + .vera-kv-row { border-top: 1px solid var(--v7-border); }
+html[data-skin] .vera-kv-row > .k {
+  font-family: var(--v7-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--v7-text-mute);
+  text-align: right;
+}
+html[data-skin] .vera-kv-row > .v {
+  font-family: var(--v7-font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--v7-text);
+  letter-spacing: -0.01em;
+}
+html[data-skin] .vera-kv-row > .v.prose {
+  font-family: var(--v7-font-round);
+  font-size: 13.5px;
+  letter-spacing: 0;
+  color: var(--v7-text-dim);
+  line-height: 1.5;
+}
+/* Magnitude bars are the one place the accent appears in a data card, so a
+   reader's eye goes to the size of a thing rather than to its label. */
+html[data-skin] .vera-bar-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 7px 16px; }
+html[data-skin] .vera-bar-track { height: 8px; border-radius: 999px; background: var(--v7-bg-raised-2); overflow: hidden; }
+html[data-skin] .vera-bar-fill { height: 100%; border-radius: 999px; background: var(--v7-cyan); }
+html[data-skin] .vera-bar-val {
+  font-family: var(--v7-font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--v7-text-mute);
+  text-align: right;
+}
+
+@media (max-width: 620px) {
+  html[data-skin] .vera-kv-row { grid-template-columns: 1fr; gap: 2px; }
+  html[data-skin] .vera-kv-row > .k { text-align: left; }
+}
