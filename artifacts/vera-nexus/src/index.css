@@ -1357,6 +1357,33 @@ html[data-skin="vessel"] .v7-light {
    --vera-emph-fg lives in each colour block above, per skin and per theme. */
 html[data-skin] {
   --vera-emph-bg: none;
+  /* Controls whose geometry is set inline in Venus.tsx read these, with the
+     original values as fallbacks, so Classic is untouched. */
+  --vera-key-r: 999px;
+}
+
+/* Optical sizing for the hero headline, measured rather than guessed.
+   At an identical 34px the two faces are already the same height — cap 24 /
+   x-height 18 for Archivo at 600, cap 25 / x-height 18 for Instrument Serif
+   at 400. So the reason Vessel's headline reads smaller is not size, it is
+   WEIGHT: 400 against 600, with high stroke contrast putting far less ink on
+   the page for the same footprint.
+
+   The compensation is therefore small and aimed at mass, not height. 38px
+   takes Instrument Serif's cap to 28 against Archivo's 24 — about 17% more
+   height to offset two weight steps and hairline strokes. An earlier pass
+   set 43px, which was measured against a fallback serif rather than the real
+   face and over-corrected to a 29% difference; that read as a mismatch in
+   the other direction. Instrument Serif is also comparatively condensed, so
+   line width is not a usable target here — at any size that matches on
+   width, it would tower over Alloy in height. */
+html[data-skin="alloy"] {
+  --vera-hero-size: 34px;
+  --vera-hero-leading: 1.16;
+}
+html[data-skin="vessel"] {
+  --vera-hero-size: 38px;
+  --vera-hero-leading: 1.14;
 }
 
 /* The card primitives already centralise geometry for all eleven response
@@ -1562,3 +1589,118 @@ html[data-skin="vessel"] .vera-key-2:active:not(:disabled) {
     transform: none;
   }
 }
+
+/* ---------- Suggestion chips on the chat entry screen -------------------
+   These previously set their whole hover state imperatively, by writing
+   borderColor / background / transform straight onto currentTarget.style in
+   an onMouseEnter handler. Venus.tsx now attaches those handlers only when
+   no skin is active, so under a skin this rule owns the state instead — one
+   place, themed, and it survives a component re-render (the imperative
+   version did not: React re-rendering the element dropped the inline styles
+   mid-hover and the chip snapped back to rest while the pointer was still
+   on it). */
+html[data-skin] .vera-suggest {
+  transition: background 150ms cubic-bezier(0.2, 0.8, 0.3, 1),
+              border-color 150ms cubic-bezier(0.2, 0.8, 0.3, 1),
+              transform 150ms cubic-bezier(0.2, 0.8, 0.3, 1),
+              box-shadow 150ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+html[data-skin] .vera-suggest:hover {
+  background: var(--v7-bg-raised-2);
+  border-color: var(--v7-cyan-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--vera-e1), var(--vera-e1-bevel);
+}
+html[data-skin] .vera-suggest:focus-visible {
+  outline: 2px solid var(--v7-cyan);
+  outline-offset: 2px;
+}
+/* The glyph well inside a chip picks up the accent as the chip lifts, so the
+   icon belongs to the hover rather than sitting inert through it. */
+html[data-skin] .vera-suggest .vera-socket {
+  transition: background 150ms ease, color 150ms ease;
+}
+html[data-skin] .vera-suggest:hover .vera-socket {
+  background: var(--v7-cyan-soft);
+  color: var(--v7-cyan);
+}
+
+/* ---------- Living Context bar ----------------------------------------
+   The one persistently visible object on the board, so it is the only place
+   the glass tier is spent. Scoped to skins: Classic never had this surface
+   and does not get it. */
+html[data-skin] .vera-ctx {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  border-radius: var(--vera-r-card);
+  border: 1px solid var(--v7-border-strong);
+  background: var(--v7-bg-raised);
+  box-shadow: var(--vera-e2), var(--vera-e1-bevel);
+  overflow: hidden;
+}
+html[data-skin] .vera-ctx-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  min-width: 0;
+}
+html[data-skin] .vera-ctx-metrics {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+html[data-skin] .vera-ctx-m {
+  display: grid;
+  gap: 1px;
+  align-content: center;
+  padding: 12px 16px;
+  border-left: 1px solid var(--v7-border);
+  flex-shrink: 0;
+}
+html[data-skin] .vera-ctx-conn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 14px;
+  border-left: 1px solid var(--v7-border);
+}
+/* Every figure is mono and tabular so the bar cannot reflow as numbers
+   update — a status object that shifts width while you read it reads as
+   unstable, and this product's whole claim is that its numbers hold up. */
+html[data-skin] .vera-ctx-v {
+  font-family: var(--v7-font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--v7-text);
+  line-height: 1.25;
+}
+html[data-skin] .vera-ctx-k {
+  font-family: var(--v7-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--v7-text-mute);
+}
+
+/* Square well in Alloy, round bowl in Vessel — the two skins carry their
+   glyphs differently, and this is the one shape rule that says so. */
+html[data-skin] .vera-socket {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--v7-border);
+  background: var(--v7-bg-raised-2);
+  color: var(--v7-text-dim);
+}
+html[data-skin="alloy"] .vera-socket { border-radius: var(--vera-r-inset); }
+html[data-skin="vessel"] .vera-socket { border-radius: 50%; }
+html[data-skin] .vera-socket-live { color: var(--v7-cyan); border-color: var(--v7-cyan-strong); background: var(--v7-cyan-soft); }
+html[data-skin] .vera-socket-bad { color: var(--red); border-color: var(--red); }

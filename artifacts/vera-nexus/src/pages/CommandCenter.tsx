@@ -8,6 +8,8 @@ import {
   type QueueItem, type InstantActionType, type DailyBriefStats,
 } from '../lib/venusApi';
 import type { VenusTheme } from '../lib/venusTheme';
+import { useVeraSkin } from '../lib/veraSkin';
+import { LivingContextBar } from './LivingContextBar';
 
 // "OS" — the operational home Vera opens INTO the same view New Chat opens
 // into (see Venus.tsx's mainView state), never a separate route/page. The
@@ -114,6 +116,8 @@ function formatTime(iso: string): string {
 }
 
 function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: Palette; category: Category; fresh?: boolean }) {
+  const { skin } = useVeraSkin();
+  const skinned = skin !== 'classic';
   const action = useQueueAction();
   const [, navigate] = useLocation();
   const [editing, setEditing] = useState(false);
@@ -205,13 +209,13 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
         )}
 
         {!isDone && (
-          <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: skinned ? '8px' : '14px', alignItems: 'center', flexWrap: 'wrap' }}>
             {editing ? (
               <>
-                <button type="button" onClick={handleSubmitEdit} style={linkStyle(palette, false, !!outbound && confirmingSend)}>
+                <button type="button" onClick={handleSubmitEdit} {...actionProps(palette, false, skinned, !!outbound && confirmingSend)}>
                   {outbound ? (confirmingSend ? 'Yes, send it' : 'Save & send') : 'Save'}
                 </button>
-                <button type="button" onClick={() => { setEditing(false); setConfirmingSend(false); }} style={linkStyle(palette, true)}>Cancel</button>
+                <button type="button" onClick={() => { setEditing(false); setConfirmingSend(false); }} {...actionProps(palette, true, skinned)}>Cancel</button>
                 {confirmingSend && outbound && (
                   <span style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', color: palette.coral }}>
                     This will {outbound}.
@@ -224,18 +228,18 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
                   <span style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', color: palette.coral }}>
                     This will {outbound}.
                   </span>
-                  <button type="button" onClick={handleAccept} style={linkStyle(palette, false, true)}>
+                  <button type="button" onClick={handleAccept} {...actionProps(palette, false, skinned, true)}>
                     {action.isPending ? 'Sending…' : 'Yes, send it'}
                   </button>
-                  <button type="button" onClick={() => setConfirmingSend(false)} style={linkStyle(palette, true)}>Cancel</button>
+                  <button type="button" onClick={() => setConfirmingSend(false)} {...actionProps(palette, true, skinned)}>Cancel</button>
                 </>
               ) : (
               <>
-                <button type="button" onClick={resolution ? handleResolve : handleAccept} style={linkStyle(palette, false, isFlagged)}>
+                <button type="button" onClick={resolution ? handleResolve : handleAccept} {...actionProps(palette, false, skinned, isFlagged)}>
                   {resolution ? resolution.label : meta.acceptLabel}
                 </button>
-                {item.draftContent && <button type="button" onClick={() => setEditing(true)} style={linkStyle(palette, true)}>Edit</button>}
-                <button type="button" onClick={handleReject} style={linkStyle(palette, true)}>{meta.rejectLabel}</button>
+                {item.draftContent && <button type="button" onClick={() => setEditing(true)} {...actionProps(palette, true, skinned)}>Edit</button>}
+                <button type="button" onClick={handleReject} {...actionProps(palette, true, skinned)}>{meta.rejectLabel}</button>
               </>
               )
             )}
@@ -281,6 +285,8 @@ function freeTimeLabel(minutes: number): string {
 }
 
 function StreakBand({ palette, stats, streak }: { palette: Palette; stats: DailyBriefStats; streak: number }) {
+  const { skin } = useVeraSkin();
+  const skinned = skin !== 'classic';
   const { headline, sub } = streakLine(streak);
   const counters = [
     stats.decisionsCaptured > 0 && [String(stats.decisionsCaptured), stats.decisionsCaptured === 1 ? 'decision captured' : 'decisions captured'],
@@ -299,8 +305,29 @@ function StreakBand({ palette, stats, streak }: { palette: Palette; stats: Daily
         border: `1px solid ${palette.tealBorder}`,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: counters.length ? '14px' : 0 }}>
-        <Flame style={{ width: 20, height: 20, color: palette.teal, flexShrink: 0 }} />
+      {/* Under a skin the streak leads with the count set large in the
+          measured face, rather than a flame badge beside a sentence — this
+          is an accumulating operating record, and a number is what an
+          operating record looks like. Classic keeps the flame. */}
+      <div style={{ display: 'flex', alignItems: skinned ? 'flex-end' : 'center', gap: skinned ? '12px' : '10px', marginBottom: counters.length ? '14px' : 0 }}>
+        {skinned ? (
+          <span
+            style={{
+              fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)",
+              fontSize: '38px',
+              fontWeight: 500,
+              letterSpacing: '-0.03em',
+              lineHeight: 0.9,
+              color: palette.teal,
+              fontVariantNumeric: 'tabular-nums lining-nums',
+              flexShrink: 0,
+            }}
+          >
+            {streak}
+          </span>
+        ) : (
+          <Flame style={{ width: 20, height: 20, color: palette.teal, flexShrink: 0 }} />
+        )}
         <div style={{ minWidth: 0 }}>
           <p style={{ fontSize: '19px', fontWeight: 600, color: palette.text, margin: 0, lineHeight: 1.25 }}>{headline}</p>
           <p style={{ fontSize: '13px', fontStyle: 'italic', color: palette.muted, margin: '2px 0 0', lineHeight: 1.4 }}>{sub}</p>
@@ -367,6 +394,31 @@ function resolutionLabel(status: string, meta: CategoryMeta): string {
   return status.toUpperCase();
 }
 
+/**
+ * Props for one of the board's action controls.
+ *
+ * Classic keeps the quiet inline links the notebook aesthetic was built
+ * around. Under a skin these become real keys — the affirmative action gets
+ * weight and travel, and declining deliberately gets neither, so approving
+ * and dismissing stop looking like the same gesture. That asymmetry is the
+ * point: these buttons send real email and post to real Slack.
+ */
+function actionProps(
+  palette: Palette,
+  quiet: boolean,
+  skinned: boolean,
+  flagged?: boolean,
+): { className?: string; style?: CSSProperties } {
+  if (!skinned) return { style: linkStyle(palette, quiet, flagged) };
+  if (quiet) return { className: 'vera-key vera-key-3' };
+  return {
+    className: 'vera-key vera-key-1',
+    // A send that leaves the building takes the caution hue rather than the
+    // accent, so the confirm step doesn't look like every other primary.
+    style: flagged ? { background: palette.coral, color: palette.paper } : undefined,
+  };
+}
+
 function linkStyle(palette: Palette, quiet: boolean, flagged?: boolean): CSSProperties {
   return {
     fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)",
@@ -399,6 +451,8 @@ const QUICK_ACTIONS: { type: InstantActionType; label: string; placeholder: stri
 ];
 
 function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId: number) => void }) {
+  const { skin } = useVeraSkin();
+  const skinned = skin !== 'classic';
   const [active, setActive] = useState<InstantActionType | null>(null);
   const [input, setInput] = useState('');
   const run = useRunInstantAction();
@@ -439,8 +493,8 @@ function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId:
             style={{ width: '100%', fontSize: '13px', color: palette.text, background: palette.paperEdge, border: `1px solid ${palette.line}`, borderRadius: '6px', padding: '8px 10px', marginBottom: '8px', outline: 'none', fontFamily: 'inherit' }}
           />
           <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
-            <button type="button" onClick={submit} style={linkStyle(palette, false)}>{run.isPending ? 'Working…' : 'Add to Blackboard'}</button>
-            <button type="button" onClick={() => { setActive(null); setInput(''); }} style={linkStyle(palette, true)}>Cancel</button>
+            <button type="button" onClick={submit} {...actionProps(palette, false, skinned)}>{run.isPending ? 'Working…' : 'Add to Blackboard'}</button>
+            <button type="button" onClick={() => { setActive(null); setInput(''); }} {...actionProps(palette, true, skinned)}>Cancel</button>
           </div>
           {run.isError && <div style={{ fontSize: '11px', marginTop: '6px', color: palette.coral }}>{run.error instanceof Error ? run.error.message : 'Failed — try again.'}</div>}
         </div>
@@ -506,6 +560,14 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
         <button type="button" onClick={onBack} style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '12px', color: palette.muted, background: 'transparent', border: 'none', padding: 0, textDecoration: 'none', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '28px', cursor: 'pointer' }}>
           <ArrowLeft style={{ width: 12, height: 12 }} /> Back to chat
         </button>
+
+        {/* Persistent business context, above the board rather than on it —
+            it describes the business, not the day's queue, so it sits
+            outside the page the queue is written on. Renders nothing under
+            Classic, and nothing before there's a company or any stats. */}
+        <div style={{ marginBottom: '18px' }}>
+          <LivingContextBar />
+        </div>
 
         <div style={{ background: palette.paper, border: `1px solid ${palette.paperEdge}`, borderRadius: '4px 14px 14px 4px', padding: '34px 40px 40px 52px', position: 'relative', boxShadow: '0 30px 60px -30px rgba(0,0,0,0.6)', overflow: 'hidden' }}>
           {/* margin rule — the vertical notebook-page line */}

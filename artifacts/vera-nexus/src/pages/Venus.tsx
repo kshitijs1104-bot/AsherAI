@@ -18,7 +18,9 @@ import { NotificationBell } from './NotificationBell';
 import { CommandCenterSection } from './CommandCenter';
 import { AttachMenu } from './AttachMenu';
 import { VeraSettingsModal } from './VeraSettingsModal';
+import { LivingContextBar } from './LivingContextBar';
 import { useVenusTheme } from '../lib/venusTheme';
+import { useVeraSkin } from '../lib/veraSkin';
 import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
 
 // One consistent compact row shape for everything below New Chat — replaces
@@ -275,6 +277,11 @@ function AttachmentChip({ fileName, previewUrl, uploading, error, onRemove }: { 
 export function VenusPage() {
   const [, navigate] = useLocation();
   const { theme, toggle: toggleTheme } = useVenusTheme();
+  // Controls whose look is set inline here can't be restyled from CSS, so the
+  // skinned variants are swapped in explicitly. Classic keeps every original
+  // inline value and imperative handler untouched.
+  const { skin } = useVeraSkin();
+  const skinned = skin !== 'classic';
   const [sessions, setSessions] = useState<ChatSession[]>(getSessions);
   const [currentSession, setCurrentSession] = useState<ChatSession>(() => {
     const existing = getSessions();
@@ -994,7 +1001,12 @@ export function VenusPage() {
                 What brings you here today?
               </div>
 
-              <h1 className="font-extrabold mb-[14px]" style={{ fontSize: '34px', lineHeight: '1.28', letterSpacing: '-0.01em', color: 'var(--v7-text)' }}>
+              {/* Size and leading come from tokens so each skin can match
+                  APPARENT size rather than share one number — 34px of
+                  Instrument Serif at 400 reads visibly smaller than 34px of
+                  Archivo at 600. Classic's original values are the
+                  fallbacks. */}
+              <h1 className="font-extrabold mb-[14px]" style={{ fontSize: 'var(--vera-hero-size, 34px)', lineHeight: 'var(--vera-hero-leading, 1.28)', letterSpacing: '-0.01em', color: 'var(--v7-text)' }}>
                 The cause behind<br />every{' '}
                 {/* Routed through two custom properties so a skin can retire
                     the gradient without this file knowing which skin is
@@ -1045,8 +1057,8 @@ export function VenusPage() {
                 <button
                   type="submit"
                   disabled={(!input.trim() && !pendingAttachment) || analyzeMutation.isPending}
-                  className="w-[38px] h-[38px] shrink-0 flex items-center justify-center transition-all disabled:opacity-40"
-                  style={{ borderRadius: '12px', border: 'none', background: 'var(--v7-cyan)' }}
+                  className={`w-[38px] h-[38px] shrink-0 flex items-center justify-center transition-all disabled:opacity-40 ${skinned ? 'vera-key vera-key-1' : ''}`}
+                  style={{ borderRadius: 'var(--vera-key-r, 12px)', border: 'none', background: 'var(--v7-cyan)', padding: 0 }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--v7-bg)" strokeWidth="2.3">
                     <path d="M7 17L17 7M17 7H9M17 7V15" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1059,14 +1071,21 @@ export function VenusPage() {
                   <button
                     key={prompt}
                     onClick={() => handleSend(prompt)}
-                    className="text-left flex items-start gap-3 transition-all group"
-                    style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border)', borderRadius: '16px', padding: '16px 17px' }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--v7-cyan-strong)'; e.currentTarget.style.background = 'var(--v7-bg-raised-2)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--v7-border)'; e.currentTarget.style.background = 'var(--v7-bg-raised)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                    className={`text-left flex items-start gap-3 transition-all group ${skinned ? 'vera-suggest' : ''}`}
+                    style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border)', borderRadius: 'var(--vera-r-card, 16px)', padding: '16px 17px' }}
+                    {...(skinned
+                      ? {}
+                      : {
+                          // Classic keeps its original imperative hover. Under a skin the
+                          // .vera-suggest rules own it instead — writing these straight onto
+                          // currentTarget.style would win over the stylesheet and undo it.
+                          onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.borderColor = 'var(--v7-cyan-strong)'; e.currentTarget.style.background = 'var(--v7-bg-raised-2)'; e.currentTarget.style.transform = 'translateY(-2px)'; },
+                          onMouseLeave: (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.borderColor = 'var(--v7-border)'; e.currentTarget.style.background = 'var(--v7-bg-raised)'; e.currentTarget.style.transform = 'translateY(0)'; },
+                        })}
                   >
                     <div
-                      className="w-[30px] h-[30px] rounded-[10px] flex items-center justify-center shrink-0"
-                      style={{ background: 'var(--v7-bg-raised-2)' }}
+                      className={`w-[30px] h-[30px] flex items-center justify-center shrink-0 ${skinned ? 'vera-socket' : 'rounded-[10px]'}`}
+                      style={skinned ? undefined : { background: 'var(--v7-bg-raised-2)' }}
                     >
                       <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke={i % 2 === 0 ? 'var(--v7-cyan)' : 'var(--v7-pink)'}>
                         <path d="M4 19V13M10 19V8M16 19V15M21 19V5" strokeWidth="2.2" strokeLinecap="round"/>
