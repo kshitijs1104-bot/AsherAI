@@ -167,23 +167,36 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
     action.mutate({ id: item.id, action: 'edit', editedContent: draft.trim() }, { onSuccess: () => setEditing(false) });
   };
 
+  // The one moment Vera speaks without being asked: a follow-up on a decision
+  // the founder made weeks ago and never mentioned again. Under a skin it gets
+  // the hue reserved product-wide for exactly this and nothing else, plus a
+  // left rule, so "Vera started this, not you" is recognisable at a glance
+  // without reading a word.
+  const isUnprompted = skinned && item.type === 'decision_followup';
+  const markColor = isUnprompted
+    ? 'var(--vera-unprompted)'
+    : isFlagged
+      ? palette.coral
+      : palette.teal;
+
   return (
     <div
       style={{
-        padding: '14px 0',
+        padding: isUnprompted ? '14px 0 14px 12px' : '14px 0',
         borderBottom: fresh ? 'none' : `1px solid ${palette.line}`,
+        borderLeft: isUnprompted ? '2px solid var(--vera-unprompted)' : undefined,
         display: 'flex',
         gap: '12px',
-        background: fresh ? palette.tealDim : 'transparent',
+        background: fresh ? palette.tealDim : isUnprompted ? 'var(--vera-unprompted-soft)' : 'transparent',
         margin: fresh ? '0 -12px 8px' : undefined,
-        borderRadius: fresh ? '8px' : undefined,
+        borderRadius: fresh ? '8px' : isUnprompted ? '0 8px 8px 0' : undefined,
         transition: 'background 1.2s ease',
       }}
     >
-      <span style={{ color: isFlagged ? palette.coral : palette.teal, fontSize: '15px', lineHeight: 1.5 }}>·</span>
+      <span style={{ color: markColor, fontSize: '15px', lineHeight: 1.5 }}>·</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', letterSpacing: '0.04em', color: isFlagged ? palette.coral : palette.faint, margin: '0 0 4px' }}>
-          {sourceLabel(item.source)} · {item.createdAt ? formatTime(item.createdAt) : ''}
+        <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', letterSpacing: '0.04em', color: isUnprompted ? 'var(--vera-unprompted)' : isFlagged ? palette.coral : palette.faint, margin: '0 0 4px' }}>
+          {isUnprompted ? 'VERA FOLLOWED UP · ' : ''}{sourceLabel(item.source)} · {item.createdAt ? formatTime(item.createdAt) : ''}
           {/* A resolved item was previously only struck through, which made
               "I actioned this" and "I dismissed this" look identical the
               next morning. Say which one it was. */}

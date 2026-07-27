@@ -901,6 +901,14 @@ html[data-skin="alloy"] .dark {
      used — pointing it at --v7-cyan here would lock the light theme to the
      dark accent. */
   --vera-emph-fg: #E0A33C;
+  /* Reserved product-wide for one thing: Vera raising something you didn't
+     ask about. Carried across from the Vessel direction into Alloy too — it
+     is the product's actual differentiator, so it earns a hue in both, and
+     nothing else is allowed to borrow it. Muted violet here so it stays
+     clearly outside Alloy's single-accent discipline without competing
+     with brass for attention. */
+  --vera-unprompted: #9B8FC0;
+  --vera-unprompted-soft: rgba(155, 143, 192, 0.13);
 
   /* Kills the 460px radial-gradient blob behind the hero and the 3.4s
      breathing halo without touching Venus.tsx: both render straight from
@@ -996,6 +1004,8 @@ html[data-skin="alloy"] .v7-light {
   --v7-tint: #F3F0EA;
   --v7-tint-border: #DAD3C7;
   --vera-emph-fg: #8A5C0F;
+  --vera-unprompted: #5B4E8C;
+  --vera-unprompted-soft: #ECEAF5;
 
   --v7-glow-1: transparent;
   --v7-glow-2: transparent;
@@ -1091,6 +1101,9 @@ html[data-skin="vessel"] .dark {
   --v7-tint: #262029;
   --v7-tint-border: #3E3543;
   --vera-emph-fg: #4FC0A5;
+  /* Vessel's second voice, and the reason it exists. */
+  --vera-unprompted: #B98BC9;
+  --vera-unprompted-soft: rgba(185, 139, 201, 0.13);
 
   --v7-glow-1: transparent;
   --v7-glow-2: transparent;
@@ -1179,6 +1192,8 @@ html[data-skin="vessel"] .v7-light {
   --v7-tint: #EEE9E8;
   --v7-tint-border: #D5CCCD;
   --vera-emph-fg: #0E6E5C;
+  --vera-unprompted: #6B3A7C;
+  --vera-unprompted-soft: #F0E8F3;
 
   --v7-glow-1: transparent;
   --v7-glow-2: transparent;
@@ -1704,3 +1719,164 @@ html[data-skin="alloy"] .vera-socket { border-radius: var(--vera-r-inset); }
 html[data-skin="vessel"] .vera-socket { border-radius: 50%; }
 html[data-skin] .vera-socket-live { color: var(--v7-cyan); border-color: var(--v7-cyan-strong); background: var(--v7-cyan-soft); }
 html[data-skin] .vera-socket-bad { color: var(--red); border-color: var(--red); }
+
+/* ---------- Icons ------------------------------------------------------
+   41 files import lucide-react and every one of them rendered at the
+   library's default 2px stroke — the "untouched default icons" tell from
+   the audit. lucide stamps a `.lucide` class on every glyph it renders, so
+   one rule re-cuts the entire set without touching a single import.
+
+   Stroke is the variable that decides whether an icon set looks drawn for a
+   product or dropped into it, and the two skins want different answers:
+   Alloy is cut at 1.75 to sit with a 600-weight grotesque, Vessel at 1.55 so
+   the glyphs don't out-weigh a hairline serif beside them. non-scaling-stroke
+   keeps that weight constant at every size, which is what makes a 16px and a
+   26px icon read as the same hand — previously a scaled-down icon thickened
+   and a scaled-up one thinned. */
+html[data-skin="alloy"] { --vera-icon-stroke: 1.75; }
+html[data-skin="vessel"] { --vera-icon-stroke: 1.55; }
+
+html[data-skin] .lucide {
+  stroke-width: var(--vera-icon-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* ---------- Type roles -------------------------------------------------
+   Fixed pairings of size, weight, tracking and case, so hierarchy is chosen
+   from a named set rather than reinvented per component. Sizes are the one
+   thing these do NOT hand back to the caller: the audit found 19 distinct
+   inline font sizes, eleven of them inside a 5px band, which is what makes
+   the current hierarchy read as accidental. */
+html[data-skin] .vera-t-title {
+  font-family: var(--vera-font-display);
+  font-size: 22px;
+  font-weight: var(--vera-display-weight);
+  letter-spacing: var(--vera-display-tracking);
+  line-height: 1.18;
+}
+html[data-skin] .vera-t-heading {
+  font-family: var(--v7-font-round);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.35;
+}
+html[data-skin] .vera-t-body {
+  font-family: var(--v7-font-round);
+  font-size: 14.5px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--v7-text-dim);
+}
+html[data-skin] .vera-t-support {
+  font-family: var(--v7-font-round);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--v7-text-mute);
+}
+/* Numbers are always mono and tabular. A figure that changes width as it
+   updates reads as unstable, and this product's whole claim is that its
+   numbers can be trusted. */
+html[data-skin] .vera-t-data {
+  font-family: var(--v7-font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--v7-text);
+}
+
+/* ---------- Where the two skins deliberately diverge -------------------
+   Up to here both skins shared every shape and differed only in palette,
+   radius and type — which made them read as one design in two colourways
+   rather than the two directions they were pitched as. These are the moves
+   that separate them.
+
+   Vessel: the context bar is a capsule sized to its content, floating clear
+   of the page rather than spanning it. A full-width bar reads as chrome you
+   stop seeing; a capsule reads as an object belonging to the business it
+   describes. */
+html[data-skin="vessel"] .vera-ctx {
+  border-radius: 999px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+html[data-skin="vessel"] .vera-ctx-id { padding-left: 10px; }
+
+/* Vessel: suggestions are ruled editorial lines, not boxed cards. An entry
+   screen with card-shaped things on it already looks like a dashboard, which
+   is the one thing this surface must not do. */
+html[data-skin="vessel"] .vera-suggest {
+  border: 0;
+  border-top: 1px solid var(--v7-border);
+  border-radius: 0;
+  background: transparent;
+  padding: 15px 10px;
+}
+html[data-skin="vessel"] .vera-suggest:hover {
+  background: var(--v7-bg-raised-2);
+  border-color: var(--v7-border-strong);
+  transform: none;
+  box-shadow: none;
+  padding-left: 18px;
+}
+html[data-skin="vessel"] .vera-suggest .vera-socket {
+  border: 0;
+  background: transparent;
+  width: 22px;
+  height: 22px;
+}
+
+/* Alloy: one 1px centre spine behind the hero, replacing the gradient blob.
+   It marks the composition's axis and stops where the composer takes over —
+   structure doing the job decoration was doing. */
+html[data-skin="alloy"] .vera-hero-axis { position: relative; }
+html[data-skin="alloy"] .vera-hero-axis::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 42%;
+  left: 50%;
+  width: 1px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--v7-border) 35%, var(--v7-border));
+}
+
+/* ---------- Recomposition ---------------------------------------------
+   Tablet and mobile are their own compositions, not a reflow. The context
+   bar is the piece that genuinely has to change shape: at full width it
+   reads left to right, and below that it stacks identity over metrics with
+   the connector glyphs pinned right, so it never eats the viewport on a
+   phone. */
+@media (max-width: 860px) {
+  html[data-skin] .vera-ctx {
+    flex-wrap: wrap;
+    border-radius: var(--vera-r-card);
+    width: auto;
+  }
+  html[data-skin] .vera-ctx-id {
+    width: 100%;
+    border-bottom: 1px solid var(--v7-border);
+  }
+  html[data-skin] .vera-ctx-metrics { order: 3; width: 100%; }
+  html[data-skin] .vera-ctx-m:first-child { border-left: 0; }
+  html[data-skin] .vera-ctx-conn { border-left: 0; margin-left: auto; }
+}
+
+@media (max-width: 560px) {
+  /* Action keys reach a real touch target and split the row evenly, while
+     the quiet decline deliberately stays small — declining should not be the
+     easiest thing to hit with a thumb. */
+  html[data-skin] .vera-key-1,
+  html[data-skin] .vera-key-2 {
+    flex: 1;
+    justify-content: center;
+    min-height: 44px;
+  }
+  html[data-skin] .vera-key-3 { flex: 0 0 auto; }
+  html[data-skin] .vera-ctx-m { padding: 10px 12px; }
+}
