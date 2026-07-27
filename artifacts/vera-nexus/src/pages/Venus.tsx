@@ -17,8 +17,7 @@ import { VenusThemeToggle } from './VenusThemeToggle';
 import { NotificationBell } from './NotificationBell';
 import { CommandCenterSection } from './CommandCenter';
 import { AttachMenu } from './AttachMenu';
-import { ConnectorPicker } from './ConnectorPicker';
-import { SkinChoiceList } from './SkinPicker';
+import { VeraSettingsModal } from './VeraSettingsModal';
 import { useVenusTheme } from '../lib/venusTheme';
 import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
 
@@ -894,8 +893,14 @@ export function VenusPage() {
             <ListChecks className="w-3.5 h-3.5" />
             All decisions
           </button>
+          {/* Used to expand an inline panel right here — Connectors plus the
+              Appearance list pushed the bottom of this fixed-height,
+              non-scrolling sidebar (`h-screen`, no overflow-y-auto) past the
+              viewport, with no way back to it short of zooming the whole
+              page out. A centered popup isn't laid out inside this column at
+              all, so nothing it contains can push anything else off-frame. */}
           <button
-            onClick={() => setShowSettings(v => !v)}
+            onClick={() => setShowSettings(true)}
             className="w-full flex items-center gap-[9px] text-[13px] font-medium transition-colors"
             style={{ color: 'var(--v7-text-dim)', paddingLeft: '8px' }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--v7-text)')}
@@ -904,36 +909,9 @@ export function VenusPage() {
             <Settings className="w-3.5 h-3.5" />
             Settings
           </button>
-
-          {showSettings && (
-            <div className="mt-2 p-3 rounded-lg" style={{ background: 'var(--v7-bg-raised-2)', border: '1px solid var(--v7-border)' }}>
-              {/* The Groq API key field lived here. Vera runs on a managed
-                  key server-side, so the field was asking founders to supply
-                  something the product already has — and its "NOT
-                  CONFIGURED" state read as a broken install on an app that
-                  was working fine. Connectors are what actually belongs in
-                  this panel. */}
-              <div className="text-[10px] uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--v7-font-mono)', color: 'var(--v7-text-mute)' }}>
-                Connectors
-              </div>
-              <ConnectorPicker />
-
-              {/* Appearance sits under Connectors rather than above it: this
-                  panel is opened to fix a data source far more often than to
-                  change how things look, and the skin is a decision most
-                  founders make once. Light/dark isn't repeated here — that
-                  toggle is already in the sidebar header just above. */}
-              <div
-                className="text-[10px] uppercase tracking-wider mt-4 mb-2 pt-3"
-                style={{ fontFamily: 'var(--v7-font-mono)', color: 'var(--v7-text-mute)', borderTop: '1px solid var(--v7-border)' }}
-              >
-                Appearance
-              </div>
-              <SkinChoiceList />
-            </div>
-          )}
         </div>
       </aside>
+      <VeraSettingsModal open={showSettings} onClose={() => setShowSettings(false)} theme={theme} />
       </>
       )}
 
