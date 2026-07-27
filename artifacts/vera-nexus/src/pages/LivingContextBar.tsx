@@ -14,6 +14,16 @@ const CONNECTOR_ICON: Record<string, typeof Mail> = {
   linkedin: Linkedin,
 };
 
+// Mirrors the board's own framing so the same figure doesn't get described
+// two different ways on two surfaces.
+function freeTime(minutes: number): string {
+  if (minutes >= 240) return '∞';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+}
+
 /**
  * Persistent business context — who this is, how the operating record is
  * accumulating, and what Vera can currently see.
@@ -38,17 +48,28 @@ export function LivingContextBar() {
   const stats = dailyBrief.data?.stats;
   const name = onboarding?.companyName?.trim();
 
-  // Nothing to anchor the bar to yet. Better absent than a row of dashes.
+  // Only bail before anything has loaded. Once the brief is in, the bar
+  // renders even on a brand-new account: this is the surface that says
+  // "Vera is watching your business", and a bar that disappears whenever the
+  // numbers are quiet says the opposite at exactly the wrong moment.
   if (!name && !stats) return null;
 
   const descriptor = [onboarding?.industry, onboarding?.stage].filter(Boolean).join(' · ');
 
   const metrics: Array<{ k: string; v: string }> = [];
   if (stats) {
+    // Days active and the streak always show, including at zero — they are
+    // the two that describe the relationship rather than the workload, so
+    // "day one" is a real state worth printing, not an empty one to hide.
+    metrics.push({ k: 'Days active', v: String(stats.daysActive) });
+    metrics.push({ k: 'Streak', v: stats.queueStreakDays > 0 ? `${stats.queueStreakDays}d` : '—' });
     if (stats.goalsActive > 0) metrics.push({ k: 'Active goals', v: String(stats.goalsActive) });
     if (stats.decisionsCaptured > 0) metrics.push({ k: 'Decisions', v: String(stats.decisionsCaptured) });
     if (stats.automationsCompleted > 0) metrics.push({ k: 'Automations', v: String(stats.automationsCompleted) });
-    if (stats.queueStreakDays > 0) metrics.push({ k: 'Streak', v: `${stats.queueStreakDays}d` });
+    // Time Vera has handed back. Framed as free time earned rather than
+    // minutes saved — the number climbs honestly with automations, and past
+    // a few hours it stops pretending to be precise.
+    if (stats.timeSavedMinutes > 0) metrics.push({ k: 'Free time', v: freeTime(stats.timeSavedMinutes) });
   }
 
   const live = (connectors.data?.connectors ?? []).filter(

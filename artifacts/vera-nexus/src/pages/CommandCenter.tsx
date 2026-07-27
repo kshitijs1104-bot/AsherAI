@@ -9,7 +9,6 @@ import {
 } from '../lib/venusApi';
 import type { VenusTheme } from '../lib/venusTheme';
 import { useVeraSkin } from '../lib/veraSkin';
-import { LivingContextBar } from './LivingContextBar';
 
 // "OS" — the operational home Vera opens INTO the same view New Chat opens
 // into (see Venus.tsx's mainView state), never a separate route/page. The
@@ -581,14 +580,6 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
         <button type="button" onClick={onBack} style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '12px', color: palette.muted, background: 'transparent', border: 'none', padding: 0, textDecoration: 'none', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '28px', cursor: 'pointer' }}>
           <ArrowLeft style={{ width: 12, height: 12 }} /> Back to chat
         </button>
-
-        {/* Persistent business context, above the board rather than on it —
-            it describes the business, not the day's queue, so it sits
-            outside the page the queue is written on. Renders nothing under
-            Classic, and nothing before there's a company or any stats. */}
-        <div style={{ marginBottom: '18px' }}>
-          <LivingContextBar />
-        </div>
 
         {skinned ? (
           /* ---- Bento board -------------------------------------------

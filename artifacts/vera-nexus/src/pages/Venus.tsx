@@ -29,14 +29,18 @@ import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/v
 // toggle row). "Nav" rows just navigate; "toggle" rows show a persistent
 // tinted/active state while their panel is open, so the two behaviors read
 // as one family instead of unrelated components bolted together.
-function SidebarNavRow({ icon: Icon, label, onClick, badgeCount }: { icon: typeof LayoutGrid; label: string; onClick: () => void; badgeCount?: number }) {
+function SidebarNavRow({ icon: Icon, label, onClick, badgeCount, skinned }: { icon: typeof LayoutGrid; label: string; onClick: () => void; badgeCount?: number; skinned?: boolean }) {
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-[9px] text-[13px] font-medium rounded-[10px] transition-colors"
+      className={`w-full flex items-center gap-[9px] text-[13px] font-medium transition-colors ${skinned ? 'vera-navrow' : 'rounded-[10px]'}`}
       style={{ color: 'var(--v7-text-dim)', padding: '8px 8px' }}
-      onMouseEnter={e => { e.currentTarget.style.color = 'var(--v7-text)'; e.currentTarget.style.background = 'var(--v7-bg-raised-2)'; }}
-      onMouseLeave={e => { e.currentTarget.style.color = 'var(--v7-text-dim)'; e.currentTarget.style.background = 'transparent'; }}
+      {...(skinned
+        ? {}
+        : {
+            onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.color = 'var(--v7-text)'; e.currentTarget.style.background = 'var(--v7-bg-raised-2)'; },
+            onMouseLeave: (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.color = 'var(--v7-text-dim)'; e.currentTarget.style.background = 'transparent'; },
+          })}
     >
       <Icon className="w-3.5 h-3.5" />
       {label}
@@ -55,18 +59,28 @@ function SidebarNavRow({ icon: Icon, label, onClick, badgeCount }: { icon: typeo
   );
 }
 
-function SidebarToggleRow({ icon: Icon, label, active, onClick }: { icon: typeof Target; label: string; active: boolean; onClick: () => void }) {
+function SidebarToggleRow({ icon: Icon, label, active, onClick, skinned }: { icon: typeof Target; label: string; active: boolean; onClick: () => void; skinned?: boolean }) {
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-[9px] text-[13px] font-medium rounded-[10px] transition-colors"
-      style={{
-        color: active ? 'var(--v7-cyan)' : 'var(--v7-text-dim)',
-        background: active ? 'var(--v7-cyan-soft)' : 'transparent',
-        padding: '8px 8px',
-      }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--v7-bg-raised-2)'; }}
-      onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+      className={`w-full flex items-center gap-[9px] text-[13px] font-medium transition-colors ${
+        skinned ? `vera-navrow${active ? ' vera-navrow-active' : ''}` : 'rounded-[10px]'
+      }`}
+      style={
+        skinned
+          ? { padding: '8px 8px', color: active ? undefined : 'var(--v7-text-dim)' }
+          : {
+              color: active ? 'var(--v7-cyan)' : 'var(--v7-text-dim)',
+              background: active ? 'var(--v7-cyan-soft)' : 'transparent',
+              padding: '8px 8px',
+            }
+      }
+      {...(skinned
+        ? {}
+        : {
+            onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => { if (!active) e.currentTarget.style.background = 'var(--v7-bg-raised-2)'; },
+            onMouseLeave: (e: React.MouseEvent<HTMLButtonElement>) => { if (!active) e.currentTarget.style.background = 'transparent'; },
+          })}
       title={active ? `Hide ${label.toLowerCase()} panel` : `Show ${label.toLowerCase()} panel`}
     >
       <Icon className="w-3.5 h-3.5" />
@@ -778,18 +792,34 @@ export function VenusPage() {
         {/* New Chat — the one hero CTA, first. Everything else below is a
             single, consistently-styled compact nav list rather than a big
             colored button plus a visually unrelated toggle row. */}
+        {/* Under a skin this is a filled key that travels under the finger,
+            not a tinted panel that glows — it is the most-pressed control in
+            the product and previously shared its shape with every quiet nav
+            row beneath it. Classic keeps the original tint and glow. */}
         <button
           onClick={handleNewChat}
-          className="flex items-center gap-[9px] font-bold text-[13.5px] transition-all mb-[10px]"
-          style={{
-            background: 'var(--v7-cyan-soft)',
-            border: '1px solid var(--v7-cyan-strong)',
-            color: 'var(--v7-cyan)',
-            padding: '11px 15px',
-            borderRadius: '14px',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--v7-cyan-soft)'; e.currentTarget.style.boxShadow = '0 0 20px -6px var(--v7-cyan-strong)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'var(--v7-cyan-soft)'; e.currentTarget.style.boxShadow = 'none'; }}
+          className={
+            skinned
+              ? 'vera-key vera-key-1 vera-newchat mb-[10px]'
+              : 'flex items-center gap-[9px] font-bold text-[13.5px] transition-all mb-[10px]'
+          }
+          style={
+            skinned
+              ? undefined
+              : {
+                  background: 'var(--v7-cyan-soft)',
+                  border: '1px solid var(--v7-cyan-strong)',
+                  color: 'var(--v7-cyan)',
+                  padding: '11px 15px',
+                  borderRadius: '14px',
+                }
+          }
+          {...(skinned
+            ? {}
+            : {
+                onMouseEnter: (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'var(--v7-cyan-soft)'; e.currentTarget.style.boxShadow = '0 0 20px -6px var(--v7-cyan-strong)'; },
+                onMouseLeave: (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'var(--v7-cyan-soft)'; e.currentTarget.style.boxShadow = 'none'; },
+              })}
         >
           <Plus className="w-3.5 h-3.5" />
           New Analysis
@@ -807,11 +837,11 @@ export function VenusPage() {
             actually control (a panel in this view) and sit under their own
             heading; the destinations below are named as destinations. */}
         <div className="mb-[18px]" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={pendingQueueCount} />
-          <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/vera/workflows')} />
+          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={pendingQueueCount} skinned={skinned} />
+          <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/vera/workflows')} skinned={skinned} />
           <div className="vera-label" style={{ padding: '10px 8px 4px' }}>Show above chat</div>
-          <SidebarToggleRow icon={Target} label="Goal panel" active={showGoalPanel} onClick={toggleGoalPanel} />
-          <SidebarToggleRow icon={MapIcon} label="Roadmap panel" active={showRoadmap} onClick={toggleRoadmap} />
+          <SidebarToggleRow icon={Target} label="Goal panel" active={showGoalPanel} onClick={toggleGoalPanel} skinned={skinned} />
+          <SidebarToggleRow icon={MapIcon} label="Roadmap panel" active={showRoadmap} onClick={toggleRoadmap} skinned={skinned} />
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
@@ -926,6 +956,18 @@ export function VenusPage() {
           Chat itself swaps into (see mainView state), never a separate
           route/page. */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Persistent business context. It was previously mounted inside the
+            Command Center board only, which meant the surface described as
+            "the one thing always visible" was absent from the default view
+            entirely — you had to navigate away from chat to see it. Mounted
+            here, outside the mainView switch, it is genuinely persistent:
+            chat and the board both sit underneath it. Renders nothing under
+            Classic and nothing before there is anything real to show. */}
+        {skinned && (
+          <div className="shrink-0" style={{ padding: isNarrow ? '12px 16px 0' : '14px 32px 0' }}>
+            <LivingContextBar />
+          </div>
+        )}
         {mainView === 'command-center' ? (
           <CommandCenterSection
             theme={theme}
