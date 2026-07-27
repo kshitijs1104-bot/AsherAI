@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, settingsTable, venusDecisionsTable, goalsTable, type VenusDecision } from "@workspace/db";
+import { db, settingsTable, venusDecisionsTable, goalsTable, type VenusDecision, type BusinessProfile } from "@workspace/db";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { VenusAnalyzeBody, IdeaReviewBody } from "@workspace/api-zod";
@@ -17,6 +17,7 @@ import { applyResolvedEvidence } from "../lib/goalEvidence";
 import { classifyDecisionType, archiveStaleOpenDecisions } from "../lib/decisionMemory";
 import { materializeRoadmapFromCard } from "../lib/roadmap";
 import { addCompanyFact, getActiveCompanyFacts, getActivePreferenceFacts, formatCompanyFactsForPrompt, formatPreferenceFactsForPrompt, findPotentialContradiction, supersedeFact } from "../lib/companyMemory";
+import { getOrCreateActiveProfile, findMatchingProfile, createProfile, setActiveProfile, updateProfileContext } from "../lib/businessProfiles";
 import { logMessage, getRelevantMessages } from "../lib/messageLog";
 import {
   looksLikeCorrection,
@@ -107,6 +108,21 @@ async function buildGoalHistoryBlock(userId: string): Promise<string> {
 
 function normalizeQueryText(message: string) {
   return message.toLowerCase().replace(/[^a-z0-9\s?]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// normalizeQueryText strips apostrophes down to a bare space rather than
+// removing them, so "it's"/"isn't"/"don't" survive as "it s"/"isn t"/"don t"
+// — two tokens, not one. The short yes/no-style classifiers below need to
+// match these as single words, so re-join the common ones before running
+// any keyword checks against normalized text.
+function rejoinContractions(normalized: string): string {
+  return normalized
+    .replace(/\bit\s+s\b/g, "its")
+    .replace(/\bisn\s+t\b/g, "isnt")
+    .replace(/\bdoesn\s+t\b/g, "doesnt")
+    .replace(/\bdon\s+t\b/g, "dont")
+    .replace(/\bthat\s+s\b/g, "thats")
+    .replace(/\bwhat\s+s\b/g, "whats");
 }
 
 // A specific number proposed inside a category that has real benchmark
@@ -378,33 +394,22 @@ function isPureContextStatement(message: string): boolean {
   return !questionish;
 }
 
-async function getStoredBusinessContext(sessionId: string): Promise<string | undefined> {
-  try {
-    const [row] = await db.select().from(settingsTable).where(eq(settingsTable.sessionId, sessionId)).limit(1);
-    return row?.venusBusinessContext || undefined;
-  } catch {
-    // DB unavailable shouldn't break the chat — just behave as if nothing
-    // is stored yet, which falls back to the existing per-session behavior.
-    return undefined;
-  }
+// Business context now lives on the founder's ACTIVE business_profiles row
+// (see businessProfiles.ts) rather than one flat settings.venusBusinessContext
+// blob per account — that flat-blob design was what made switching to a
+// "new" business destructive: there was only ever one slot, so pivoting away
+// from a business and back to it later meant re-describing it from scratch.
+// getOrCreateActiveProfile auto-migrates a founder's legacy blob into their
+// first profile the first time it runs for them, so this needs no separate
+// data migration. These two helpers just read/write the already-resolved
+// active profile passed in by the route, rather than re-querying it.
+function getStoredBusinessContext(profile: BusinessProfile | null): string | undefined {
+  return profile?.contextBlob || undefined;
 }
 
-async function saveStoredBusinessContext(sessionId: string, context: string): Promise<void> {
-  try {
-    const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.sessionId, sessionId)).limit(1);
-    if (existing) {
-      await db.update(settingsTable)
-        .set({ venusBusinessContext: context, venusBusinessContextUpdatedAt: new Date(), updatedAt: new Date() })
-        .where(eq(settingsTable.sessionId, sessionId));
-    } else {
-      await db.insert(settingsTable)
-        .values({ sessionId, venusBusinessContext: context, venusBusinessContextUpdatedAt: new Date() })
-        .onConflictDoNothing({ target: settingsTable.sessionId });
-    }
-  } catch {
-    // Best-effort persistence — if this fails, Venus just falls back to
-    // asking for context again next time rather than crashing the request.
-  }
+async function saveStoredBusinessContext(profile: BusinessProfile | null, context: string): Promise<void> {
+  if (!profile) return; // no active profile (DB hiccup) — best-effort, matches every other degrade-gracefully path in this file
+  await updateProfileContext(profile.id, context);
 }
 
 // ---- Pending "same business or new?" confirmation state ----
@@ -452,16 +457,71 @@ async function setPendingContextConfirmation(sessionId: string, pending: boolean
   }
 }
 
+// ---- Pending "what does the new business do?" state ----
+// Set the moment a founder confirms "new" to the same-or-new question above.
+// The VERY NEXT message is checked against a founder's OTHER existing
+// business profiles (see findMatchingProfile) before deciding whether to
+// restore one or create a fresh one — without this flag, that message would
+// just flow through as an ordinary context statement with no chance to
+// detect "this is actually the coffee business you told me about last week."
+
+async function getPendingNewProfileIntake(sessionId: string): Promise<boolean> {
+  try {
+    const [row] = await db.select().from(settingsTable).where(eq(settingsTable.sessionId, sessionId)).limit(1);
+    return row?.pendingNewProfileIntake ?? false;
+  } catch {
+    return false;
+  }
+}
+
+async function setPendingNewProfileIntake(sessionId: string, pending: boolean): Promise<void> {
+  try {
+    const [existing] = await db.select().from(settingsTable).where(eq(settingsTable.sessionId, sessionId)).limit(1);
+    if (existing) {
+      await db.update(settingsTable)
+        .set({ pendingNewProfileIntake: pending, updatedAt: new Date() })
+        .where(eq(settingsTable.sessionId, sessionId));
+    } else if (pending) {
+      await db.insert(settingsTable)
+        .values({ sessionId, pendingNewProfileIntake: true })
+        .onConflictDoNothing({ target: settingsTable.sessionId });
+    }
+  } catch {
+    // Best-effort — if this fails, the next message is just treated as an
+    // ordinary context statement instead of checked against existing
+    // profiles, which degrades to the old (pre-multi-profile) behavior
+    // rather than breaking the response.
+  }
+}
+
 // Classifies a short reply to the "same business or new?" question. Kept
 // deliberately narrow and literal (not a general sentiment classifier) —
 // this only ever runs when pendingContextConfirmation is true, so it is
 // answering one specific yes/no-shaped question, not parsing arbitrary text.
 function classifyContextConfirmationReply(message: string): "new" | "same" | "unclear" {
-  const normalized = normalizeQueryText(message);
-  if (/^\s*(new|different|new one|it'?s new|different business|new business|different one|separate business)\s*[.!]?\s*$/i.test(normalized)) {
+  const normalized = rejoinContractions(normalizeQueryText(message));
+
+  // Negated-same phrasing means "new" — check first, since these phrases
+  // contain the literal word "same"/"related" that the same-check below
+  // would otherwise match on.
+  if (/\bnot\s+(the\s+)?same\b|\bisnt\s+(the\s+)?same\b|\bnot\s+related\b/.test(normalized)) {
     return "new";
   }
-  if (/^\s*(same|same one|same business|it'?s the same|continuing|still the same)\s*[.!]?\s*$/i.test(normalized)) {
+
+  // FIX: this was originally anchored to the ENTIRE message (^...$), so it
+  // only ever matched a bare "new"/"same" or one fixed trailing phrase.
+  // Real replies to this question are rarely that terse — "same business,
+  // just answer the question", "yes it's the same one", "forget any earlier
+  // context, this is a brand new company" — all fell through as "unclear"
+  // and silently re-asked the identical question forever (confirmed via
+  // live testing; see the field-test report). Matching these phrases
+  // anywhere in the reply is safe specifically because this classifier only
+  // ever runs while this one yes/no-shaped question is pending — it is
+  // still answering one narrow question, not parsing open-ended sentiment.
+  if (/\bnew\b|\bdifferent\b|\bseparate business\b|\banother (business|company|one)\b|\bstarting (over|fresh)\b|\bforget (the |any )?(old|earlier|previous)\b/.test(normalized)) {
+    return "new";
+  }
+  if (/\bsame\b|\bcontinuing\b|\brelated\b/.test(normalized)) {
     return "same";
   }
   return "unclear";
@@ -546,9 +606,20 @@ async function setPendingFactContradiction(sessionId: string, value: PendingFact
 }
 
 function classifyContradictionResolutionReply(message: string): "update" | "both" | "unclear" {
-  const normalized = normalizeQueryText(message);
-  if (/\b(update|correct|change it|replace|yes update)\b/i.test(normalized)) return "update";
-  if (/\b(both|both true|still true|no both|keep both)\b/i.test(normalized)) return "both";
+  const normalized = rejoinContractions(normalizeQueryText(message));
+
+  // FIX: the "update" side only recognized a handful of exact phrases
+  // ("update", "change it", "replace") — a real reply like "that changed,
+  // forget the old one, only the coffee business is real" matched none of
+  // them and silently re-asked the identical question (confirmed via live
+  // testing). Added the common natural ways to say "the old one is wrong
+  // now" without loosening the "both true" side.
+  if (/\b(update|updated|correct|corrected|change it|changed|replace|replaced|outdated)\b|\bno longer\b|\bnot anymore\b|\bforget (the |that )?(old|earlier|previous)\b/.test(normalized)) {
+    return "update";
+  }
+  if (/\b(both|both true|still true|keep both|both real|both are true)\b|\bno both\b/.test(normalized)) {
+    return "both";
+  }
   return "unclear";
 }
 
@@ -905,13 +976,23 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       return res.json(buildFallbackVenusResponse(body.data.message));
     }
 
+    // Resolved once per request and threaded through everything below —
+    // which of a founder's (possibly several) businesses this conversation
+    // is currently about. Auto-provisions a first profile from legacy
+    // single-blob state the first time this runs for a given founder (see
+    // businessProfiles.ts), so nobody is reset to nothing by this existing.
+    const activeProfile = await getOrCreateActiveProfile(sessionId);
+
     // Business context now persists in three layers, checked in order of
     // freshness: (1) context explicitly passed on this request, (2) context
     // mentioned earlier in the CURRENT chat session, (3) context saved to the
     // database from ANY previous session — this is what makes Venus remember
     // the business across brand new chats instead of only within one session.
+    // Layer 3 is scoped to whichever business profile is currently active,
+    // not the whole account, so switching profiles actually changes what's
+    // remembered instead of blending every business together.
     const sessionHistoryContext = deriveContextFromHistory(body.data.sessionHistory);
-    const storedContext = await getStoredBusinessContext(sessionId);
+    const storedContext = getStoredBusinessContext(activeProfile);
 
     // MUST run before every other classifier below. If the previous turn was
     // "is this the same business or a new one?", this message is the answer
@@ -925,7 +1006,15 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       const reply = classifyContextConfirmationReply(body.data.message);
       if (reply === "new") {
         await setPendingContextConfirmation(sessionId, false);
-        await saveStoredBusinessContext(sessionId, ""); // clear stale context — do NOT let it leak into the new business's answers
+        // FIX: this used to destructively clear the context blob AND every
+        // structured company_facts row right here, on the spot — correct for
+        // a genuine one-time pivot, but it meant a founder juggling 2-3 real
+        // businesses lost everything Vera knew the moment they switched away
+        // from one, even temporarily. We don't yet know what the "new"
+        // business actually is, so the decision (restore an existing profile
+        // vs. create a genuinely new one) now waits for the founder's answer
+        // to buildFreshContextIntake() below — see awaitingNewProfileIntake.
+        await setPendingNewProfileIntake(sessionId, true);
         return res.json(buildFreshContextIntake());
       }
       if (reply === "same") {
@@ -938,6 +1027,44 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         // guessing, so we never silently pick a side.
         return res.json(buildBusinessContextConfirmation());
       }
+    }
+
+    // ---- Resolving "what does the new business do?" against existing profiles ----
+    // Set one turn ago, the moment the founder confirmed "new" above. This
+    // message is the answer to buildFreshContextIntake()'s question — check
+    // it against the founder's OTHER existing profiles before deciding
+    // whether to restore one (no data lost, no re-describing) or create a
+    // genuinely new one. Skipped (not awaited at all) when awaitingConfirmation
+    // fired this turn, since that path only just NOW asked the question this
+    // block would otherwise try to answer.
+    const awaitingNewProfileIntake = !awaitingConfirmation && (await getPendingNewProfileIntake(sessionId));
+    if (awaitingNewProfileIntake) {
+      await setPendingNewProfileIntake(sessionId, false);
+      // Guard against a founder ignoring the intake question and asking
+      // something else instead ("actually nvm, what's my biggest risk") —
+      // only treat this as a business description if it actually reads like
+      // one; otherwise fall through to ordinary handling with whatever
+      // profile is still active rather than creating a nonsense profile
+      // named after an unrelated question.
+      if (isPureContextStatement(body.data.message)) {
+        const matched = await findMatchingProfile(sessionId, body.data.message, activeProfile?.id ?? undefined);
+        if (matched) {
+          await setActiveProfile(sessionId, matched.id);
+          return res.json({
+            summary: `This sounds like **${matched.name}** — the business you told me about before. Switching back to it instead of starting fresh. What would you like help with?`,
+            cards: [],
+            contextAcknowledged: true,
+          });
+        }
+        const newProfile = await createProfile(sessionId, body.data.message);
+        if (newProfile) {
+          await setActiveProfile(sessionId, newProfile.id);
+          addCompanyFact({ userId: sessionId, factText: body.data.message, sourceType: "chat", profileId: newProfile.id }).catch(() => {});
+        }
+        return res.json(buildContextAcknowledgment(body.data.message));
+      }
+      // Not a business description — leave the active profile as-is and let
+      // the message fall through to normal handling below.
     }
 
     // ---- Item 4: pending fact-contradiction confirmation ----
@@ -954,6 +1081,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           factText: pendingContradiction.newFactText,
           factType: pendingContradiction.factType,
           sourceType: pendingContradiction.sourceType,
+          profileId: activeProfile?.id ?? null,
         });
         return res.json({ summary: "Got it — updated.", cards: [], contextAcknowledged: true });
       }
@@ -964,6 +1092,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           factText: pendingContradiction.newFactText,
           factType: pendingContradiction.factType,
           sourceType: pendingContradiction.sourceType,
+          profileId: activeProfile?.id ?? null,
         });
         return res.json({ summary: "Got it — I'll keep both as true.", cards: [], contextAcknowledged: true });
       }
@@ -1048,7 +1177,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       const combinedContext = storedContext && !looksLikeDifferentBusiness(storedContext, body.data.message)
         ? `${storedContext} | ${body.data.message}`
         : body.data.message;
-      await saveStoredBusinessContext(sessionId, combinedContext);
+      await saveStoredBusinessContext(activeProfile, combinedContext);
 
       // Before logging this as a new structured fact, check whether it
       // contradicts an already-stored one (see companyMemory.findPotentialContradiction)
@@ -1056,7 +1185,9 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       // overwritten or silently duplicated. This IS blocking (one cheap DB
       // read), unlike the fire-and-forget log below, because the founder
       // needs an answer this turn if there's a real conflict to resolve.
-      const conflict = await findPotentialContradiction(sessionId, "general", body.data.message);
+      // Scoped to the active profile so a detail about THIS business is
+      // never flagged as "contradicting" an unrelated one.
+      const conflict = await findPotentialContradiction(sessionId, "general", body.data.message, activeProfile?.id);
       if (conflict) {
         await setPendingFactContradiction(sessionId, { oldFactId: conflict.id, newFactText: body.data.message, factType: "general", sourceType: "chat" });
         return res.json({
@@ -1070,7 +1201,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       // its own structured fact — see companyMemory.ts for why this exists
       // alongside the blob rather than replacing it. Fire-and-forget:
       // addCompanyFact never throws, but this must never delay the response.
-      addCompanyFact({ userId: sessionId, factText: body.data.message, sourceType: "chat" }).catch(() => {});
+      addCompanyFact({ userId: sessionId, factText: body.data.message, sourceType: "chat", profileId: activeProfile?.id ?? null }).catch(() => {});
       return res.json(buildContextAcknowledgment(combinedContext));
     }
 
@@ -1084,8 +1215,8 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // came from businessContext or sessionHistory rather than the DB. Persist
     // it now so it survives into future sessions too.
     if (effectiveBusinessContext && !storedContext) {
-      await saveStoredBusinessContext(sessionId, effectiveBusinessContext);
-      addCompanyFact({ userId: sessionId, factText: effectiveBusinessContext, sourceType: "chat" }).catch(() => {});
+      await saveStoredBusinessContext(activeProfile, effectiveBusinessContext);
+      addCompanyFact({ userId: sessionId, factText: effectiveBusinessContext, sourceType: "chat", profileId: activeProfile?.id ?? null }).catch(() => {});
     }
 
     // Classify BEFORE running any of the expensive retrieval/web-search work
@@ -1210,7 +1341,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // goals. Skipped on a narrow query, same reasoning as ownDecisions/
     // precedents above: a quick follow-up doesn't need the founder's full
     // track record re-injected.
-    const companyFacts = isNarrowScope ? [] : await getActiveCompanyFacts(sessionId, 8);
+    const companyFacts = isNarrowScope ? [] : await getActiveCompanyFacts(sessionId, 8, activeProfile?.id);
     const companyFactsBlock = companyFacts.length > 0
       ? `STRUCTURED FACTS VENUS HAS LEARNED ABOUT THIS FOUNDER'S BUSINESS (individually captured and correctable, higher-confidence than the freeform Business Context line below; facts tagged "user-reported" are the founder's own claim — reason from them but never restate them back as independently established fact):\n${formatCompanyFactsForPrompt(companyFacts)}`
       : "";

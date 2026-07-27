@@ -801,7 +801,7 @@ export function VenusPage() {
             heading; the destinations below are named as destinations. */}
         <div className="mb-[18px]" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
           <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={pendingQueueCount} />
-          <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/venus/workflows')} />
+          <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/vera/workflows')} />
           <div className="vera-label" style={{ padding: '10px 8px 4px' }}>Show above chat</div>
           <SidebarToggleRow icon={Target} label="Goal panel" active={showGoalPanel} onClick={toggleGoalPanel} />
           <SidebarToggleRow icon={MapIcon} label="Roadmap panel" active={showRoadmap} onClick={toggleRoadmap} />
@@ -874,7 +874,7 @@ export function VenusPage() {
         {/* Bottom Settings */}
         <div style={{ borderTop: '1px solid var(--v7-border)', marginTop: '12px', paddingTop: '14px' }}>
           <button
-            onClick={() => navigate('/venus/goals')}
+            onClick={() => navigate('/vera/goals')}
             className="w-full flex items-center gap-[9px] text-[13px] font-medium transition-colors mb-1"
             style={{ color: 'var(--v7-text-dim)', paddingLeft: '8px' }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--v7-text)')}
@@ -884,7 +884,7 @@ export function VenusPage() {
             All goals
           </button>
           <button
-            onClick={() => navigate('/venus/decisions')}
+            onClick={() => navigate('/vera/decisions')}
             className="w-full flex items-center gap-[9px] text-[13px] font-medium transition-colors mb-1"
             style={{ color: 'var(--v7-text-dim)', paddingLeft: '8px' }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--v7-text)')}
@@ -1528,7 +1528,14 @@ function confidenceState(confidence?: 'verified' | 'exploratory', contradictions
     return { label: 'Split precedent', color: 'var(--amber)', tone: 'warn' as const };
   }
   if (confidence === 'exploratory') {
-    return { label: 'Exploratory — no precedent match', color: 'var(--amber)', tone: 'warn' as const };
+    // FIX: this used to hardcode "— no precedent match" unconditionally,
+    // but "exploratory" only means the STRONG/verified bar wasn't cleared —
+    // a moderate-tier match (or the founder's own past decisions) can still
+    // be attached and listed right below this badge, which made it flatly
+    // contradict its own evidence list ("no precedent match" next to a
+    // "3 precedents" chip and named companies). The actual grounding basis
+    // is already stated honestly in the `note` text below this badge.
+    return { label: 'Exploratory', color: 'var(--amber)', tone: 'warn' as const };
   }
   return { label: 'Verified precedent', color: 'var(--mint)', tone: 'ok' as const };
 }
@@ -1559,14 +1566,20 @@ function EvidenceStrip({
   return (
     <div className="vera-block mt-3" style={{ padding: '12px 14px' }}>
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+        {/* FIX: this whole strip was the smallest text on the page (10px,
+            same as .vera-label below) despite being the one element meant to
+            invite scrutiny of an answer. Bumped to 12px locally via inline
+            style rather than raising the shared .vera-label token, which is
+            reused across ~30 other spots in the card system that weren't
+            part of this review. */}
         {state && (
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider" style={{ color: state.color }}>
+          <span className="inline-flex items-center gap-1.5 font-mono uppercase tracking-wider" style={{ color: state.color, fontSize: '12px' }}>
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: state.color }} />
             {state.label}
           </span>
         )}
         {precedents.length > 0 && (
-          <span className="vera-label">
+          <span className="vera-label" style={{ fontSize: '12px' }}>
             {precedents.length} precedent{precedents.length === 1 ? '' : 's'}
             {ownDecisions.length > 0 ? ` · ${ownDecisions.length} of your past decisions` : ''}
           </span>
@@ -1576,6 +1589,7 @@ function EvidenceStrip({
             type="button"
             onClick={() => setOpen((v) => !v)}
             className="vera-label ml-auto flex items-center gap-1 hover:text-[var(--text)]"
+            style={{ fontSize: '12px' }}
             aria-expanded={open}
           >
             {open ? 'Hide basis' : 'Show basis'}
@@ -1597,7 +1611,7 @@ function EvidenceStrip({
           {note && <p className="text-[12.5px] leading-relaxed text-[var(--muted-text)]">{note}</p>}
           {precedents.length > 0 && (
             <div>
-              <div className="vera-label mb-1">Precedents used</div>
+              <div className="vera-label mb-1" style={{ fontSize: '12px' }}>Precedents used</div>
               <div className="flex flex-wrap gap-1.5">
                 {precedents.map((ref) => (
                   <span
@@ -1613,7 +1627,7 @@ function EvidenceStrip({
           )}
           {ownDecisions.length > 0 && (
             <div>
-              <div className="vera-label mb-1">Your past decisions</div>
+              <div className="vera-label mb-1" style={{ fontSize: '12px' }}>Your past decisions</div>
               <ul className="space-y-1">
                 {ownDecisions.map((ref) => (
                   <li key={`${ref.type}-${ref.id}`} className="text-[12px] text-[var(--muted-text)] leading-snug">

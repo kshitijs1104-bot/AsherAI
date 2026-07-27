@@ -308,14 +308,14 @@ export function TodayCard() {
     if (!brief) return [];
     const items: { key: string; label: string; text: string; onClick?: () => void }[] = [];
     if (brief.topDecision) {
-      items.push({ key: 'decision', label: 'Decision', text: brief.topDecision.query, onClick: () => navigate('/venus/decisions') });
+      items.push({ key: 'decision', label: 'Decision', text: brief.topDecision.query, onClick: () => navigate('/vera/decisions') });
     }
     if (brief.biggestRisk) {
       items.push({
         key: 'risk',
         label: brief.biggestRisk.risk === 'off_track' ? 'Off track' : 'At risk',
         text: brief.biggestRisk.title,
-        onClick: () => navigate('/venus/goals'),
+        onClick: () => navigate('/vera/goals'),
       });
     }
     if (brief.blockedTask) {

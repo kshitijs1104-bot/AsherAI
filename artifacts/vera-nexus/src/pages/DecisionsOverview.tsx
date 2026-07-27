@@ -117,7 +117,7 @@ export function DecisionsOverview() {
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <button
-            onClick={() => navigate('/venus')}
+            onClick={() => navigate('/vera')}
             className="flex items-center gap-1.5 text-[13px] font-medium"
             style={{ color: 'var(--v7-text-mute)' }}
           >
@@ -132,7 +132,7 @@ export function DecisionsOverview() {
           <h1 className="text-[19px] font-extrabold">Decisions</h1>
         </div>
         <p className="text-[13px] mb-5" style={{ color: 'var(--v7-text-mute)' }}>
-          Everything Venus has recommended, and what happened when you acted on it.
+          Everything Vera has recommended, and what happened when you acted on it.
         </p>
 
         <div className="flex items-center gap-1.5 mb-2 flex-wrap">
@@ -161,7 +161,7 @@ export function DecisionsOverview() {
           <div className="text-[13px] rounded-xl p-4 mt-4" style={{ background: 'var(--v7-bg-raised)', color: 'var(--v7-text-mute)' }}>
             {isArchivedView
               ? "Nothing archived yet — the archive icon on any decision moves it here without deleting it."
-              : 'Nothing here yet — a decision or roadmap card Venus gives you in any chat gets logged here automatically.'}
+              : 'Nothing here yet — a decision or roadmap card Vera gives you in any chat gets logged here automatically.'}
           </div>
         )}
 

@@ -294,7 +294,7 @@ function SubTaskList({ subTasks, onResolved }: { subTasks: GoalWithProgress['sub
   if (subTasks.length === 0) {
     return (
       <div className="text-[12px] mt-3" style={{ color: 'var(--v7-text-mute)' }}>
-        No roadmap items yet — the next decision or roadmap card Venus gives you in this chat becomes evidence here automatically.
+        No roadmap items yet — the next decision or roadmap card Vera gives you in this chat becomes evidence here automatically.
       </div>
     );
   }
@@ -413,7 +413,7 @@ function SetGoalForm({ onSubmit, onCancel, submitting, initial }: {
         onChange={(e) => setDeadline(e.target.value)}
       />
       <div className="text-[11px] mb-3" style={{ color: 'var(--v7-text-mute)' }}>
-        All four are required — without a concrete metric, value, and deadline Venus can't reason about urgency or trade-offs in this chat.
+        All four are required — without a concrete metric, value, and deadline Vera can't reason about urgency or trade-offs in this chat.
       </div>
       <div className="flex gap-2">
         <button
@@ -547,7 +547,7 @@ export function GoalPanel({ serverChatId, onRequireServerChat }: GoalPanelProps)
       {!goal && !editing && (
         <div>
           <div className="text-[12px] mb-2" style={{ color: 'var(--v7-text-mute)' }}>
-            Give this chat one named goal — Venus will weigh urgency, value, and trade-offs against it in every answer here.
+            Give this chat one named goal — Vera will weigh urgency, value, and trade-offs against it in every answer here.
           </div>
           <button
             onClick={() => setEditing(true)}

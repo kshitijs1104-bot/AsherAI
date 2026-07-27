@@ -18,6 +18,11 @@ export interface AddCompanyFactInput {
   claimType?: "style_preference" | "user_reported_belief" | "verified";
   sourceType: "onboarding" | "chat" | "checkin" | "decision" | "manual";
   confidence?: number;
+  // Which business_profiles row this fact belongs to (see
+  // businessProfiles.ts). Only meaningful for entryKind "business_fact" —
+  // pass null/omit for preferences, which apply across every business a
+  // founder has.
+  profileId?: number | null;
 }
 
 export async function addCompanyFact(input: AddCompanyFactInput): Promise<CompanyFact | null> {
@@ -34,6 +39,7 @@ export async function addCompanyFact(input: AddCompanyFactInput): Promise<Compan
         claimType: input.claimType || "user_reported_belief",
         sourceType: input.sourceType,
         confidence: input.confidence ?? null,
+        profileId: input.profileId ?? null,
       })
       .returning();
     return row ?? null;
@@ -47,17 +53,27 @@ export async function addCompanyFact(input: AddCompanyFactInput): Promise<Compan
 // explicitly deleted by the founder. Ordered most recent first so a
 // prompt-context caller taking a top-N slice gets the freshest facts rather
 // than an arbitrary insertion-order slice.
-export async function getActiveCompanyFacts(userId: string, limit = 20): Promise<CompanyFact[]> {
+//
+// profileId scopes this to ONE business (see businessProfiles.ts) — without
+// it, a founder with 2-3 businesses would get every business's facts blended
+// into one prompt regardless of which one the current chat is actually
+// about. Omitted/null falls back to the pre-multi-profile behavior (every
+// business_fact row for this user) so a caller that hasn't looked up an
+// active profile yet still degrades to something reasonable rather than
+// silently returning nothing.
+export async function getActiveCompanyFacts(userId: string, limit = 20, profileId?: number | null): Promise<CompanyFact[]> {
   try {
+    const conditions = [
+      eq(companyFactsTable.userId, userId),
+      isNull(companyFactsTable.supersededBy),
+      isNull(companyFactsTable.deletedAt),
+      eq(companyFactsTable.entryKind, "business_fact"),
+    ];
+    if (profileId != null) conditions.push(eq(companyFactsTable.profileId, profileId));
     return await db
       .select()
       .from(companyFactsTable)
-      .where(and(
-        eq(companyFactsTable.userId, userId),
-        isNull(companyFactsTable.supersededBy),
-        isNull(companyFactsTable.deletedAt),
-        eq(companyFactsTable.entryKind, "business_fact"),
-      ))
+      .where(and(...conditions))
       .orderBy(desc(companyFactsTable.createdAt))
       .limit(limit);
   } catch (err) {
@@ -164,22 +180,29 @@ function extractNumbers(text: string): string[] {
 // isn't asked and the fact is added normally; the cost of over-triggering
 // this on ordinary elaboration would be worse, since it would nag the
 // founder on every new detail about the same subject).
+//
+// profileId scopes candidates to ONE business — without it, mentioning a
+// detail about business B could get flagged as "contradicting" a fact from
+// unrelated business A purely because both use generic overlapping words.
 export async function findPotentialContradiction(
   userId: string,
   factType: string,
   newFactText: string,
+  profileId?: number | null,
 ): Promise<CompanyFact | null> {
   try {
+    const conditions = [
+      eq(companyFactsTable.userId, userId),
+      eq(companyFactsTable.factType, factType),
+      eq(companyFactsTable.entryKind, "business_fact"),
+      isNull(companyFactsTable.supersededBy),
+      isNull(companyFactsTable.deletedAt),
+    ];
+    if (profileId != null) conditions.push(eq(companyFactsTable.profileId, profileId));
     const candidates = await db
       .select()
       .from(companyFactsTable)
-      .where(and(
-        eq(companyFactsTable.userId, userId),
-        eq(companyFactsTable.factType, factType),
-        eq(companyFactsTable.entryKind, "business_fact"),
-        isNull(companyFactsTable.supersededBy),
-        isNull(companyFactsTable.deletedAt),
-      ))
+      .where(and(...conditions))
       .orderBy(desc(companyFactsTable.createdAt))
       .limit(20);
 

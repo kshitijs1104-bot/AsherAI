@@ -9,7 +9,7 @@ export function Topbar() {
 
   const handleEnterprise = () => {
     setTier('Enterprise');
-    navigate(isEnterpriseUnlocked() ? '/venus' : getNextGateRoute());
+    navigate(isEnterpriseUnlocked() ? '/vera' : getNextGateRoute());
   };
 
   const handlePersonal = () => {

@@ -31,7 +31,7 @@ export function PlanGate() {
   const handleContinue = () => {
     setGateStage(selected === 'free' ? 'complete' : 'plan');
     if (selected === 'free') {
-      navigate('/venus');
+      navigate('/vera');
     } else {
       navigate('/enterprise/checkout');
     }

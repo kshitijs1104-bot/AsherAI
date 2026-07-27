@@ -10,7 +10,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // collapse both global sidebars there so the feed uses the entire screen width.
   const isSight = location === '/sight';
   const showLeftSidebar = !isSight;
-  const showRightSidebar = !['/venus', '/settings', '/crypt', '/sight'].includes(location);
+  const showRightSidebar = !['/vera', '/venus', '/settings', '/crypt', '/sight'].includes(location);
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col dark">

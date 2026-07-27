@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod/v4";
 import { requireAuth, requireUserId } from "../middlewares/auth";
 import { getActiveCompanyFacts, addCompanyFact, deleteCompanyFact } from "../lib/companyMemory";
+import { getOrCreateActiveProfile } from "../lib/businessProfiles";
 
 const router = Router();
 
@@ -37,7 +38,12 @@ router.post("/company-facts", requireAuth, async (req, res) => {
 
   try {
     const userId = requireUserId(req);
-    const fact = await addCompanyFact({ userId, ...body.data });
+    // Scoped to whichever business is currently active (see
+    // businessProfiles.ts) — without this, a Morning Check-In fact would be
+    // saved with no profile at all and silently invisible to chat prompts,
+    // which only pull facts for the founder's active profile.
+    const activeProfile = await getOrCreateActiveProfile(userId);
+    const fact = await addCompanyFact({ userId, ...body.data, profileId: activeProfile?.id ?? null });
     if (!fact) return res.status(500).json({ error: "Failed to save fact" });
     return res.status(201).json({ fact });
   } catch (err) {

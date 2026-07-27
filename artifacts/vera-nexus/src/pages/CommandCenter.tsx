@@ -312,15 +312,15 @@ function outboundTargetFor(item: QueueItem): string | null {
 // Returns null for items whose resolution genuinely is just "I've seen
 // this" (a plain insight, a read alert) — those keep the old tick-off.
 function resolutionFor(item: QueueItem): { label: string; href: string } | null {
-  if (item.type === 'welcome') return { label: 'Set up workflows', href: '/venus/workflows' };
-  if (item.type === 'automation_suggestion') return { label: 'Set up workflow', href: '/venus/workflows' };
-  if (item.type === 'goal_risk') return { label: 'Review goal', href: '/venus/goals' };
-  if (item.type === 'decision_followup') return { label: 'Log outcome', href: '/venus/decisions' };
+  if (item.type === 'welcome') return { label: 'Set up workflows', href: '/vera/workflows' };
+  if (item.type === 'automation_suggestion') return { label: 'Set up workflow', href: '/vera/workflows' };
+  if (item.type === 'goal_risk') return { label: 'Review goal', href: '/vera/goals' };
+  if (item.type === 'decision_followup') return { label: 'Log outcome', href: '/vera/decisions' };
 
   // "Reconnect Slack"-shaped items: the fix lives on the Workflows page,
   // which is where every connector is actually linked from.
   if (item.type === 'connector_error' || item.type === 'connector_setup') {
-    return { label: 'Fix connection', href: '/venus/workflows' };
+    return { label: 'Fix connection', href: '/vera/workflows' };
   }
 
   return null;

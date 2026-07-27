@@ -1,4 +1,4 @@
-import { pgTable, serial, text, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -20,8 +20,26 @@ export const settingsTable = pgTable("settings", {
   // Venus remember "I'm building a B2B SaaS for clinics in India" across
   // every future question — in this session and in brand new sessions —
   // without asking again, until the user starts a genuinely different idea.
+  //
+  // LEGACY as of business_profiles: this column is now only the seed value
+  // getOrCreateActiveProfile reads ONCE per founder to auto-provision their
+  // first profile (see businessProfiles.ts) so existing accounts aren't
+  // reset to nothing. The live source of truth afterward is
+  // business_profiles.contextBlob for whichever profile activeProfileId
+  // points at — this column is no longer written to on that path.
   venusBusinessContext: text("venus_business_context"),
   venusBusinessContextUpdatedAt: timestamp("venus_business_context_updated_at"),
+  // Which business_profiles row is "the current business" for this founder
+  // right now. Null until getOrCreateActiveProfile first runs for them.
+  activeProfileId: integer("active_profile_id"),
+  // Set when the founder just confirmed "new" to "is this the same business
+  // or a new one?" — the description they give in their VERY NEXT message is
+  // checked against their other existing profiles (see findMatchingProfile)
+  // before deciding whether to restore one or create a new one, instead of
+  // always destructively starting from zero. Cleared as soon as that next
+  // message is handled, whether or not it turned out to actually be a
+  // business description (see isPureContextStatement guard in ai.ts).
+  pendingNewProfileIntake: boolean("pending_new_profile_intake").notNull().default(false),
   // Set when Venus asks "is this the same business or a new one?" (see
   // buildBusinessContextConfirmation in ai.ts) so the VERY NEXT message in
   // this session can be interpreted as the answer to that specific question,

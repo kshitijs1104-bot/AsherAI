@@ -13,7 +13,7 @@ export function CheckoutGate() {
     setProcessing(true);
     setTimeout(() => {
       completeGate();
-      navigate('/venus');
+      navigate('/vera');
     }, 1800);
   };
 

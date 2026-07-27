@@ -250,7 +250,7 @@ export function WorkflowsPage() {
       <div className="relative max-w-2xl mx-auto px-6 py-8" style={{ zIndex: 1 }}>
         <div className="flex items-center justify-between mb-6">
           <button
-            onClick={() => navigate('/venus')}
+            onClick={() => navigate('/vera')}
             className="flex items-center gap-1.5 text-[13px] font-medium"
             style={{ color: 'var(--v7-text-mute)' }}
           >

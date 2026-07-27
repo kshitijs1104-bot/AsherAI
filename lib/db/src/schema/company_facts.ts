@@ -27,6 +27,15 @@ export const companyFactsTable = pgTable(
     id: serial("id").primaryKey(),
     userId: text("user_id").notNull(),
 
+    // Which business_profiles row this fact belongs to. Only meaningful for
+    // entryKind "business_fact" — a "preference" (style rule) applies across
+    // every business a founder has, so those rows are left unscoped (null).
+    // Null on a business_fact row means it predates multi-profile support;
+    // getOrCreateActiveProfile backfills these onto a founder's first
+    // auto-provisioned profile the first time it runs for them, so nothing
+    // captured before this column existed is silently orphaned.
+    profileId: integer("profile_id"),
+
     factText: text("fact_text").notNull(),
     // Loose categorical tag for retrieval filtering as the fact log grows —
     // "general" is the safe default for anything not confidently classified,

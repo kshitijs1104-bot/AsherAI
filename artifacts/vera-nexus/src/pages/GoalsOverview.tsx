@@ -88,7 +88,7 @@ export function GoalsOverview() {
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <button
-            onClick={() => navigate('/venus')}
+            onClick={() => navigate('/vera')}
             className="flex items-center gap-1.5 text-[13px] font-medium"
             style={{ color: 'var(--v7-text-mute)' }}
           >
@@ -110,7 +110,7 @@ export function GoalsOverview() {
 
         {!isLoading && goals.length === 0 && (
           <div className="text-[13px] rounded-xl p-4" style={{ background: 'var(--v7-bg-raised)', color: 'var(--v7-text-mute)' }}>
-            No goals set yet. Open a chat and set one — Venus will weigh urgency, value, and trade-offs against it in every answer there.
+            No goals set yet. Open a chat and set one — Vera will weigh urgency, value, and trade-offs against it in every answer there.
           </div>
         )}
 

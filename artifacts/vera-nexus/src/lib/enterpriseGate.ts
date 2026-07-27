@@ -87,6 +87,6 @@ export function getNextGateRoute(): string {
   if (!stage || stage === 'signup') return '/enterprise/signup';
   if (stage === 'onboarding') return '/enterprise/onboarding';
   if (stage === 'plan') return '/enterprise/plan';
-  if (stage === 'complete') return '/venus';
+  if (stage === 'complete') return '/vera';
   return '/enterprise/signup';
 }

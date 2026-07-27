@@ -125,12 +125,32 @@ function computeOutcomeHistoryFactor(ownDecisions: OwnDecisionMatch[]): number {
 }
 
 function buildEvidenceRefs(retrieval: RetrievalResult, ownDecisions: OwnDecisionMatch[]): EvidenceRef[] {
-  const precedentRefs: EvidenceRef[] = retrieval.precedents.map((m) => ({
-    type: "precedent",
-    id: m.precedent.id,
-    label: m.precedent.companyName,
-    weight: m.score,
-  }));
+  // FIX: previously included every retrieved precedent regardless of tier,
+  // so a "moderate" match — retrieval.ts's own deliberately-relaxed pass,
+  // kept loose so legitimate strategy questions don't lose all grounding
+  // (see .agents/memory/retrieval-gating-lexical-overlap.md) — got named in
+  // the UI as a "PRECEDENTS USED" citation with the same visual confidence
+  // as a real match. Confirmed live: "Spoke" was cited as evidence for both
+  // an unrelated company-failure question and a completely different
+  // Slack-message-drafting request, and "Ask Jeeves"/"Notion AI" were cited
+  // for a DTC coffee-subscription business — none topically related. Those
+  // are real precedent rows and a real (weak) lexical score, just not
+  // strong enough to defensibly name as "what grounded this answer." The
+  // weak match still reaches the model as soft background context (see
+  // precedentBlock in ai.ts), so reasoning quality is unaffected — only
+  // what's paraded to the user as a citation changes. "strong" tier already
+  // requires clearing MATCH_THRESHOLD + MIN_RAW_OVERLAP + a 3-precedent
+  // floor (see retrieval.ts), so this is a presentation-layer change only —
+  // it does not touch retrieval scoring/thresholds at all.
+  const precedentRefs: EvidenceRef[] =
+    retrieval.tier === "strong"
+      ? retrieval.precedents.map((m) => ({
+          type: "precedent" as const,
+          id: m.precedent.id,
+          label: m.precedent.companyName,
+          weight: m.score,
+        }))
+      : [];
   const ownDecisionRefs: EvidenceRef[] = ownDecisions.map((d) => ({
     type: "own_decision",
     id: d.decision.id,

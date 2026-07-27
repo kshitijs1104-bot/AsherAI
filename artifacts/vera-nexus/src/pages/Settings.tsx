@@ -129,7 +129,7 @@ export function SettingsPage() {
         <section className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8">
           <h2 className="text-lg font-syne font-bold text-white mb-1">What Vera Knows</h2>
           <p className="text-xs text-[var(--muted)] mb-6">
-            Captured automatically from your conversations — this is what Venus factors into every answer, beyond the context above.
+            Captured automatically from your conversations — this is what Vera factors into every answer, beyond the context above.
           </p>
           <ul className="space-y-2">
             {facts.map((fact) => (

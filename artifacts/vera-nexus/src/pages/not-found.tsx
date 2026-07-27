@@ -21,7 +21,7 @@ export default function NotFound() {
 
         <div className="flex flex-wrap gap-3">
           <Link
-            href="/venus"
+            href="/vera"
             className="rounded-lg bg-[var(--indigo)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
           >
             Back to Vera

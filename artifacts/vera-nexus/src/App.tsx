@@ -109,6 +109,24 @@ function Router() {
           <ThoughtsPage />
         </Layout>
       </Route>
+      {/* FIX: "/venus" is the internal codename, not the product name — it
+          was leaking straight into the visible URL bar. "/vera" is now the
+          canonical path every in-app navigation call points at (see
+          enterpriseGate.ts, Topbar.tsx, Layout.tsx, etc.); the old /venus
+          routes stay registered, rendering the exact same components, so
+          any existing bookmark or shared link keeps working. */}
+      <Route path="/vera">
+        <AuthGate component={VenusPage} />
+      </Route>
+      <Route path="/vera/workflows">
+        <AuthGate component={WorkflowsPage} />
+      </Route>
+      <Route path="/vera/goals">
+        <AuthGate component={GoalsOverview} />
+      </Route>
+      <Route path="/vera/decisions">
+        <AuthGate component={DecisionsOverview} />
+      </Route>
       <Route path="/venus">
         <AuthGate component={VenusPage} />
       </Route>
