@@ -833,3 +833,732 @@
 .venus-hero-mark {
   animation: v7-breathe 3.4s ease-in-out infinite;
 }
+
+/* ==========================================================================
+   SKINS — Alloy and Vessel
+   ==========================================================================
+
+   Everything below is ADDITIVE. Not one rule above this line was changed, so
+   the original look is still fully described by the stylesheet and is what
+   renders when no skin is selected. `lib/veraSkin.ts` writes
+   `data-skin="alloy" | "vessel"` onto <html>, or removes the attribute
+   entirely for Classic — which means Classic is the *absence* of these
+   overrides rather than a reimplementation of them, and therefore cannot
+   drift away from the original.
+
+   Two selector groups per skin, because the app applies its palettes at two
+   different levels:
+
+     html[data-skin="X"], html[data-skin="X"] .dark   → dark values
+     html[data-skin="X"] .v7-light                    → light values
+
+   The second group in each pair is needed because Layout.tsx puts `.dark` on
+   a wrapper div and the four Vera routes put `.v7-light` on their own root
+   inside it. A custom property set on a descendant beats one inherited from
+   an ancestor regardless of specificity, so overriding only <html> would be
+   silently ignored for every token `.dark` also defines. Both selectors carry
+   higher specificity than the originals (0,2,1 vs 0,1,0), so these win.
+
+   Both skins define EVERY token the originals define. A partially covered
+   family would leave the uncovered half showing through from `:root`, which
+   is exactly the "three parallel ramps" problem this replaces.
+   ---------------------------------------------------------------------- */
+
+/* ---------- ALLOY · dark ("graphite") ----------------------------------
+   A machined near-black biased green-cyan at 3–5% chroma. The original
+   surfaces were pinned to hue 240 at 16–45% saturation, which is what read
+   as navy; this keeps a cool undertone without the blue cast. One accent —
+   brass — and it means "act on this" and nothing else. */
+html[data-skin="alloy"],
+html[data-skin="alloy"] .dark {
+  --v7-bg: #0B0C0C;
+  --v7-bg-raised: #1B1E1E;
+  --v7-bg-raised-2: #232827;
+  --v7-border: rgba(240, 245, 243, 0.07);
+  --v7-border-strong: rgba(240, 245, 243, 0.14);
+  --v7-text: #F0F3F2;
+  --v7-text-dim: #B2BAB8;
+  --v7-text-mute: #838C8A;
+
+  /* --v7-cyan is the app's "this is interactive" slot; brass takes it. */
+  --v7-cyan: #E0A33C;
+  --v7-cyan-soft: rgba(224, 163, 60, 0.13);
+  --v7-cyan-strong: rgba(224, 163, 60, 0.42);
+  /* --v7-pink is a card-type label slot, not an action. It deliberately gets
+     a low-chroma slate rather than a second bright hue, so categories stay
+     distinguishable without competing with the accent for attention. */
+  --v7-pink: #7E93A8;
+  --v7-pink-soft: rgba(126, 147, 168, 0.13);
+
+  /* The user's own chat bubble is not an action — it's their words. Neutral
+     raised surface instead of the old indigo wash. */
+  --v7-tint: #232827;
+  --v7-tint-border: #3B4241;
+
+  /* Retires the gradient-filled word in the hero headline. Written as a
+     literal rather than var(--v7-cyan) because a custom property that
+     references another is substituted where it is DECLARED, not where it is
+     used — pointing it at --v7-cyan here would lock the light theme to the
+     dark accent. */
+  --vera-emph-fg: #E0A33C;
+
+  /* Kills the 460px radial-gradient blob behind the hero and the 3.4s
+     breathing halo without touching Venus.tsx: both render straight from
+     these tokens, so transparent values make them no-ops. */
+  --v7-glow-1: transparent;
+  --v7-glow-2: transparent;
+  --v7-glow-shadow-a: transparent;
+  --v7-glow-shadow-b: transparent;
+
+  --bg: #0B0C0C;
+  --surface: #1B1E1E;
+  --surface2: #232827;
+  --surface3: #2B3130;
+  --border: rgba(240, 245, 243, 0.08);
+  --border2: rgba(240, 245, 243, 0.15);
+  --text: #F0F3F2;
+  --muted: #B2BAB8;
+  --muted-text: #B2BAB8;
+  --dim: #838C8A;
+
+  /* Card-type label slots. One action colour, three muted category hues that
+     read as distinct without any of them looking clickable. */
+  --indigo: #E0A33C;
+  --indigo-light: #9B8FC0;
+  --mint: #6FAE92;
+  --green: #C98A6A;
+  --amber: #DE9A46;
+  --red: #E06A64;
+
+  --vera-card-bg: #1B1E1E;
+  --vera-card-border: rgba(240, 245, 243, 0.09);
+  --vera-inset-bg: #232827;
+  --vera-inset-border: rgba(240, 245, 243, 0.07);
+  --vera-label-color: #838C8A;
+
+  /* shadcn/Radix chrome, so the shared ui/ components don't clash with the
+     surfaces around them. */
+  --background: 180 4% 4%;
+  --foreground: 165 8% 95%;
+  --card: 180 5% 11%;
+  --card-foreground: 165 8% 95%;
+  --card-border: 180 5% 18%;
+  --popover: 180 5% 11%;
+  --popover-foreground: 165 8% 95%;
+  --primary: 38 72% 56%;
+  --primary-foreground: 40 90% 8%;
+  --secondary: 180 5% 15%;
+  --secondary-foreground: 165 8% 95%;
+  --muted-foreground: 165 5% 53%;
+  --accent: 38 72% 56%;
+  --accent-foreground: 40 90% 8%;
+  --input: 180 5% 18%;
+  --ring: 38 72% 56%;
+
+  --vera-cc-bg: #0B0C0C;
+  --vera-cc-paper: #16191A;
+  --vera-cc-paper-edge: #2B3130;
+  --vera-cc-line: rgba(240, 245, 243, 0.08);
+  --vera-cc-text: #F0F3F2;
+  --vera-cc-muted: #B2BAB8;
+  --vera-cc-faint: #838C8A;
+  --vera-cc-accent: #E0A33C;
+  --vera-cc-accent-dim: rgba(224, 163, 60, 0.13);
+  --vera-cc-accent-border: rgba(224, 163, 60, 0.34);
+  --vera-cc-second: #7E93A8;
+  --vera-cc-second-dim: rgba(126, 147, 168, 0.13);
+  --vera-cc-second-border: rgba(126, 147, 168, 0.32);
+  --vera-cc-rule: rgba(126, 147, 168, 0.30);
+  --vera-cc-dogear: #0B0C0C;
+}
+
+/* ---------- ALLOY · light ("stone") ------------------------------------
+   Warm, biased clay at under 4% chroma — warm without reading as cream
+   paper. Elevation in light mode is carried by shadow rather than by the
+   face stepping up the ramp, because a white face has nowhere lighter to go;
+   see the elevation tokens further down. */
+html[data-skin="alloy"] .v7-light {
+  --v7-bg: #FAF8F5;
+  --v7-bg-raised: #FFFFFF;
+  --v7-bg-raised-2: #F3F0EA;
+  --v7-border: #E4DED4;
+  --v7-border-strong: #C9C1B2;
+  --v7-text: #16181A;
+  --v7-text-dim: #464B4E;
+  --v7-text-mute: #6C716F;
+
+  --v7-cyan: #8A5C0F;
+  --v7-cyan-soft: #F6EEDC;
+  --v7-cyan-strong: #8A5C0F;
+  --v7-pink: #4E6275;
+  --v7-pink-soft: #E9EDF1;
+
+  --v7-tint: #F3F0EA;
+  --v7-tint-border: #DAD3C7;
+  --vera-emph-fg: #8A5C0F;
+
+  --v7-glow-1: transparent;
+  --v7-glow-2: transparent;
+  --v7-glow-shadow-a: transparent;
+  --v7-glow-shadow-b: transparent;
+
+  --bg: #FAF8F5;
+  --surface: #FFFFFF;
+  /* The original light palette set --surface and --surface2 to the same
+     #ffffff, so an intended step in the ramp did nothing. Every remaining
+     --surface2 consumer is an inset (form fields, chips, the composer well,
+     inline code), never a card face — response cards paint --vera-card-bg —
+     so giving it a real recessed value fixes the dead step without turning
+     any card into a hole. */
+  --surface2: #F3F0EA;
+  --surface3: #E9E4DB;
+  --border: #E4DED4;
+  --border2: #D3CBBD;
+  --text: #16181A;
+  --muted: #464B4E;
+  --muted-text: #464B4E;
+  --dim: #6C716F;
+
+  --indigo: #8A5C0F;
+  --indigo-light: #5B4E8C;
+  --mint: #1F6B54;
+  --green: #8A4B22;
+  --amber: #8A5A14;
+  --red: #A62E2E;
+
+  --vera-card-bg: #FFFFFF;
+  --vera-card-border: #E4DED4;
+  --vera-inset-bg: #F3F0EA;
+  --vera-inset-border: #E7E1D8;
+  --vera-label-color: #6C716F;
+
+  --background: 40 25% 97%;
+  --foreground: 200 8% 9%;
+  --card: 0 0% 100%;
+  --card-foreground: 200 8% 9%;
+  --card-border: 38 22% 86%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 200 8% 9%;
+  --primary: 38 82% 30%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 38 25% 94%;
+  --secondary-foreground: 200 8% 9%;
+  --muted-foreground: 165 3% 43%;
+  --accent: 38 82% 30%;
+  --accent-foreground: 0 0% 100%;
+  --input: 38 22% 86%;
+  --ring: 38 82% 30%;
+
+  --vera-cc-bg: #F3F0EA;
+  --vera-cc-paper: #FFFFFF;
+  --vera-cc-paper-edge: #DAD3C7;
+  --vera-cc-line: rgba(74, 60, 36, 0.11);
+  --vera-cc-text: #16181A;
+  --vera-cc-muted: #464B4E;
+  --vera-cc-faint: #6C716F;
+  --vera-cc-accent: #8A5C0F;
+  --vera-cc-accent-dim: #F6EEDC;
+  --vera-cc-accent-border: #DEC79C;
+  --vera-cc-second: #4E6275;
+  --vera-cc-second-dim: #E9EDF1;
+  --vera-cc-second-border: #C2CDD7;
+  --vera-cc-rule: rgba(78, 98, 117, 0.34);
+  --vera-cc-dogear: #F3F0EA;
+}
+
+/* ---------- VESSEL · dark ("espresso") ---------------------------------
+   Warm near-black with a plum undertone. Verdigris is the action colour —
+   an oxidised version of the mint already in the product, keeping the brand
+   equity while removing the neon. Aubergine is reserved product-wide for one
+   thing: Vera speaking unprompted. */
+html[data-skin="vessel"],
+html[data-skin="vessel"] .dark {
+  --v7-bg: #0C0A0D;
+  --v7-bg-raised: #1C1820;
+  --v7-bg-raised-2: #262029;
+  --v7-border: rgba(245, 240, 243, 0.075);
+  --v7-border-strong: rgba(245, 240, 243, 0.15);
+  --v7-text: #F5F0F3;
+  --v7-text-dim: #C0B5BE;
+  --v7-text-mute: #8E8290;
+
+  --v7-cyan: #4FC0A5;
+  --v7-cyan-soft: rgba(79, 192, 165, 0.13);
+  --v7-cyan-strong: rgba(79, 192, 165, 0.44);
+  --v7-pink: #B98BC9;
+  --v7-pink-soft: rgba(185, 139, 201, 0.13);
+
+  --v7-tint: #262029;
+  --v7-tint-border: #3E3543;
+  --vera-emph-fg: #4FC0A5;
+
+  --v7-glow-1: transparent;
+  --v7-glow-2: transparent;
+  --v7-glow-shadow-a: transparent;
+  --v7-glow-shadow-b: transparent;
+
+  --bg: #0C0A0D;
+  --surface: #1C1820;
+  --surface2: #262029;
+  --surface3: #332C36;
+  --border: rgba(245, 240, 243, 0.085);
+  --border2: rgba(245, 240, 243, 0.16);
+  --text: #F5F0F3;
+  --muted: #C0B5BE;
+  --muted-text: #C0B5BE;
+  --dim: #8E8290;
+
+  --indigo: #4FC0A5;
+  --indigo-light: #B98BC9;
+  --mint: #7FB98F;
+  --green: #D08A6A;
+  --amber: #DDA05A;
+  --red: #E0707F;
+
+  --vera-card-bg: #1C1820;
+  --vera-card-border: rgba(245, 240, 243, 0.09);
+  --vera-inset-bg: #262029;
+  --vera-inset-border: rgba(245, 240, 243, 0.07);
+  --vera-label-color: #8E8290;
+
+  --background: 285 8% 5%;
+  --foreground: 315 15% 95%;
+  --card: 280 13% 11%;
+  --card-foreground: 315 15% 95%;
+  --card-border: 285 12% 19%;
+  --popover: 280 13% 11%;
+  --popover-foreground: 315 15% 95%;
+  --primary: 166 47% 53%;
+  --primary-foreground: 166 65% 8%;
+  --secondary: 285 12% 15%;
+  --secondary-foreground: 315 15% 95%;
+  --muted-foreground: 288 6% 54%;
+  --accent: 166 47% 53%;
+  --accent-foreground: 166 65% 8%;
+  --input: 285 12% 19%;
+  --ring: 166 47% 53%;
+
+  --vera-cc-bg: #0C0A0D;
+  --vera-cc-paper: #181420;
+  --vera-cc-paper-edge: #322B38;
+  --vera-cc-line: rgba(245, 240, 243, 0.08);
+  --vera-cc-text: #F5F0F3;
+  --vera-cc-muted: #C0B5BE;
+  --vera-cc-faint: #8E8290;
+  --vera-cc-accent: #4FC0A5;
+  --vera-cc-accent-dim: rgba(79, 192, 165, 0.13);
+  --vera-cc-accent-border: rgba(79, 192, 165, 0.32);
+  --vera-cc-second: #B98BC9;
+  --vera-cc-second-dim: rgba(185, 139, 201, 0.13);
+  --vera-cc-second-border: rgba(185, 139, 201, 0.32);
+  --vera-cc-rule: rgba(185, 139, 201, 0.34);
+  --vera-cc-dogear: #0C0A0D;
+}
+
+/* ---------- VESSEL · light ("limewash") --------------------------------
+   Warm, but violet-clay warm (~350–20°, chroma under 3%) rather than the
+   yellow-cream that a warm light mode usually reaches for. That is what
+   keeps it from reading as aged paper next to cool accents — the exact
+   objection recorded against the earlier beige pass. */
+html[data-skin="vessel"] .v7-light {
+  --v7-bg: #F7F3F2;
+  --v7-bg-raised: #FFFFFF;
+  --v7-bg-raised-2: #EEE9E8;
+  --v7-border: #E2DADA;
+  --v7-border-strong: #C6BABC;
+  --v7-text: #1A1519;
+  --v7-text-dim: #4B4149;
+  --v7-text-mute: #6E626A;
+
+  --v7-cyan: #0E6E5C;
+  --v7-cyan-soft: #E3F0EC;
+  --v7-cyan-strong: #0E6E5C;
+  --v7-pink: #6B3A7C;
+  --v7-pink-soft: #F0E8F3;
+
+  --v7-tint: #EEE9E8;
+  --v7-tint-border: #D5CCCD;
+  --vera-emph-fg: #0E6E5C;
+
+  --v7-glow-1: transparent;
+  --v7-glow-2: transparent;
+  --v7-glow-shadow-a: transparent;
+  --v7-glow-shadow-b: transparent;
+
+  --bg: #F7F3F2;
+  --surface: #FFFFFF;
+  --surface2: #EEE9E8;
+  --surface3: #E4DDDD;
+  --border: #E2DADA;
+  --border2: #D2C7C9;
+  --text: #1A1519;
+  --muted: #4B4149;
+  --muted-text: #4B4149;
+  --dim: #6E626A;
+
+  --indigo: #0E6E5C;
+  --indigo-light: #6B3A7C;
+  --mint: #0F6B57;
+  --green: #8C4A2F;
+  --amber: #8A5A14;
+  --red: #A83244;
+
+  --vera-card-bg: #FFFFFF;
+  --vera-card-border: #E2DADA;
+  --vera-inset-bg: #F7F3F2;
+  --vera-inset-border: #E7E0E0;
+  --vera-label-color: #6E626A;
+
+  --background: 12 21% 96%;
+  --foreground: 300 11% 9%;
+  --card: 0 0% 100%;
+  --card-foreground: 300 11% 9%;
+  --card-border: 0 14% 87%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 300 11% 9%;
+  --primary: 168 77% 24%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 10 15% 93%;
+  --secondary-foreground: 300 11% 9%;
+  --muted-foreground: 288 6% 44%;
+  --accent: 168 77% 24%;
+  --accent-foreground: 0 0% 100%;
+  --input: 0 14% 87%;
+  --ring: 168 77% 24%;
+
+  --vera-cc-bg: #EEE9E8;
+  --vera-cc-paper: #FFFFFF;
+  --vera-cc-paper-edge: #D5CCCD;
+  --vera-cc-line: rgba(50, 34, 44, 0.11);
+  --vera-cc-text: #1A1519;
+  --vera-cc-muted: #4B4149;
+  --vera-cc-faint: #6E626A;
+  --vera-cc-accent: #0E6E5C;
+  --vera-cc-accent-dim: #E3F0EC;
+  --vera-cc-accent-border: #B4D7CE;
+  --vera-cc-second: #6B3A7C;
+  --vera-cc-second-dim: #F0E8F3;
+  --vera-cc-second-border: #D6C1DE;
+  --vera-cc-rule: rgba(107, 58, 124, 0.34);
+  --vera-cc-dogear: #EEE9E8;
+}
+
+/* ---------- Geometry, elevation and type, per skin ---------------------
+   `--radius` is what Tailwind's rounded-sm/md/lg/xl all derive from (see the
+   @theme block at the top of this file), so setting it here re-scales every
+   one of the ~290 rounded-* utilities in the app at once. That is the single
+   highest-leverage fix for "one radius on everything": the ladder moves as a
+   unit and keeps its relative steps instead of collapsing at 6–8px.
+
+   The shadow scale is also defined for real here. Every --shadow-* token in
+   the original stylesheet is authored at `/ 0.00` alpha — ten tokens, all
+   fully transparent — which is why nothing in the product currently reads as
+   a physical object. */
+html[data-skin="alloy"] {
+  --radius: 0.625rem;          /* 10px → sm 6 · md 8 · lg 10 · xl 14 */
+  --vera-r-panel: 20px;
+  --vera-r-card: 14px;
+  --vera-r-inset: 8px;
+  --vera-card-pad: 20px;
+  --vera-block-pad: 14px;
+
+  --vera-font-display: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+  --app-font-sans: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
+  --v7-font-round: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
+  --v7-font-mono: 'Azeret Mono', 'IBM Plex Mono', ui-monospace, monospace;
+  --app-font-mono: 'Azeret Mono', 'IBM Plex Mono', ui-monospace, monospace;
+  --vera-display-weight: 600;
+  --vera-display-tracking: -0.022em;
+
+  --vera-e1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --vera-e2: 0 12px 30px -10px rgba(0, 0, 0, 0.72), 0 2px 4px rgba(0, 0, 0, 0.4);
+
+  --shadow-2xs: 0 1px 1px rgba(0, 0, 0, 0.30);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.38);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.42), 0 1px 1px rgba(0, 0, 0, 0.28);
+  --shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.46), 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 6px 14px -6px rgba(0, 0, 0, 0.55), 0 2px 4px -1px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 30px -10px rgba(0, 0, 0, 0.70), 0 2px 4px rgba(0, 0, 0, 0.40);
+  --shadow-xl: 0 22px 48px -18px rgba(0, 0, 0, 0.78), 0 4px 8px -2px rgba(0, 0, 0, 0.45);
+  --shadow-2xl: 0 32px 68px -26px rgba(0, 0, 0, 0.85);
+}
+
+html[data-skin="alloy"] .v7-light {
+  --vera-e1: 0 1px 2px rgba(74, 60, 36, 0.06), 0 1px 0 rgba(74, 60, 36, 0.03);
+  --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --vera-e2: 0 10px 26px -12px rgba(74, 60, 36, 0.24), 0 2px 4px -1px rgba(74, 60, 36, 0.09);
+
+  --shadow-2xs: 0 1px 1px rgba(74, 60, 36, 0.05);
+  --shadow-xs: 0 1px 2px rgba(74, 60, 36, 0.07);
+  --shadow-sm: 0 1px 2px rgba(74, 60, 36, 0.08), 0 1px 1px rgba(74, 60, 36, 0.05);
+  --shadow: 0 2px 4px -1px rgba(74, 60, 36, 0.10), 0 1px 2px rgba(74, 60, 36, 0.06);
+  --shadow-md: 0 6px 14px -6px rgba(74, 60, 36, 0.16), 0 2px 4px -1px rgba(74, 60, 36, 0.08);
+  --shadow-lg: 0 12px 28px -12px rgba(74, 60, 36, 0.22), 0 2px 4px rgba(74, 60, 36, 0.08);
+  --shadow-xl: 0 22px 46px -20px rgba(74, 60, 36, 0.26), 0 4px 8px -2px rgba(74, 60, 36, 0.10);
+  --shadow-2xl: 0 32px 64px -26px rgba(74, 60, 36, 0.30);
+}
+
+html[data-skin="vessel"] {
+  --radius: 0.875rem;          /* 14px → sm 10 · md 12 · lg 14 · xl 18 */
+  --vera-r-panel: 28px;
+  --vera-r-card: 22px;
+  --vera-r-inset: 12px;
+  --vera-card-pad: 24px;
+  --vera-block-pad: 16px;
+
+  --vera-font-display: 'Instrument Serif', Constantia, Georgia, serif;
+  --app-font-sans: 'Onest', 'Segoe UI', system-ui, sans-serif;
+  --v7-font-round: 'Onest', 'Segoe UI', system-ui, sans-serif;
+  --v7-font-mono: 'Spline Sans Mono', 'IBM Plex Mono', ui-monospace, monospace;
+  --app-font-mono: 'Spline Sans Mono', 'IBM Plex Mono', ui-monospace, monospace;
+  /* Instrument Serif ships in one weight. Asking for 800 (which the existing
+     markup does via font-extrabold) would make the browser synthesise a fake
+     bold — smeared stems, uneven joins. Headings are pinned to 400 below and
+     take their emphasis from size and tracking instead. */
+  --vera-display-weight: 400;
+  --vera-display-tracking: -0.028em;
+
+  --vera-e1: 0 3px 10px -4px rgba(0, 0, 0, 0.6);
+  --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  --vera-e2: 0 24px 56px -22px rgba(0, 0, 0, 0.82), 0 4px 10px -4px rgba(0, 0, 0, 0.5);
+
+  --shadow-2xs: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --shadow-xs: 0 2px 4px -1px rgba(0, 0, 0, 0.40);
+  --shadow-sm: 0 3px 8px -3px rgba(0, 0, 0, 0.48);
+  --shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.52);
+  --shadow-md: 0 10px 24px -10px rgba(0, 0, 0, 0.62);
+  --shadow-lg: 0 24px 56px -22px rgba(0, 0, 0, 0.80), 0 4px 10px -4px rgba(0, 0, 0, 0.50);
+  --shadow-xl: 0 36px 78px -30px rgba(0, 0, 0, 0.88);
+  --shadow-2xl: 0 48px 96px -38px rgba(0, 0, 0, 0.92);
+}
+
+html[data-skin="vessel"] .v7-light {
+  /* Shadows carry the ground's own plum hue rather than black. A black
+     shadow on a warm page greys it on contact, which is the fastest way a
+     warm palette dies once it reaches code. */
+  --vera-e1: 0 2px 8px -4px rgba(50, 34, 44, 0.15), 0 1px 2px rgba(50, 34, 44, 0.05);
+  --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --vera-e2: 0 20px 48px -20px rgba(50, 34, 44, 0.26), 0 4px 10px -4px rgba(50, 34, 44, 0.10);
+
+  --shadow-2xs: 0 1px 2px rgba(50, 34, 44, 0.06);
+  --shadow-xs: 0 2px 4px -1px rgba(50, 34, 44, 0.08);
+  --shadow-sm: 0 3px 8px -3px rgba(50, 34, 44, 0.11);
+  --shadow: 0 4px 12px -4px rgba(50, 34, 44, 0.13);
+  --shadow-md: 0 10px 24px -10px rgba(50, 34, 44, 0.18);
+  --shadow-lg: 0 20px 48px -20px rgba(50, 34, 44, 0.26), 0 4px 10px -4px rgba(50, 34, 44, 0.10);
+  --shadow-xl: 0 32px 72px -28px rgba(50, 34, 44, 0.30);
+  --shadow-2xl: 0 44px 92px -36px rgba(50, 34, 44, 0.34);
+}
+
+/* ---------- Shared skin behaviour -------------------------------------- */
+
+/* Turns off the gradient fill on the hero's emphasised word. The paired
+   --vera-emph-fg lives in each colour block above, per skin and per theme. */
+html[data-skin] {
+  --vera-emph-bg: none;
+}
+
+/* The card primitives already centralise geometry for all eleven response
+   card types; pointing them at tokens is what lets a skin move the whole
+   system at once. The nesting law still holds by construction — inset radius
+   is a smaller number than card radius in both skins — so a block can never
+   again carry a larger radius than the card containing it. */
+html[data-skin] .vera-card {
+  border-radius: var(--vera-r-card);
+  padding: var(--vera-card-pad);
+  box-shadow: var(--vera-e1), var(--vera-e1-bevel);
+}
+
+html[data-skin] .vera-block {
+  border-radius: var(--vera-r-inset);
+  padding: var(--vera-block-pad);
+  box-shadow: none;
+}
+
+/* One lifted tier, used for the single item a surface wants you to act on.
+   The discipline is that exactly one element per screen carries it. */
+html[data-skin] .vera-lift {
+  box-shadow: var(--vera-e2), var(--vera-e1-bevel);
+}
+
+/* Headings take the display face, and the weight is pinned in BOTH skins
+   rather than left to the markup. Several headings carry `font-extrabold`
+   (800), which neither display face should be asked for: Instrument Serif
+   ships in a single weight, so 800 would make the browser synthesise a fake
+   bold — smeared stems and uneven joins — and Archivo is set at 600 by
+   design, taking its authority from width and tracking instead of mass. */
+html[data-skin] h1,
+html[data-skin] h2,
+html[data-skin] h3,
+html[data-skin] .vera-display {
+  font-family: var(--vera-font-display);
+  letter-spacing: var(--vera-display-tracking);
+  font-weight: var(--vera-display-weight);
+}
+
+/* Archivo is a variable face with a real width axis, which is the whole
+   reason it was chosen over another grotesque. Without this it renders at
+   the default width and loses the engineered, signage-like proportion that
+   distinguishes Alloy's headings from any default sans scaled up. */
+html[data-skin="alloy"] h1,
+html[data-skin="alloy"] h2,
+html[data-skin="alloy"] h3,
+html[data-skin="alloy"] .vera-display {
+  font-variation-settings: 'wdth' 112;
+}
+
+/* Micro-labels keep one definition but pick up the skin's mono face. */
+html[data-skin] .vera-label {
+  font-family: var(--v7-font-mono);
+  letter-spacing: 0.09em;
+}
+
+/* The hero mark's breathing halo animates between two now-transparent glow
+   tokens, so it is already invisible under a skin. Stopping the animation
+   outright means it also stops costing a composite every frame. */
+html[data-skin] .venus-hero-mark {
+  animation: none;
+}
+
+/* ---------- Keys ------------------------------------------------------
+   Physical controls rather than opacity fades. Both skins share the class
+   names and differ in how the press reads: Alloy collapses a hard bottom
+   edge, Vessel inverts a bevel and compresses. Dismiss deliberately gets
+   neither in either skin — declining should not feel as good to press as
+   the action you actually want. */
+/* Deliberately NOT scoped to html[data-skin]. The first-run picker renders
+   while Classic is still the active look — that is the whole point of it —
+   so scoping these to a skin left its buttons as bare user-agent controls at
+   the one moment they had to look deliberate. The base styling reads from
+   --v7-* tokens, which Classic defines too, so it is correct in all three. */
+.vera-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: var(--v7-font-round);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: transform 160ms cubic-bezier(0.2, 0.8, 0.3, 1),
+              box-shadow 160ms cubic-bezier(0.2, 0.8, 0.3, 1),
+              background 160ms cubic-bezier(0.2, 0.8, 0.3, 1),
+              border-color 160ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.vera-key:focus-visible {
+  outline: 2px solid var(--v7-cyan);
+  outline-offset: 3px;
+}
+.vera-key:disabled {
+  opacity: 0.45;
+  transform: none;
+  cursor: not-allowed;
+}
+
+.vera-key-1 {
+  background: var(--v7-cyan);
+  color: var(--v7-bg);
+  border-color: transparent;
+}
+.vera-key-2 {
+  background: var(--v7-bg-raised);
+  color: var(--v7-text);
+  border-color: var(--v7-border-strong);
+}
+.vera-key-3 {
+  background: transparent;
+  color: var(--v7-text-mute);
+}
+.vera-key-3:hover {
+  color: var(--v7-text);
+  background: var(--v7-bg-raised-2);
+}
+
+/* Classic gets a restrained press so the picker's controls still feel like
+   controls before a skin has been chosen. The two skins override this below
+   with their own physics. */
+.vera-key-1:hover:not(:disabled),
+.vera-key-2:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.vera-key-1:active:not(:disabled),
+.vera-key-2:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Alloy: a key body with a hard bottom edge that collapses under the finger. */
+html[data-skin="alloy"] .vera-key-1 {
+  box-shadow: 0 2px 0 0 color-mix(in srgb, var(--v7-cyan) 62%, #000),
+              inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+html[data-skin="alloy"] .vera-key-1:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 0 color-mix(in srgb, var(--v7-cyan) 62%, #000),
+              inset 0 1px 0 rgba(255, 255, 255, 0.34);
+}
+html[data-skin="alloy"] .vera-key-1:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 0 transparent, inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+html[data-skin="alloy"] .vera-key-2 {
+  box-shadow: 0 2px 0 0 var(--v7-border-strong), var(--vera-e1-bevel);
+}
+html[data-skin="alloy"] .vera-key-2:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: var(--v7-bg-raised-2);
+  box-shadow: 0 3px 0 0 var(--v7-border-strong), var(--vera-e1-bevel);
+}
+html[data-skin="alloy"] .vera-key-2:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 0 transparent, inset 0 2px 4px rgba(0, 0, 0, 0.16);
+}
+
+/* Vessel: a sprung bevel. Asymmetric timing — slow release, fast press — is
+   what reads as sprung rather than merely animated. */
+html[data-skin="vessel"] .vera-key {
+  transition-duration: 210ms;
+  transition-timing-function: cubic-bezier(0.32, 0.72, 0.28, 1);
+  padding: 10px 20px;
+}
+html[data-skin="vessel"] .vera-key:active:not(:disabled) {
+  transition-duration: 85ms;
+}
+html[data-skin="vessel"] .vera-key-1 {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3),
+              inset 0 -1px 0 rgba(0, 0, 0, 0.16),
+              0 6px 18px -8px color-mix(in srgb, var(--v7-cyan) 60%, transparent);
+}
+html[data-skin="vessel"] .vera-key-1:hover:not(:disabled) {
+  transform: translateY(-1.5px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3),
+              inset 0 -1px 0 rgba(0, 0, 0, 0.16),
+              0 12px 26px -10px color-mix(in srgb, var(--v7-cyan) 66%, transparent);
+}
+html[data-skin="vessel"] .vera-key-1:active:not(:disabled) {
+  transform: scale(0.972);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.26);
+}
+html[data-skin="vessel"] .vera-key-2 {
+  box-shadow: var(--vera-e1-bevel), var(--vera-e1);
+}
+html[data-skin="vessel"] .vera-key-2:hover:not(:disabled) {
+  transform: translateY(-1.5px);
+  box-shadow: var(--vera-e1-bevel), var(--vera-e2);
+}
+html[data-skin="vessel"] .vera-key-2:active:not(:disabled) {
+  transform: scale(0.972);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vera-key {
+    transition: none;
+  }
+  .vera-key:hover:not(:disabled),
+  .vera-key:active:not(:disabled) {
+    transform: none;
+  }
+}

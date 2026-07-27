@@ -3,6 +3,81 @@ import { useGetOnboarding, useSaveOnboarding } from '@workspace/api-client-react
 import { useQueryClient } from '@tanstack/react-query';
 import { getGetOnboardingQueryKey } from '@workspace/api-client-react';
 import { useCompanyFacts } from '../lib/venusApi';
+import { SKIN_META, VERA_SKINS, useVeraSkin } from '../lib/veraSkin';
+import { useVenusTheme } from '../lib/venusTheme';
+
+// The escape hatch for the redesign. Every skin — including the original —
+// is one click from here, applies instantly, and persists, so trying one is
+// never a decision anyone has to commit to.
+function Appearance() {
+  const { skin, setSkin } = useVeraSkin();
+  const { theme, setTheme } = useVenusTheme();
+
+  return (
+    <section className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8">
+      <h2 className="text-lg font-syne font-bold text-[var(--text)] mb-1">Appearance</h2>
+      <p className="text-xs text-[var(--muted)] mb-8">
+        How Vera looks. Changes apply straight away and only affect this browser — nothing about your data or analysis changes.
+      </p>
+
+      <div className="space-y-3 mb-8">
+        <label className="text-xs font-mono uppercase text-[var(--dim)]">Design</label>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {VERA_SKINS.map((option) => {
+            const meta = SKIN_META[option];
+            const active = skin === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setSkin(option)}
+                aria-pressed={active}
+                className={`text-left rounded-lg border p-4 transition-colors ${
+                  active
+                    ? 'border-[var(--indigo)] bg-[var(--surface2)]'
+                    : 'border-[var(--border)] bg-[var(--surface2)]/40 hover:border-[var(--border2)]'
+                }`}
+              >
+                <span className="flex items-center justify-between gap-2 mb-1">
+                  <span className="text-sm font-bold text-[var(--text)]">{meta.name}</span>
+                  {active && (
+                    <span className="text-[9px] font-mono uppercase tracking-wider text-[var(--indigo)]">In use</span>
+                  )}
+                </span>
+                <span className="block text-[11px] font-mono uppercase tracking-wider text-[var(--indigo)] mb-2">
+                  {meta.line}
+                </span>
+                <span className="block text-xs text-[var(--muted)] leading-relaxed">{meta.detail}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <label className="text-xs font-mono uppercase text-[var(--dim)]">Light or dark</label>
+        <div className="inline-flex gap-1 p-1 rounded-lg bg-[var(--surface2)] border border-[var(--border)]">
+          {(['dark', 'light'] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setTheme(option)}
+              aria-pressed={theme === option}
+              className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded transition-colors ${
+                theme === option ? 'bg-[var(--indigo)] text-white' : 'text-[var(--muted)] hover:text-[var(--text)]'
+              }`}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-[var(--muted)]">
+          Applies to Vera's own screens — chat, the command centre, goals and decisions.
+        </p>
+      </div>
+    </section>
+  );
+}
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -42,6 +117,7 @@ export function SettingsPage() {
         <p className="text-sm font-mono text-[var(--muted)]">Configure Vera Nexus core parameters.</p>
       </header>
 
+      <Appearance />
 
       {/* Business Context */}
       <section className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8">

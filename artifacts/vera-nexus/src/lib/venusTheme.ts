@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 // Vera-local theme preference — deliberately separate from the app-wide
 // dark mode (Layout.tsx hardcodes `dark` unconditionally for the rest of
@@ -26,16 +26,50 @@ function writeTheme(theme: VenusTheme) {
   }
 }
 
-export function useVenusTheme() {
-  const [theme, setTheme] = useState<VenusTheme>(readTheme);
+// Previously each caller held its own useState seeded from localStorage, so
+// the four Vera routes and the Settings control each tracked the theme
+// independently: toggling on one surface left every other mounted surface
+// showing the old value until it happened to remount. One module-level value
+// with explicit subscribers keeps them in step, and mirrors the store in
+// veraSkin.ts so both preferences behave the same way.
+let current: VenusTheme = readTheme();
+const listeners = new Set<(theme: VenusTheme) => void>();
 
-  const toggle = useCallback(() => {
-    setTheme((prev) => {
-      const next: VenusTheme = prev === 'light' ? 'dark' : 'light';
-      writeTheme(next);
-      return next;
-    });
+export function getVenusTheme(): VenusTheme {
+  return current;
+}
+
+export function setVenusTheme(theme: VenusTheme) {
+  current = theme;
+  writeTheme(theme);
+  listeners.forEach((fn) => fn(theme));
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== KEY) return;
+    const next: VenusTheme = event.newValue === 'light' ? 'light' : 'dark';
+    current = next;
+    listeners.forEach((fn) => fn(next));
+  });
+}
+
+export function useVenusTheme() {
+  const [theme, setLocal] = useState<VenusTheme>(current);
+
+  useEffect(() => {
+    listeners.add(setLocal);
+    setLocal(current);
+    return () => {
+      listeners.delete(setLocal);
+    };
   }, []);
 
-  return { theme, toggle };
+  const toggle = useCallback(() => {
+    setVenusTheme(current === 'light' ? 'dark' : 'light');
+  }, []);
+
+  const set = useCallback((next: VenusTheme) => setVenusTheme(next), []);
+
+  return { theme, toggle, setTheme: set };
 }

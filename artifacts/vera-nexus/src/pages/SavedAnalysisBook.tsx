@@ -135,10 +135,10 @@ function MiniVera({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderBottom: `1px solid ${palette.tealBorder}` }}>
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', letterSpacing: '0.05em', color: palette.teal }}>
+        <span style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', letterSpacing: '0.05em', color: palette.teal }}>
           ASK VERA · {MINI_TURN_LIMIT - userTurns} {MINI_TURN_LIMIT - userTurns === 1 ? 'MESSAGE' : 'MESSAGES'} LEFT
         </span>
-        <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: palette.muted, fontSize: '11px', fontFamily: "'IBM Plex Mono', monospace", cursor: 'pointer', padding: 0 }}>
+        <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: palette.muted, fontSize: '11px', fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", cursor: 'pointer', padding: 0 }}>
           Close
         </button>
       </div>
@@ -151,7 +151,7 @@ function MiniVera({
         )}
         {messages.map((m, i) => (
           <div key={i} style={{ marginBottom: '10px' }}>
-            <div style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '9.5px', letterSpacing: '0.05em', color: m.role === 'user' ? palette.faint : palette.teal, marginBottom: '3px' }}>
+            <div style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '9.5px', letterSpacing: '0.05em', color: m.role === 'user' ? palette.faint : palette.teal, marginBottom: '3px' }}>
               {m.role === 'user' ? 'YOU' : 'VERA'}
             </div>
             <div style={{ fontSize: '13px', lineHeight: 1.55, color: palette.text, whiteSpace: 'pre-wrap' }}>{m.content}</div>
@@ -180,7 +180,7 @@ function MiniVera({
               type="button"
               onClick={handoff}
               style={{
-                fontFamily: "'IBM Plex Mono', monospace", fontSize: '11px', letterSpacing: '0.03em',
+                fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '11px', letterSpacing: '0.03em',
                 background: palette.teal, color: isLight ? '#ffffff' : '#08120f',
                 border: 'none', borderRadius: '6px', padding: '7px 12px', cursor: 'pointer', fontWeight: 600,
               }}
@@ -207,7 +207,7 @@ function MiniVera({
               onClick={send}
               disabled={!input.trim() || analyze.isPending}
               style={{
-                fontFamily: "'IBM Plex Mono', monospace", fontSize: '11px',
+                fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '11px',
                 background: palette.teal, color: isLight ? '#ffffff' : '#08120f',
                 border: 'none', borderRadius: '6px', padding: '8px 12px',
                 cursor: 'pointer', fontWeight: 600, opacity: !input.trim() || analyze.isPending ? 0.45 : 1,
@@ -243,7 +243,7 @@ function AnalysisEntry({
     <div style={{ padding: '18px 0', borderBottom: `1px solid ${palette.line}` }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '6px' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
-        <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '9.5px', letterSpacing: '0.05em', color: palette.faint }}>
+        <span style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '9.5px', letterSpacing: '0.05em', color: palette.faint }}>
           {formatSavedAt(analysis.savedAt)}
         </span>
       </div>
@@ -268,7 +268,7 @@ function AnalysisEntry({
           onClick={() => setAsking((v) => !v)}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: '5px',
-            fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', letterSpacing: '0.02em',
+            fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', letterSpacing: '0.02em',
             background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
             color: palette.teal, borderBottom: `1px solid ${palette.tealBorder}`,
           }}
@@ -282,7 +282,7 @@ function AnalysisEntry({
             type="button"
             onClick={() => onOpenThread!(analysis)}
             style={{
-              fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', letterSpacing: '0.02em',
+              fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', letterSpacing: '0.02em',
               background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
               color: palette.muted, borderBottom: '1px solid transparent',
             }}
@@ -358,7 +358,7 @@ export function SavedAnalysisBook({
         onClick={spread.kind === 'index' ? onBack : () => goTo({ kind: 'index' })}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: '6px',
-          fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', letterSpacing: '0.02em',
+          fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '12px', letterSpacing: '0.02em',
           color: palette.muted, background: 'none', border: 'none', padding: 0,
           marginBottom: '28px', cursor: 'pointer',
         }}
@@ -413,7 +413,7 @@ function IndexPage({
         />
       </h1>
 
-      <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '11.5px', color: palette.muted, letterSpacing: '0.01em', margin: '8px 0 18px' }}>
+      <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '11.5px', color: palette.muted, letterSpacing: '0.01em', margin: '8px 0 18px' }}>
         HERE'S WHAT YOU SAVED FROM YOUR CHATS
       </p>
 
@@ -449,7 +449,7 @@ function IndexPage({
               >
                 <span style={{ minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: '15px', fontWeight: 600, color: palette.text }}>{typeLabel(t)}</span>
-                  <span style={{ display: 'block', fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', color: palette.faint, marginTop: '2px', letterSpacing: '0.03em' }}>
+                  <span style={{ display: 'block', fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', color: palette.faint, marginTop: '2px', letterSpacing: '0.03em' }}>
                     {count} {count === 1 ? 'SAVED' : 'SAVED'}
                   </span>
                 </span>
@@ -497,7 +497,7 @@ function TypePage({
         />
       </h1>
 
-      <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '11px', color: palette.muted, letterSpacing: '0.02em', margin: '8px 0 4px' }}>
+      <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '11px', color: palette.muted, letterSpacing: '0.02em', margin: '8px 0 4px' }}>
         {entries.length} {entries.length === 1 ? 'ANALYSIS' : 'ANALYSES'} SAVED
       </p>
 

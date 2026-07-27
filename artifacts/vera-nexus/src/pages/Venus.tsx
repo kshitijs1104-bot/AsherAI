@@ -1004,7 +1004,13 @@ export function VenusPage() {
 
               <h1 className="font-extrabold mb-[14px]" style={{ fontSize: '34px', lineHeight: '1.28', letterSpacing: '-0.01em', color: 'var(--v7-text)' }}>
                 The cause behind<br />every{' '}
-                <span style={{ background: 'linear-gradient(100deg, var(--v7-cyan), var(--v7-pink))', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>
+                {/* Routed through two custom properties so a skin can retire
+                    the gradient without this file knowing which skin is
+                    active. Both fall back to the original values, so with no
+                    skin selected this renders the exact gradient it always
+                    did; Alloy and Vessel set --vera-emph-bg to none and take
+                    the emphasis from the accent at full strength instead. */}
+                <span style={{ background: 'var(--vera-emph-bg, linear-gradient(100deg, var(--v7-cyan), var(--v7-pink)))', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'var(--vera-emph-fg, transparent)' }}>
                   effect.
                 </span>
               </h1>

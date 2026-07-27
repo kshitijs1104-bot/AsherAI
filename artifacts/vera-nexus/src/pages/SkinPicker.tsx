@@ -1,0 +1,265 @@
+import { useEffect, useState } from 'react';
+import { SKIN_META, hasChosenSkin, setSkin, useVeraSkin, type VeraSkin } from '../lib/veraSkin';
+import { useVenusTheme } from '../lib/venusTheme';
+
+// Swatches for the two preview tiles. These are literal values rather than
+// reads of the live custom properties on purpose: a tile has to show what a
+// skin looks like while a *different* skin is active, and a var() would
+// resolve to whichever one is currently applied. They mirror the token blocks
+// in index.css — if those move, these move with them.
+const PREVIEW: Record<
+  Exclude<VeraSkin, 'classic'>,
+  Record<'dark' | 'light', { ground: string; card: string; edge: string; text: string; dim: string; accent: string; accentInk: string }>
+> = {
+  alloy: {
+    dark: { ground: '#0B0C0C', card: '#1B1E1E', edge: 'rgba(240,245,243,0.10)', text: '#F0F3F2', dim: '#838C8A', accent: '#E0A33C', accentInk: '#201603' },
+    light: { ground: '#FAF8F5', card: '#FFFFFF', edge: '#E4DED4', text: '#16181A', dim: '#6C716F', accent: '#8A5C0F', accentInk: '#FFFFFF' },
+  },
+  vessel: {
+    dark: { ground: '#0C0A0D', card: '#1C1820', edge: 'rgba(245,240,243,0.10)', text: '#F5F0F3', dim: '#8E8290', accent: '#4FC0A5', accentInk: '#06231C' },
+    light: { ground: '#F7F3F2', card: '#FFFFFF', edge: '#E2DADA', text: '#1A1519', dim: '#6E626A', accent: '#0E6E5C', accentInk: '#FFFFFF' },
+  },
+};
+
+const PREVIEW_FONT: Record<Exclude<VeraSkin, 'classic'>, { display: string; body: string; radius: number; cardRadius: number }> = {
+  alloy: { display: "'Archivo', system-ui, sans-serif", body: "'Instrument Sans', system-ui, sans-serif", radius: 10, cardRadius: 14 },
+  vessel: { display: "'Instrument Serif', Constantia, Georgia, serif", body: "'Onest', system-ui, sans-serif", radius: 14, cardRadius: 22 },
+};
+
+function SkinTile({
+  skin,
+  theme,
+  selected,
+  onSelect,
+}: {
+  skin: Exclude<VeraSkin, 'classic'>;
+  theme: 'dark' | 'light';
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const c = PREVIEW[skin][theme];
+  const f = PREVIEW_FONT[skin];
+  const meta = SKIN_META[skin];
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      style={{
+        display: 'grid',
+        gap: '14px',
+        textAlign: 'left',
+        padding: '14px',
+        borderRadius: `${f.cardRadius}px`,
+        background: 'var(--v7-bg-raised)',
+        border: `1px solid ${selected ? 'var(--v7-cyan)' : 'var(--v7-border-strong)'}`,
+        boxShadow: selected ? '0 0 0 3px var(--v7-cyan-soft)' : 'none',
+        cursor: 'pointer',
+        transition: 'border-color 160ms ease, box-shadow 160ms ease',
+      }}
+    >
+      {/* Miniature of the skin: ground, a card set into it, a key. */}
+      <div
+        aria-hidden="true"
+        style={{
+          background: c.ground,
+          borderRadius: `${f.radius}px`,
+          padding: '16px',
+          display: 'grid',
+          gap: '10px',
+          border: `1px solid ${c.edge}`,
+        }}
+      >
+        <div style={{ fontFamily: f.display, fontSize: '17px', fontWeight: skin === 'vessel' ? 400 : 600, color: c.text, letterSpacing: skin === 'vessel' ? '-0.02em' : '-0.015em', lineHeight: 1.2 }}>
+          Four things need you
+        </div>
+        <div
+          style={{
+            background: c.card,
+            border: `1px solid ${c.edge}`,
+            borderRadius: `${f.cardRadius - 4}px`,
+            padding: '12px',
+            display: 'grid',
+            gap: '8px',
+          }}
+        >
+          <div style={{ fontFamily: f.body, fontSize: '11.5px', fontWeight: 600, color: c.text, lineHeight: 1.3 }}>
+            Reply to Kettle &amp; Co about wholesale
+          </div>
+          <div style={{ fontFamily: f.body, fontSize: '10.5px', color: c.dim, lineHeight: 1.4 }}>
+            Drafted 06:12 from your last three replies.
+          </div>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', paddingTop: '2px' }}>
+            <span
+              style={{
+                background: c.accent,
+                color: c.accentInk,
+                fontFamily: f.body,
+                fontSize: '10px',
+                fontWeight: 600,
+                padding: '5px 11px',
+                borderRadius: '999px',
+              }}
+            >
+              Approve
+            </span>
+            <span style={{ fontFamily: f.body, fontSize: '10px', color: c.dim }}>Dismiss</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: '3px', padding: '0 4px 4px' }}>
+        <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--v7-text)' }}>{meta.name}</span>
+        <span style={{ fontSize: '12.5px', color: 'var(--v7-cyan)', fontWeight: 500 }}>{meta.line}</span>
+        <span style={{ fontSize: '12.5px', color: 'var(--v7-text-mute)', lineHeight: 1.5 }}>{meta.detail}</span>
+      </div>
+    </button>
+  );
+}
+
+/**
+ * Shown once, the first time someone opens Vera, and never again after a
+ * choice is stored. Selecting a tile applies the skin immediately rather than
+ * on confirm, so the app behind the dialog is the actual preview — the tiles
+ * only have to get someone close enough to want to look.
+ *
+ * There is no default selection and no way to end up somewhere by accident:
+ * closing without picking keeps the current look and asks again next time.
+ */
+export function SkinPicker() {
+  const { theme } = useVenusTheme();
+  const { skin } = useVeraSkin();
+  const [open, setOpen] = useState(() => !hasChosenSkin());
+  // What the skin was before the dialog opened, so dismissing can put it back
+  // if someone tried one on and then changed their mind.
+  const [entrySkin] = useState<VeraSkin>(skin);
+  const [touched, setTouched] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setSkin(entrySkin);
+      setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, entrySkin]);
+
+  if (!open) return null;
+
+  const confirm = (choice: VeraSkin) => {
+    setSkin(choice);
+    setOpen(false);
+  };
+
+  return (
+    <div
+      className={theme === 'light' ? 'v7-light' : ''}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="skin-picker-title"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 200,
+        display: 'grid',
+        placeItems: 'center',
+        padding: '20px',
+        background: 'rgba(0,0,0,0.62)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        overflowY: 'auto',
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '720px',
+          background: 'var(--v7-bg)',
+          border: '1px solid var(--v7-border-strong)',
+          borderRadius: '20px',
+          padding: '28px',
+          display: 'grid',
+          gap: '22px',
+          boxShadow: '0 40px 90px -30px rgba(0,0,0,0.7)',
+          fontFamily: 'var(--v7-font-round)',
+        }}
+      >
+        <div style={{ display: 'grid', gap: '7px' }}>
+          <span
+            style={{
+              fontFamily: 'var(--v7-font-mono)',
+              fontSize: '10px',
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: 'var(--v7-text-mute)',
+            }}
+          >
+            One-time setup
+          </span>
+          <h2 id="skin-picker-title" style={{ fontSize: '25px', fontWeight: 700, color: 'var(--v7-text)', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+            Choose how Vera looks
+          </h2>
+          <p style={{ fontSize: '14px', color: 'var(--v7-text-dim)', margin: 0, lineHeight: 1.55, maxWidth: '52ch' }}>
+            Two designs, the same Vera underneath. Pick whichever you'd rather look at
+            all day — you can switch, or go back to the original, any time in Settings.
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: '14px',
+          }}
+        >
+          <SkinTile
+            skin="alloy"
+            theme={theme}
+            selected={touched && skin === 'alloy'}
+            onSelect={() => {
+              setTouched(true);
+              setSkin('alloy');
+            }}
+          />
+          <SkinTile
+            skin="vessel"
+            theme={theme}
+            selected={touched && skin === 'vessel'}
+            onSelect={() => {
+              setTouched(true);
+              setSkin('vessel');
+            }}
+          />
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '14px',
+            flexWrap: 'wrap',
+            paddingTop: '4px',
+            borderTop: '1px solid var(--v7-border)',
+          }}
+        >
+          <button type="button" className="vera-key vera-key-3" onClick={() => confirm('classic')}>
+            Keep the original look
+          </button>
+          <button
+            type="button"
+            className="vera-key vera-key-1"
+            disabled={!touched}
+            onClick={() => confirm(skin)}
+            title={touched ? undefined : 'Pick one of the two above first'}
+          >
+            {touched ? `Use ${SKIN_META[skin].name}` : 'Pick one to continue'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

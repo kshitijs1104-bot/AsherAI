@@ -17,6 +17,7 @@ import { WorkflowsPage } from "@/pages/Workflows";
 import { GoalsOverview } from "@/pages/GoalsOverview";
 import { DecisionsOverview } from "@/pages/DecisionsOverview";
 import { SettingsPage } from "@/pages/Settings";
+import { SkinPicker } from "@/pages/SkinPicker";
 import { SignupGate } from "@/pages/enterprise/Signup";
 import { OnboardingGate } from "@/pages/enterprise/Onboarding";
 import { PlanGate } from "@/pages/enterprise/Plan";
@@ -159,6 +160,15 @@ function App() {
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <Router />
             </WouterRouter>
+            {/* Asks once, on first sign-in, which of the two visual systems to
+                use — and never again once a choice is stored. Mounted here
+                rather than inside a route so the choice is made before the
+                founder starts working, and gated on SignedIn so it can't
+                appear over the sign-in screen. Renders null when a skin has
+                already been chosen, so this costs a mount and nothing else. */}
+            <SignedIn>
+              <SkinPicker />
+            </SignedIn>
             <Toaster />
           </CategoryProvider>
         </TooltipProvider>

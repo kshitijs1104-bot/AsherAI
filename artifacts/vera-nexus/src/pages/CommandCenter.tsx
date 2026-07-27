@@ -18,12 +18,34 @@ import type { VenusTheme } from '../lib/venusTheme';
 // Blackboard (dark)/Whiteboard (light) rather than "notebook" — still one
 // physical object, just the surface founders actually write status updates
 // on, which is closer to what this page is.
+// These were flat hex literals, which made the board the one surface in the
+// product that CSS could not reach: it opted out of the theme system entirely
+// and had to be edited by hand whenever the palette moved. Each value is now
+// a CSS custom property with the ORIGINAL hex as its fallback, which does two
+// things at once — a skin (see index.css) can restyle the board by defining
+// the variables, and with no skin selected every fallback fires and the board
+// renders exactly the colours it always did, byte for byte.
+//
+// The board sits inside Venus.tsx's root, which carries `.v7-light` in light
+// mode, so the variables already resolve per-theme on their own. The two
+// objects below are kept because the component still picks between them by
+// theme, and because the fallbacks — the classic values — genuinely differ.
 const DARK = {
-  bg: '#0a0d12', paper: '#11151d', paperEdge: '#1c212c', line: 'rgba(255,255,255,0.07)',
-  text: '#e7e9ee', muted: '#7c8494', faint: '#4b5261',
-  teal: '#33d2ac', tealDim: 'rgba(51,210,172,0.14)', tealBorder: 'rgba(51,210,172,0.3)',
-  coral: '#d97a63', coralDim: 'rgba(217,122,99,0.14)', coralBorder: 'rgba(217,122,99,0.3)',
-  marginRule: 'rgba(217,122,99,0.35)', dogear: '#0a0d12',
+  bg: 'var(--vera-cc-bg, #0a0d12)',
+  paper: 'var(--vera-cc-paper, #11151d)',
+  paperEdge: 'var(--vera-cc-paper-edge, #1c212c)',
+  line: 'var(--vera-cc-line, rgba(255,255,255,0.07))',
+  text: 'var(--vera-cc-text, #e7e9ee)',
+  muted: 'var(--vera-cc-muted, #7c8494)',
+  faint: 'var(--vera-cc-faint, #4b5261)',
+  teal: 'var(--vera-cc-accent, #33d2ac)',
+  tealDim: 'var(--vera-cc-accent-dim, rgba(51,210,172,0.14))',
+  tealBorder: 'var(--vera-cc-accent-border, rgba(51,210,172,0.3))',
+  coral: 'var(--vera-cc-second, #d97a63)',
+  coralDim: 'var(--vera-cc-second-dim, rgba(217,122,99,0.14))',
+  coralBorder: 'var(--vera-cc-second-border, rgba(217,122,99,0.3))',
+  marginRule: 'var(--vera-cc-rule, rgba(217,122,99,0.35))',
+  dogear: 'var(--vera-cc-dogear, #0a0d12)',
 };
 // `faint` carries the timestamp/source line on every row and was #a89d84 on
 // #fffdf7 — 2.64:1 measured, less than half the AA floor, so the one piece
@@ -31,11 +53,21 @@ const DARK = {
 // to read. Now 4.55:1, with `muted` at 7.02:1. Matches the contrast pass in
 // index.css's .v7-light.
 const LIGHT = {
-  bg: '#efe9dc', paper: '#fffdf7', paperEdge: '#ddd3bb', line: 'rgba(25,20,10,0.12)',
-  text: '#1c1913', muted: '#5f5747', faint: '#7d7460',
-  teal: '#0b7a61', tealDim: 'rgba(11,122,97,0.14)', tealBorder: 'rgba(11,122,97,0.38)',
-  coral: '#8f4325', coralDim: 'rgba(143,67,37,0.12)', coralBorder: 'rgba(143,67,37,0.34)',
-  marginRule: 'rgba(143,67,37,0.38)', dogear: '#efe9dc',
+  bg: 'var(--vera-cc-bg, #efe9dc)',
+  paper: 'var(--vera-cc-paper, #fffdf7)',
+  paperEdge: 'var(--vera-cc-paper-edge, #ddd3bb)',
+  line: 'var(--vera-cc-line, rgba(25,20,10,0.12))',
+  text: 'var(--vera-cc-text, #1c1913)',
+  muted: 'var(--vera-cc-muted, #5f5747)',
+  faint: 'var(--vera-cc-faint, #7d7460)',
+  teal: 'var(--vera-cc-accent, #0b7a61)',
+  tealDim: 'var(--vera-cc-accent-dim, rgba(11,122,97,0.14))',
+  tealBorder: 'var(--vera-cc-accent-border, rgba(11,122,97,0.38))',
+  coral: 'var(--vera-cc-second, #8f4325)',
+  coralDim: 'var(--vera-cc-second-dim, rgba(143,67,37,0.12))',
+  coralBorder: 'var(--vera-cc-second-border, rgba(143,67,37,0.34))',
+  marginRule: 'var(--vera-cc-rule, rgba(143,67,37,0.38))',
+  dogear: 'var(--vera-cc-dogear, #efe9dc)',
 };
 
 type Palette = typeof DARK;
@@ -146,7 +178,7 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
     >
       <span style={{ color: isFlagged ? palette.coral : palette.teal, fontSize: '15px', lineHeight: 1.5 }}>·</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', letterSpacing: '0.04em', color: isFlagged ? palette.coral : palette.faint, margin: '0 0 4px' }}>
+        <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', letterSpacing: '0.04em', color: isFlagged ? palette.coral : palette.faint, margin: '0 0 4px' }}>
           {sourceLabel(item.source)} · {item.createdAt ? formatTime(item.createdAt) : ''}
           {/* A resolved item was previously only struck through, which made
               "I actioned this" and "I dismissed this" look identical the
@@ -181,7 +213,7 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
                 </button>
                 <button type="button" onClick={() => { setEditing(false); setConfirmingSend(false); }} style={linkStyle(palette, true)}>Cancel</button>
                 {confirmingSend && outbound && (
-                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', color: palette.coral }}>
+                  <span style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', color: palette.coral }}>
                     This will {outbound}.
                   </span>
                 )}
@@ -189,7 +221,7 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
             ) : (
               confirmingSend && outbound ? (
                 <>
-                  <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', color: palette.coral }}>
+                  <span style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', color: palette.coral }}>
                     This will {outbound}.
                   </span>
                   <button type="button" onClick={handleAccept} style={linkStyle(palette, false, true)}>
@@ -279,8 +311,8 @@ function StreakBand({ palette, stats, streak }: { palette: Palette; stats: Daily
         <div style={{ display: 'flex', gap: '26px', flexWrap: 'wrap', paddingTop: '14px', borderTop: `1px solid ${palette.tealBorder}` }}>
           {counters.map(([value, label]) => (
             <span key={label} style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '20px', fontWeight: 600, color: palette.teal, lineHeight: 1.1 }}>{value}</span>
-              <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', color: palette.muted, letterSpacing: '0.03em' }}>{label}</span>
+              <span style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '20px', fontWeight: 600, color: palette.teal, lineHeight: 1.1 }}>{value}</span>
+              <span style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', color: palette.muted, letterSpacing: '0.03em' }}>{label}</span>
             </span>
           ))}
         </div>
@@ -337,7 +369,7 @@ function resolutionLabel(status: string, meta: CategoryMeta): string {
 
 function linkStyle(palette: Palette, quiet: boolean, flagged?: boolean): CSSProperties {
   return {
-    fontFamily: "'IBM Plex Mono', monospace",
+    fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)",
     fontSize: '10.5px',
     letterSpacing: '0.02em',
     color: quiet ? palette.muted : flagged ? palette.coral : palette.teal,
@@ -388,7 +420,7 @@ function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId:
             key={a.type}
             onClick={() => setActive(a.type)}
             style={{
-              background: 'none', border: 'none', color: palette.teal, fontFamily: "'Fraunces', serif",
+              background: 'none', border: 'none', color: palette.teal, fontFamily: "var(--vera-font-display, 'Fraunces', serif)",
               fontSize: '13.5px', fontStyle: 'italic', borderBottom: `1px solid ${palette.tealBorder}`, padding: '0 0 2px', cursor: 'pointer',
             }}
           >
@@ -459,7 +491,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
   // screenful.
   return (
     <div
-      style={{ background: palette.bg, minHeight: '100%', flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: '48px 20px 80px', fontFamily: "'Fraunces', serif", color: palette.text }}
+      style={{ background: palette.bg, minHeight: '100%', flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: '48px 20px 80px', fontFamily: "var(--vera-font-display, 'Fraunces', serif)", color: palette.text }}
     >
       {view === 'book' ? (
         <SavedAnalysisBook
@@ -471,7 +503,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
         />
       ) : (
       <div style={{ width: '100%', maxWidth: '640px' }}>
-        <button type="button" onClick={onBack} style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '12px', color: palette.muted, background: 'transparent', border: 'none', padding: 0, textDecoration: 'none', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '28px', cursor: 'pointer' }}>
+        <button type="button" onClick={onBack} style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '12px', color: palette.muted, background: 'transparent', border: 'none', padding: 0, textDecoration: 'none', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '28px', cursor: 'pointer' }}>
           <ArrowLeft style={{ width: 12, height: 12 }} /> Back to chat
         </button>
 
@@ -483,7 +515,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
 
           <p style={{ fontStyle: 'italic', fontSize: '13px', color: palette.muted, margin: '0 0 4px' }}>{dateLabel}</p>
           <h1 style={{ fontSize: '28px', fontWeight: 500, margin: '0 0 6px' }}>Today's {boardName}</h1>
-          <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '11.5px', color: palette.muted, letterSpacing: '0.01em', margin: '0 0 22px' }}>
+          <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '11.5px', color: palette.muted, letterSpacing: '0.01em', margin: '0 0 22px' }}>
             EVERYTHING VERA DRAFTED, DECIDED, OR FOUND WHILE YOU WERE AWAY
           </p>
 
@@ -505,7 +537,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
               queue gets. */}
           <div style={{ marginBottom: '24px', paddingBottom: '18px', borderBottom: `1px solid ${palette.line}` }}>
             {savedAnalyses.length === 0 ? (
-              <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', letterSpacing: '0.05em', color: palette.faint, margin: 0 }}>
+              <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', letterSpacing: '0.05em', color: palette.faint, margin: 0 }}>
                 SAVED ANALYSIS · NOTHING KEPT YET
               </p>
             ) : (
@@ -515,7 +547,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
                   onClick={() => setView('book')}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: '7px',
-                    fontFamily: "'Fraunces', serif", fontSize: '14px', fontStyle: 'italic',
+                    fontFamily: "var(--vera-font-display, 'Fraunces', serif)", fontSize: '14px', fontStyle: 'italic',
                     background: 'transparent', border: 'none', padding: '0 0 2px',
                     color: palette.teal, borderBottom: `1px solid ${palette.tealBorder}`, cursor: 'pointer',
                   }}
@@ -530,7 +562,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
                       title={`${typeLabel(t)} · ${count}`}
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: '5px',
-                        fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', color: palette.faint,
+                        fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', color: palette.faint,
                       }}
                     >
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: savedTypeColor(t, isLight) }} />
@@ -552,7 +584,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
               <button
                 key={cat}
                 onClick={() => sectionRefs.current[cat]?.scrollIntoView({ behavior: 'smooth' })}
-                style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10.5px', letterSpacing: '0.04em', color: palette.muted, background: 'transparent', border: `1px solid ${palette.paperEdge}`, padding: '6px 11px', borderRadius: '20px', cursor: 'pointer' }}
+                style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', letterSpacing: '0.04em', color: palette.muted, background: 'transparent', border: `1px solid ${palette.paperEdge}`, padding: '6px 11px', borderRadius: '20px', cursor: 'pointer' }}
               >
                 {CATEGORY_META[cat].label}
                 {grouped[cat].filter((i) => i.status === 'pending').length > 0 && ` (${grouped[cat].filter((i) => i.status === 'pending').length})`}
@@ -579,7 +611,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
           {(Object.keys(CATEGORY_META) as Category[]).map((cat) =>
             grouped[cat].length === 0 ? null : (
               <div key={cat} ref={(el) => { sectionRefs.current[cat] = el; }} style={{ marginBottom: '8px' }}>
-                <p style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: '10px', letterSpacing: '0.1em', color: palette.faint, margin: '22px 0 4px' }}>
+                <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', letterSpacing: '0.1em', color: palette.faint, margin: '22px 0 4px' }}>
                   {CATEGORY_META[cat].label}
                 </p>
                 {grouped[cat].map((item) => (
