@@ -18,6 +18,7 @@ import { NotificationBell } from './NotificationBell';
 import { CommandCenterSection } from './CommandCenter';
 import { AttachMenu } from './AttachMenu';
 import { ConnectorPicker } from './ConnectorPicker';
+import { SkinChoiceList } from './SkinPicker';
 import { useVenusTheme } from '../lib/venusTheme';
 import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
 
@@ -916,6 +917,19 @@ export function VenusPage() {
                 Connectors
               </div>
               <ConnectorPicker />
+
+              {/* Appearance sits under Connectors rather than above it: this
+                  panel is opened to fix a data source far more often than to
+                  change how things look, and the skin is a decision most
+                  founders make once. Light/dark isn't repeated here — that
+                  toggle is already in the sidebar header just above. */}
+              <div
+                className="text-[10px] uppercase tracking-wider mt-4 mb-2 pt-3"
+                style={{ fontFamily: 'var(--v7-font-mono)', color: 'var(--v7-text-mute)', borderTop: '1px solid var(--v7-border)' }}
+              >
+                Appearance
+              </div>
+              <SkinChoiceList />
             </div>
           )}
         </div>

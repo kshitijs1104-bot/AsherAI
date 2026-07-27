@@ -1,6 +1,80 @@
 import { useEffect, useState } from 'react';
-import { SKIN_META, hasChosenSkin, setSkin, useVeraSkin, type VeraSkin } from '../lib/veraSkin';
+import { SKIN_META, VERA_SKINS, hasChosenSkin, setSkin, useVeraSkin, type VeraSkin } from '../lib/veraSkin';
 import { useVenusTheme } from '../lib/venusTheme';
+
+/**
+ * The compact form, for Vera's own settings panel in the sidebar (260px wide,
+ * so this is a vertical stack rather than the dialog's side-by-side tiles).
+ * Lives here beside the dialog because both read the same SKIN_META and must
+ * describe the skins identically — a founder who picked "Vessel" on day one
+ * should find the same words when they go looking for it later.
+ *
+ * Light/dark is deliberately absent: the sidebar header already carries that
+ * toggle a few pixels above this panel, and offering it twice in one column
+ * invites the reading that they are two different settings.
+ */
+export function SkinChoiceList() {
+  const { skin, setSkin: choose } = useVeraSkin();
+
+  return (
+    <div style={{ display: 'grid', gap: '4px' }}>
+      {VERA_SKINS.map((option) => {
+        const meta = SKIN_META[option];
+        const active = skin === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => choose(option)}
+            aria-pressed={active}
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px',
+              width: '100%',
+              textAlign: 'left',
+              padding: '8px 9px',
+              borderRadius: '8px',
+              background: active ? 'var(--v7-cyan-soft)' : 'transparent',
+              border: `1px solid ${active ? 'var(--v7-cyan-strong)' : 'transparent'}`,
+              cursor: 'pointer',
+              transition: 'background 140ms ease, border-color 140ms ease',
+            }}
+            onMouseEnter={(e) => {
+              if (!active) e.currentTarget.style.background = 'var(--v7-bg-raised)';
+            }}
+            onMouseLeave={(e) => {
+              if (!active) e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            {/* A filled dot in the accent is the whole selected-state signal —
+                at this width a check glyph plus a label wraps the line. */}
+            <span
+              aria-hidden="true"
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                marginTop: '5px',
+                flexShrink: 0,
+                background: active ? 'var(--v7-cyan)' : 'transparent',
+                border: active ? 'none' : '1px solid var(--v7-border-strong)',
+              }}
+            />
+            <span style={{ display: 'grid', gap: '1px', minWidth: 0 }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--v7-text)', lineHeight: 1.3 }}>
+                {meta.name}
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--v7-text-mute)', lineHeight: 1.35 }}>
+                {meta.line}
+              </span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 // Swatches for the two preview tiles. These are literal values rather than
 // reads of the live custom properties on purpose: a tile has to show what a
