@@ -10,7 +10,7 @@ import { detectFactConflicts, type ExtractedFact } from "../lib/factConflicts";
 import { computeConvergence, withheldReasonFor, generateRecommendationText, type Hypothesis, type Contradiction } from "../lib/evidenceConvergence";
 import { collectResponseStrings } from "../lib/responseText";
 import { checkArithmeticConsistency } from "../lib/arithmeticCheck";
-import { detectUngroundedCurrency } from "../lib/groundedness";
+import { detectUngroundedCurrency, detectUngroundedEntityClaims } from "../lib/groundedness";
 import { webSearch, formatWebSearchForPrompt } from "../lib/websearch";
 import { requireAuth, requireUserId } from "../middlewares/auth";
 import { applyResolvedEvidence } from "../lib/goalEvidence";
@@ -1874,6 +1874,18 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         const ungroundedCurrencies = detectUngroundedCurrency(responseStrings, groundingText);
         if (ungroundedCurrencies.length > 0) {
           console.error(`[groundedness] session=${sessionId} ungroundedCurrencies=${JSON.stringify(ungroundedCurrencies)} query="${body.data.message.slice(0, 200)}"`);
+        }
+
+        // Ungrounded third-party entity claims: same shadow-mode treatment
+        // as the currency check above — new/unvalidated, logged only, never
+        // attached to the response. Catches the reported case directly: a
+        // named outside company (e.g. "YouTube") paired with a hard figure
+        // that appears nowhere in anything actually supplied to the model
+        // (see groundedness.ts for why the currency and arithmetic checks
+        // both miss this by construction).
+        const ungroundedEntityClaims = detectUngroundedEntityClaims(responseStrings, groundingText);
+        if (ungroundedEntityClaims.length > 0) {
+          console.error(`[groundedness] session=${sessionId} ungroundedEntityClaims=${JSON.stringify(ungroundedEntityClaims)} query="${body.data.message.slice(0, 200)}"`);
         }
       } catch (integrityErr) {
         console.error("[responseIntegrity] check failed, continuing without it", integrityErr);
