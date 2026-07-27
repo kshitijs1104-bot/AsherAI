@@ -57,6 +57,14 @@ function inferSector(query: string): string | null {
 export interface PrecedentMatch {
   precedent: Precedent;
   score: number;
+  // How much of the match came from the founder's actual QUESTION rather
+  // than their stored business context (see questionTokens below) — 0 means
+  // this precedent matched purely on shared context words, with zero real
+  // connection to what was actually asked. Not used to gate tier/ranking
+  // here (see the NOTE further down on why that regressed real queries when
+  // tried) — exposed so a caller deciding what to show as a CITATION can
+  // apply its own, stricter bar than what's good enough to rank/reason from.
+  questionOverlap: number;
 }
 
 export type ConfidenceTier = "strong" | "moderate" | "none";
@@ -234,7 +242,7 @@ export async function retrievePrecedents(query: string, opts?: { sector?: string
     }
   }
 
-  const top = selected.map(({ precedent, score }) => ({ precedent, score }));
+  const top = selected.map(({ precedent, score, questionOverlap }) => ({ precedent, score, questionOverlap }));
   const confidence = top.length > 0 ? Math.min(1, top[0].score) : 0;
   const matched = tier !== "none";
 

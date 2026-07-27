@@ -386,12 +386,25 @@ function looksLikeBusinessContext(message: string): boolean {
 // the imperative/analytical-verb family below to close that gap. This is a
 // syntactic fix (imperative vs. declarative mood), not a judgment call, so
 // it belongs here in the classifier rather than in the LLM prompt.
+// FIX: "then whyd u say youtube takes 55% cut" and "...hows that possible"
+// both went straight into buildContextAcknowledgment ("Got it — noted: ...
+// What would you like help with?") instead of being answered — confirmed
+// live. Both contain a bare percentage (matches BUSINESS_METRICS_SIGNAL
+// above) and neither has a "?", so everything hinged on this regex; "whyd"
+// and "hows" are informal contractions with the apostrophe simply omitted
+// (not the "it's"->"it s" space-splitting normalizeQueryText produces
+// elsewhere in this file), so \bwhy\b/\bhow\b never matched them. This also
+// mattered beyond the immediate non-answer: a message swallowed here returns
+// before classifyQuery ever runs, so a real correction phrased this way was
+// invisible to the correction-capture pipeline (responseFeedback.ts) too.
+// Same accommodation the "shld" entry below already makes for "should".
+const questionish = /\b(should|shld|shouldnt|would|wouldnt|could|couldnt|worth|help|how|hows|howd|what|whats|whatd|why|whyd|which|when|whens|who|whos|whod|where|wheres|recommend|advice|suggest|priorit|map|analyz|identify|outline|breakdown|break down|walk me|walk through|compare|evaluat|assess|review|explain|tell me|give me|show me|list|summariz|forecast|plan|project|estimate|calculat)\b/i;
+
 function isPureContextStatement(message: string): boolean {
   const normalized = normalizeQueryText(message);
   if (!looksLikeBusinessContext(message)) return false;
   if (message.includes("?")) return false;
-  const questionish = /\b(should|shld|would|could|worth|help|how|what|why|which|when|recommend|advice|suggest|priorit|map|analyz|identify|outline|breakdown|break down|walk me|walk through|compare|evaluat|assess|review|explain|tell me|give me|show me|list|summariz|forecast|plan|project|estimate|calculat)\b/i.test(normalized);
-  return !questionish;
+  return !questionish.test(normalized);
 }
 
 // Business context now lives on the founder's ACTIVE business_profiles row

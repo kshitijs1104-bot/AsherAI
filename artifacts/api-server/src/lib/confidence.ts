@@ -124,33 +124,13 @@ function computeOutcomeHistoryFactor(ownDecisions: OwnDecisionMatch[]): number {
   return ((positiveCount - negativeCount) / ownDecisions.length) * OUTCOME_HISTORY_WEIGHT;
 }
 
-function buildEvidenceRefs(retrieval: RetrievalResult, ownDecisions: OwnDecisionMatch[]): EvidenceRef[] {
-  // FIX: previously included every retrieved precedent regardless of tier,
-  // so a "moderate" match — retrieval.ts's own deliberately-relaxed pass,
-  // kept loose so legitimate strategy questions don't lose all grounding
-  // (see .agents/memory/retrieval-gating-lexical-overlap.md) — got named in
-  // the UI as a "PRECEDENTS USED" citation with the same visual confidence
-  // as a real match. Confirmed live: "Spoke" was cited as evidence for both
-  // an unrelated company-failure question and a completely different
-  // Slack-message-drafting request, and "Ask Jeeves"/"Notion AI" were cited
-  // for a DTC coffee-subscription business — none topically related. Those
-  // are real precedent rows and a real (weak) lexical score, just not
-  // strong enough to defensibly name as "what grounded this answer." The
-  // weak match still reaches the model as soft background context (see
-  // precedentBlock in ai.ts), so reasoning quality is unaffected — only
-  // what's paraded to the user as a citation changes. "strong" tier already
-  // requires clearing MATCH_THRESHOLD + MIN_RAW_OVERLAP + a 3-precedent
-  // floor (see retrieval.ts), so this is a presentation-layer change only —
-  // it does not touch retrieval scoring/thresholds at all.
-  const precedentRefs: EvidenceRef[] =
-    retrieval.tier === "strong"
-      ? retrieval.precedents.map((m) => ({
-          type: "precedent" as const,
-          id: m.precedent.id,
-          label: m.precedent.companyName,
-          weight: m.score,
-        }))
-      : [];
+function buildEvidenceRefs(citablePrecedents: PrecedentMatch[], ownDecisions: OwnDecisionMatch[]): EvidenceRef[] {
+  const precedentRefs: EvidenceRef[] = citablePrecedents.map((m) => ({
+    type: "precedent" as const,
+    id: m.precedent.id,
+    label: m.precedent.companyName,
+    weight: m.score,
+  }));
   const ownDecisionRefs: EvidenceRef[] = ownDecisions.map((d) => ({
     type: "own_decision",
     id: d.decision.id,
@@ -163,7 +143,33 @@ function buildEvidenceRefs(retrieval: RetrievalResult, ownDecisions: OwnDecision
 export function computeConfidence(retrieval: RetrievalResult, ownDecisions: OwnDecisionMatch[]): ConfidenceResult {
   const evidenceQuality = clamp01(retrieval.confidence);
   const verificationBoost = computeVerificationBoost(retrieval.precedents);
-  const { penalty: contradictionPenalty, signal } = computeContradiction(retrieval.precedents);
+
+  // FIX: contradiction detection and the "PRECEDENTS USED" citation list are
+  // both user-facing claims about which specific companies back this
+  // answer, so both are computed from the same, stricter "citable" set —
+  // not every retrieved precedent regardless of tier, which is what let a
+  // "moderate" match (retrieval.ts's own deliberately-relaxed pass, kept
+  // loose so legitimate strategy questions don't lose all grounding — see
+  // .agents/memory/retrieval-gating-lexical-overlap.md) get named in the UI
+  // with the same visual confidence as a real match: "Spoke" was cited for
+  // both an unrelated company-failure question and an unrelated Slack-draft
+  // request; "Ask Jeeves"/"Notion AI" for a DTC coffee business.
+  //
+  // "strong" tier alone still isn't enough, though — confirmed live on
+  // "which company do i own", a pure context-recall question with zero real
+  // topical content of its own. retrieval.ts's base lexical score blends the
+  // question with the founder's stored business context and deliberately
+  // does NOT gate tier selection on questionOverlap (a prior attempt to do
+  // that regressed real strategy questions — same memory note above), so a
+  // question contributing nothing of its own can still ride stored context
+  // to "strong" tier across precedents sharing nothing with what was
+  // actually asked — that query cited Gigya/Piston Cloud/LendUp/SmartAsset
+  // under a "Split precedent" badge, none related to the founder's business.
+  // Per-precedent questionOverlap isn't blended away like the tier is, so
+  // requiring it here (a citation-display filter, not a retrieval-scoring
+  // one) closes this without touching retrieval.ts at all.
+  const citablePrecedents = retrieval.tier === "strong" ? retrieval.precedents.filter((m) => m.questionOverlap > 0) : [];
+  const { penalty: contradictionPenalty, signal } = computeContradiction(citablePrecedents);
   const outcomeHistoryFactor = computeOutcomeHistoryFactor(ownDecisions);
 
   const score = clamp01(evidenceQuality + verificationBoost - contradictionPenalty + outcomeHistoryFactor);
@@ -177,8 +183,15 @@ export function computeConfidence(retrieval: RetrievalResult, ownDecisions: OwnD
   // cleared 0.3 purely on the +0.25 sector boost (see retrieval.ts). Adjacent
   // evidence is real evidence and still grounds the answer — it just isn't
   // "verified", so the badge now says exploratory and the note explains why.
+  // Also requires at least one CITABLE precedent (real question relevance,
+  // not just a context-blend-driven "strong" score) — without this, a
+  // context-only strong match with zero question overlap and no
+  // outcome-contradiction between its precedents (so no "Split precedent"
+  // badge to at least hint something's off) could still claim "Verified
+  // precedent" while citablePrecedents, and therefore evidenceRefs below,
+  // is empty — a badge asserting grounding with nothing shown to back it.
   const tier: ConfidenceResult["tier"] =
-    score >= VERIFIED_THRESHOLD && retrieval.tier === "strong" ? "verified" : "exploratory";
+    score >= VERIFIED_THRESHOLD && retrieval.tier === "strong" && citablePrecedents.length > 0 ? "verified" : "exploratory";
 
   return {
     score: Number(score.toFixed(3)),
@@ -190,6 +203,6 @@ export function computeConfidence(retrieval: RetrievalResult, ownDecisions: OwnD
       outcomeHistoryFactor: Number(outcomeHistoryFactor.toFixed(3)),
     },
     contradictions: signal ? [signal] : [],
-    evidenceRefs: buildEvidenceRefs(retrieval, ownDecisions),
+    evidenceRefs: buildEvidenceRefs(citablePrecedents, ownDecisions),
   };
 }
