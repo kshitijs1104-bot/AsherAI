@@ -6,18 +6,13 @@ import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
-import { Layout } from "@/components/layout/Layout";
-import { CategoryProvider } from "@/lib/CategoryContext";
-import { LinePage } from "@/pages/Line";
-import { SightPage } from "@/pages/Sight";
-import { CryptPage } from "@/pages/Crypt";
-import { ThoughtsPage } from "@/pages/Thoughts";
 import { VenusPage } from "@/pages/Venus";
 import { WorkflowsPage } from "@/pages/Workflows";
 import { GoalsOverview } from "@/pages/GoalsOverview";
 import { DecisionsOverview } from "@/pages/DecisionsOverview";
 import { SettingsPage } from "@/pages/Settings";
 import { SkinPicker } from "@/pages/SkinPicker";
+import { LandingPage } from "@/pages/landing/Landing";
 import { SignupGate } from "@/pages/enterprise/Signup";
 import { OnboardingGate } from "@/pages/enterprise/Onboarding";
 import { PlanGate } from "@/pages/enterprise/Plan";
@@ -81,35 +76,20 @@ function AuthGate({ component: Component }: { component: ComponentType }) {
 function Router() {
   return (
     <Switch>
+      {/* The front door. Public on purpose — outside AuthGate, because a
+          signed-out visitor is exactly who it is for — and outside any app
+          chrome, since it carries its own nav and footer.
+
+          This used to be the Line/Sight/Crypt terminal; that whole surface now
+          lives in src/_archive (see the README there for how to bring a screen
+          back). "/landing" stays registered as an alias so links written while
+          it lived there keep resolving. */}
+      <Route path="/" component={LandingPage} />
+      <Route path="/landing" component={LandingPage} />
       <Route path="/enterprise/signup" component={SignupGate} />
       <Route path="/enterprise/onboarding" component={OnboardingGate} />
       <Route path="/enterprise/plan" component={PlanGate} />
       <Route path="/enterprise/checkout" component={CheckoutGate} />
-      <Route path="/">
-        <Layout>
-          <LinePage />
-        </Layout>
-      </Route>
-      <Route path="/line">
-        <Layout>
-          <LinePage />
-        </Layout>
-      </Route>
-      <Route path="/sight">
-        <Layout>
-          <SightPage />
-        </Layout>
-      </Route>
-      <Route path="/crypt">
-        <Layout>
-          <CryptPage />
-        </Layout>
-      </Route>
-      <Route path="/thoughts">
-        <Layout>
-          <ThoughtsPage />
-        </Layout>
-      </Route>
       {/* FIX: "/venus" is the internal codename, not the product name — it
           was leaking straight into the visible URL bar. "/vera" is now the
           canonical path every in-app navigation call points at (see
@@ -140,10 +120,17 @@ function Router() {
       <Route path="/venus/decisions">
         <AuthGate component={DecisionsOverview} />
       </Route>
+      {/* Settings kept its path but lost its wrapper. It reads as Nexus chrome
+          and used to render inside <Layout>, but its contents are Vera's — the
+          business context attached to every request, and the read-only company
+          memory — so it survived the archive while Layout did not. It is a
+          self-contained centred form and needs no chrome.
+
+          It is also gated now, where it previously was not: every query on the
+          page needs a session, so an unauthenticated visit could only ever
+          render an empty form. */}
       <Route path="/settings">
-        <Layout>
-          <SettingsPage />
-        </Layout>
+        <AuthGate component={SettingsPage} />
       </Route>
       <Route component={NotFound} />
     </Switch>
@@ -156,7 +143,10 @@ function App() {
       <AuthTokenBridge />
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <CategoryProvider>
+          {/* CategoryProvider used to wrap everything here. Its only consumers
+              were the Topbar, the LeftSidebar, Line and Thoughts — all now in
+              src/_archive — so it went with them. */}
+          <>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
               <Router />
             </WouterRouter>
@@ -170,7 +160,7 @@ function App() {
               <SkinPicker />
             </SignedIn>
             <Toaster />
-          </CategoryProvider>
+          </>
         </TooltipProvider>
       </QueryClientProvider>
     </ClerkProvider>

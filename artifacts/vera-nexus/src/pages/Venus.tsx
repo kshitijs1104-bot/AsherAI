@@ -764,14 +764,17 @@ export function VenusPage() {
         {/* Back link + sidebar collapse */}
         <div className="flex items-center justify-between" style={{ padding: '0 0 22px' }}>
           <button
-            onClick={() => navigate('/line')}
+            /* Was '/line' — the Nexus feed, which is archived and no longer
+               routed, so this button had become a one-way trip to NotFound.
+               '/' is now the landing page. */
+            onClick={() => navigate('/')}
             className="flex items-center gap-[7px] text-[13px] font-medium transition-colors"
             style={{ color: 'var(--v7-text-mute)', padding: '8px 8px' }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--v7-text-dim)')}
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--v7-text-mute)')}
           >
             <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5"><path d="M15 5L8 12L15 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Back to Vera Nexus
+            Back to home
           </button>
           <div className="flex items-center gap-1 shrink-0">
             <VenusThemeToggle theme={theme} onToggle={toggleTheme} />

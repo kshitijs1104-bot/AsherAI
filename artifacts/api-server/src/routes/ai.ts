@@ -2294,7 +2294,7 @@ router.post("/ai/summarize-article", async (req, res) => {
         bullets: [
           "Configure your Groq API key in Settings to unlock AI article summaries.",
           "Visit console.groq.com to create a free key in under 60 seconds.",
-          "Paste the key in Vera Nexus Settings and refresh — summaries appear instantly.",
+          "Paste the key in Vera Settings and refresh — summaries appear instantly.",
         ],
         stats: [
           { label: "Status", value: "No API key" },

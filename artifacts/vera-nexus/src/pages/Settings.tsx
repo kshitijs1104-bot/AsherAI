@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'wouter';
 import { useGetOnboarding, useSaveOnboarding } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getGetOnboardingQueryKey } from '@workspace/api-client-react';
 import { useCompanyFacts } from '../lib/venusApi';
 
-// Appearance deliberately does NOT live here. This is Vera Nexus's own
-// settings route (Line / Sight / Crypt chrome); the skin is a Vera setting,
-// so it sits in Vera's sidebar panel next to Connectors — see the Appearance
+// Appearance deliberately does NOT live here. The skin is a Vera setting, so
+// it sits in Vera's sidebar panel next to Connectors — see the Appearance
 // block in Venus.tsx, which renders SkinChoiceList. One place, next to the
 // product it changes, rather than two controls that could disagree.
+//
+// This page used to render inside the Nexus <Layout>. That chrome is archived
+// (src/_archive) and this page is not: everything on it is Vera's. It now
+// renders standalone, so it carries its own way back.
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -42,10 +46,24 @@ export function SettingsPage() {
   });
 
   return (
-    <div className="p-8 max-w-3xl mx-auto space-y-12">
+    // Two elements, not one: the ground has to be full-bleed while the form
+    // stays a centred 3xl column. <Layout>'s wrapper used to provide the
+    // former; folding both onto a single div would paint the background only
+    // behind the column.
+    <div className="dark min-h-screen bg-[var(--bg)] text-[var(--text)]">
+      <div className="p-8 max-w-3xl mx-auto space-y-12">
+      <Link
+        href="/vera"
+        className="inline-flex items-center gap-2 text-[13px] text-[var(--muted)] hover:text-white transition-colors"
+      >
+        <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5">
+          <path d="M15 5L8 12L15 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Back to Vera
+      </Link>
       <header>
         <h1 className="text-2xl font-syne font-bold text-white mb-2">Settings</h1>
-        <p className="text-sm font-mono text-[var(--muted)]">Configure Vera Nexus core parameters.</p>
+        <p className="text-sm font-mono text-[var(--muted)]">Configure how Vera reads your business.</p>
       </header>
 
       {/* Business Context */}
@@ -151,6 +169,7 @@ export function SettingsPage() {
           </ul>
         </section>
       )}
+      </div>
     </div>
   );
 }

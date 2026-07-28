@@ -1,7 +1,10 @@
 import { Link, useLocation } from 'wouter';
 import { Settings, User } from 'lucide-react';
 import { useCategory } from '../../lib/CategoryContext';
-import { isEnterpriseUnlocked, getNextGateRoute } from '../../lib/enterpriseGate';
+// Aliased rather than relative: enterpriseGate is still live code in src/lib,
+// so the old '../../lib/…' path would now resolve inside _archive and break.
+// This is the only import in the archived tree that reaches outside it.
+import { isEnterpriseUnlocked, getNextGateRoute } from '@/lib/enterpriseGate';
 
 export function Topbar() {
   const [location, navigate] = useLocation();
