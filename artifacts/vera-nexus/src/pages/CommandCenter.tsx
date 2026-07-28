@@ -1,11 +1,15 @@
 import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useLocation } from 'wouter';
-import { ArrowLeft, ArrowRight, Flame } from 'lucide-react';
+import {
+  ArrowLeft, ArrowRight, Flame,
+  Mail, MessageSquare, FileSpreadsheet, NotebookText, Ticket, Linkedin, Plug,
+} from 'lucide-react';
 import { SavedAnalysisBook, typeColor as savedTypeColor, TYPE_ORDER as SAVED_TYPE_ORDER } from './SavedAnalysisBook';
+import { ActivityWeek } from './ActivityWeek';
 import { getSavedAnalyses, typeLabel, type SavedAnalysis, type SavedAnalysisType, type ChatMessage } from '../lib/venusHistory';
 import {
-  useQueue, useQueueAction, useDailyBrief, useRunInstantAction,
-  type QueueItem, type InstantActionType, type DailyBriefStats,
+  useQueue, useQueueAction, useDailyBrief, useRunInstantAction, useConnectors,
+  type QueueItem, type InstantActionType, type DailyBriefStats, type ConnectorStatus,
 } from '../lib/venusApi';
 import type { VenusTheme } from '../lib/venusTheme';
 import { useVeraSkin } from '../lib/veraSkin';
@@ -76,6 +80,21 @@ type Palette = typeof DARK;
 const SOURCE_LABEL: Record<string, string> = {
   gmail: 'GMAIL', slack: 'SLACK', sheets: 'SHEETS', calendar: 'CALENDAR', notion: 'NOTION',
   jira: 'JIRA', linkedin: 'LINKEDIN', whatsapp: 'WHATSAPP', instant_action: 'QUICK ACTION',
+};
+
+// Moved here from the Living Context bar, which used to carry the "what can
+// Vera actually see" glyphs across every screen. That bar is gone — it
+// repeated the rail's own figures at the top of the same page — so the one
+// thing it showed that the rail didn't comes down into the rail.
+const CONNECTOR_ICON: Record<string, typeof Mail> = {
+  gmail: Mail,
+  slack: MessageSquare,
+  whatsapp: MessageSquare,
+  sheets: FileSpreadsheet,
+  google_sheets: FileSpreadsheet,
+  notion: NotebookText,
+  jira: Ticket,
+  linkedin: Linkedin,
 };
 
 function sourceLabel(source: string): string {
@@ -281,6 +300,17 @@ function streakLine(streak: number): { headline: string; sub: string } {
   return { headline: `${streak} days in a row`, sub: "Genuinely impressive. Vera works better the longer you've done this." };
 }
 
+// The rail's version of the same idea, cut to fit beside a 32px numeral in a
+// ~320px column. streakLine's sentences are written for the classic board's
+// full-width band and wrap to three lines here.
+function streakCaption(streak: number): { label: string; note: string } {
+  if (streak <= 0) return { label: 'Day one', note: 'Clear one item and the streak starts.' };
+  if (streak === 1) return { label: 'Day in a row', note: 'Come back tomorrow and it sticks.' };
+  if (streak < 5) return { label: 'Days in a row', note: "You've shown up every day this week." };
+  if (streak < 14) return { label: 'Days in a row', note: 'A routine now, not a novelty.' };
+  return { label: 'Days in a row', note: 'Vera works better the longer you do this.' };
+}
+
 // "Time saved" was a number in minutes — 8m, 24m — which reads as a
 // rounding error and quietly invites the founder to check the maths on a
 // figure nobody can verify. Free time is the same idea told as a joke: the
@@ -354,6 +384,18 @@ function StreakBand({ palette, stats, streak }: { palette: Palette; stats: Daily
               <span style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', color: palette.muted, letterSpacing: '0.03em' }}>{label}</span>
             </span>
           ))}
+        </div>
+      )}
+
+      {/* The same week strip the skinned rail draws, in the notebook's own
+          ink. Counters say how much; this says whether it was steady. */}
+      {stats.activityByDay && stats.activityByDay.length > 0 && (
+        <div style={{ marginTop: '4px', paddingTop: '6px', borderTop: counters.length ? `1px solid ${palette.tealBorder}` : 'none' }}>
+          <ActivityWeek
+            days={stats.activityByDay}
+            flush
+            tone={{ accent: palette.teal, quiet: palette.tealBorder, well: palette.paperEdge }}
+          />
         </div>
       )}
     </div>
@@ -515,6 +557,65 @@ function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId:
   );
 }
 
+/**
+ * What Vera can currently see. Previously a row of unlabelled glyphs in the
+ * Living Context bar, where the only way to learn which service a socket
+ * stood for — or that one had stopped working — was to hover it. In the rail
+ * there is room to simply say so, and a broken connector is the one piece of
+ * standing state on this page that needs acting on rather than reading.
+ *
+ * Renders nothing when nothing is connected: an empty "Connected" tile on a
+ * fresh account is a reproach, and the queue already carries a real
+ * connector_setup item pointing at the same page.
+ */
+function ConnectedTile() {
+  const [, navigate] = useLocation();
+  const connectors = useConnectors();
+  const live = (connectors.data?.connectors ?? []).filter(
+    (c: ConnectorStatus) => c.status === 'connected' || c.status === 'error',
+  );
+  if (live.length === 0) return null;
+
+  const brokenCount = live.filter((c: ConnectorStatus) => c.status === 'error').length;
+
+  return (
+    <div className="vera-tile">
+      <div className="vera-tile-head">
+        <span className="vera-label">Connected</span>
+        {brokenCount > 0 && (
+          <span className="vera-tally" style={{ color: 'var(--red)', background: 'transparent', borderColor: 'var(--red)' }}>
+            {brokenCount} need{brokenCount === 1 ? 's' : ''} fixing
+          </span>
+        )}
+      </div>
+      <div className="vera-tile-body" style={{ display: 'grid', gap: '10px' }}>
+        {live.map((c: ConnectorStatus) => {
+          const Icon = CONNECTOR_ICON[c.type] ?? Plug;
+          const broken = c.status === 'error';
+          return (
+            <span key={c.type} style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+              <span className={`vera-socket ${broken ? 'vera-socket-bad' : 'vera-socket-live'}`} style={{ width: 24, height: 24 }}>
+                <Icon className="w-3 h-3" />
+              </span>
+              <span className="vera-t-support" style={{ color: broken ? 'var(--red)' : 'var(--v7-text-dim)', minWidth: 0 }}>
+                {broken ? `${c.label} — needs reconnecting` : c.label}
+              </span>
+            </span>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => navigate('/vera/workflows')}
+          className="vera-key vera-key-3"
+          style={{ marginTop: '2px', justifyContent: 'flex-start' }}
+        >
+          Manage connections
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueInChat }: {
   theme: VenusTheme;
   onBack: () => void;
@@ -651,8 +752,29 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
                 <div className="vera-tile">
                   <div className="vera-tile-head">
                     <span className="vera-label">Output</span>
-                    {streak > 0 && <span className="vera-tally">{streak} days</span>}
+                    <span className="vera-tally">
+                      {dailyBrief.data.stats.daysActive} {dailyBrief.data.stats.daysActive === 1 ? 'day' : 'days'} active
+                    </span>
                   </div>
+
+                  {/* The streak leads, because it is the only figure here
+                      that can go DOWN — everything below it is an
+                      accumulating total that only ever climbs, and a column
+                      of numbers that can't fall reads as decoration. */}
+                  <div className="vera-streak">
+                    <span className="vera-streak-n">{streak}</span>
+                    <span style={{ display: 'grid', gap: '2px', minWidth: 0 }}>
+                      <span className="vera-t-heading">{streakCaption(streak).label}</span>
+                      <span className="vera-t-support">{streakCaption(streak).note}</span>
+                    </span>
+                  </div>
+
+                  {/* …and the week under it says whether that streak was
+                      earned steadily or in one sitting, which no total can. */}
+                  <div style={{ borderBottom: '1px solid var(--v7-border)' }}>
+                    <ActivityWeek days={dailyBrief.data.stats.activityByDay ?? []} />
+                  </div>
+
                   {/* The accumulating record, as structured data rather than
                       prose — this is the one place on the board where every
                       value is directly comparable, so it gets the key/value
@@ -666,6 +788,8 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
                   </div>
                 </div>
               )}
+
+              <ConnectedTile />
 
               <div className="vera-tile">
                 <div className="vera-tile-head">

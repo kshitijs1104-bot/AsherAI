@@ -1640,68 +1640,11 @@ html[data-skin] .vera-suggest:hover .vera-socket {
   color: var(--v7-cyan);
 }
 
-/* ---------- Living Context bar ----------------------------------------
-   The one persistently visible object on the board, so it is the only place
-   the glass tier is spent. Scoped to skins: Classic never had this surface
-   and does not get it. */
-html[data-skin] .vera-ctx {
-  display: flex;
-  align-items: stretch;
-  flex-wrap: wrap;
-  border-radius: var(--vera-r-card);
-  border: 1px solid var(--v7-border-strong);
-  background: var(--v7-bg-raised);
-  box-shadow: var(--vera-e2), var(--vera-e1-bevel);
-  overflow: hidden;
-}
-html[data-skin] .vera-ctx-id {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  min-width: 0;
-}
-html[data-skin] .vera-ctx-metrics {
-  display: flex;
-  align-items: stretch;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-}
-html[data-skin] .vera-ctx-m {
-  display: grid;
-  gap: 1px;
-  align-content: center;
-  padding: 12px 16px;
-  border-left: 1px solid var(--v7-border);
-  flex-shrink: 0;
-}
-html[data-skin] .vera-ctx-conn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 12px 14px;
-  border-left: 1px solid var(--v7-border);
-}
-/* Every figure is mono and tabular so the bar cannot reflow as numbers
-   update — a status object that shifts width while you read it reads as
-   unstable, and this product's whole claim is that its numbers hold up. */
-html[data-skin] .vera-ctx-v {
-  font-family: var(--v7-font-mono);
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums lining-nums;
-  color: var(--v7-text);
-  line-height: 1.25;
-}
-html[data-skin] .vera-ctx-k {
-  font-family: var(--v7-font-mono);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--v7-text-mute);
-}
+/* The Living Context bar's rules lived here. The bar is gone — it repeated
+   the Command Center rail's own figures directly above them — and its
+   markup went with it. Only .vera-socket below survives it, because the
+   suggestion chips and the rail's Connected tile both carry glyphs in the
+   same well. */
 
 /* Square well in Alloy, round bowl in Vessel — the two skins carry their
    glyphs differently, and this is the one shape rule that says so. */
@@ -1793,19 +1736,7 @@ html[data-skin] .vera-t-data {
    Up to here both skins shared every shape and differed only in palette,
    radius and type — which made them read as one design in two colourways
    rather than the two directions they were pitched as. These are the moves
-   that separate them.
-
-   Vessel: the context bar is a capsule sized to its content, floating clear
-   of the page rather than spanning it. A full-width bar reads as chrome you
-   stop seeing; a capsule reads as an object belonging to the business it
-   describes. */
-html[data-skin="vessel"] .vera-ctx {
-  border-radius: 999px;
-  width: fit-content;
-  max-width: 100%;
-  margin: 0 auto;
-}
-html[data-skin="vessel"] .vera-ctx-id { padding-left: 10px; }
+   that separate them. */
 
 /* Vessel: suggestions are ruled editorial lines, not boxed cards. An entry
    screen with card-shaped things on it already looks like a dashboard, which
@@ -1847,26 +1778,7 @@ html[data-skin="alloy"] .vera-hero-axis::before {
 }
 
 /* ---------- Recomposition ---------------------------------------------
-   Tablet and mobile are their own compositions, not a reflow. The context
-   bar is the piece that genuinely has to change shape: at full width it
-   reads left to right, and below that it stacks identity over metrics with
-   the connector glyphs pinned right, so it never eats the viewport on a
-   phone. */
-@media (max-width: 860px) {
-  html[data-skin] .vera-ctx {
-    flex-wrap: wrap;
-    border-radius: var(--vera-r-card);
-    width: auto;
-  }
-  html[data-skin] .vera-ctx-id {
-    width: 100%;
-    border-bottom: 1px solid var(--v7-border);
-  }
-  html[data-skin] .vera-ctx-metrics { order: 3; width: 100%; }
-  html[data-skin] .vera-ctx-m:first-child { border-left: 0; }
-  html[data-skin] .vera-ctx-conn { border-left: 0; margin-left: auto; }
-}
-
+   Tablet and mobile are their own compositions, not a reflow. */
 @media (max-width: 560px) {
   /* Action keys reach a real touch target and split the row evenly, while
      the quiet decline deliberately stays small — declining should not be the
@@ -1878,7 +1790,14 @@ html[data-skin="alloy"] .vera-hero-axis::before {
     min-height: 44px;
   }
   html[data-skin] .vera-key-3 { flex: 0 0 auto; }
-  html[data-skin] .vera-ctx-m { padding: 10px 12px; }
+  /* Seven columns in a phone-width rail: drop the gutter and tighten the
+     gaps rather than letting the strip scroll — a week that has to be
+     scrolled to be seen whole isn't a week strip. */
+  .vera-week { padding: 12px 12px 11px; }
+  .vera-week-plot { gap: 4px; }
+  html[data-skin="vessel"] .vera-week-plot { gap: 6px; }
+  .vera-week-well,
+  html[data-skin="vessel"] .vera-week-well { height: 54px; }
 }
 
 /* ---------- cmnd centre bento -----------------------------------------
@@ -1993,6 +1912,136 @@ html[data-skin] .vera-bar-val {
 @media (max-width: 620px) {
   html[data-skin] .vera-kv-row { grid-template-columns: 1fr; gap: 2px; }
   html[data-skin] .vera-kv-row > .k { text-align: left; }
+}
+
+/* ---------- The week strip ---------------------------------------------
+   Seven columns, one per day, ending today. The Output tile's counters are
+   all-time totals, which look exactly the same whether they were earned
+   steadily or in one burst a month ago — this is the only thing on the
+   board that shows the SHAPE of the founder's week rather than its sum.
+
+   Deliberately NOT scoped to skins. The classic notebook board gets the
+   same strip, handed its own palette through the three custom properties
+   below (see ActivityWeek.tsx) rather than a second implementation. Every
+   colour resolves from a token, so light/dark comes free in all three. */
+.vera-week {
+  --vera-week-accent: var(--v7-cyan, #2ce8d6);
+  --vera-week-quiet: var(--v7-border-strong, rgba(255, 255, 255, 0.16));
+  --vera-week-well: var(--v7-bg-raised-2, rgba(255, 255, 255, 0.045));
+  padding: 12px 16px 13px;
+}
+/* Inside the classic band, which already carries its own gutter. */
+.vera-week-flush { padding: 12px 0 0; }
+.vera-week-plot {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  align-items: end;
+}
+.vera-week-col { display: grid; gap: 7px; justify-items: center; min-width: 0; }
+.vera-week-well {
+  width: 100%;
+  height: 62px;
+  display: flex;
+  align-items: flex-end;
+  background: var(--vera-week-well);
+  border-radius: 3px;
+  overflow: hidden;
+}
+/* Columns grow from the baseline, so the accent segment — the days actually
+   acted on — always starts at the same line and stays comparable across the
+   week. Activity that wasn't actioned rides above it. */
+.vera-week-stack { width: 100%; display: flex; flex-direction: column; justify-content: flex-end; }
+.vera-week-seg { display: block; flex-basis: 0; min-height: 2px; }
+.vera-week-seg-act { background: var(--vera-week-accent); }
+.vera-week-seg-quiet { background: var(--vera-week-quiet); }
+/* A day with nothing on it is a flat rule on the baseline, not an absent
+   column — the gap in a streak is information, and drawing nothing at all
+   makes an empty Sunday look like a rendering fault. */
+.vera-week-nil { width: 100%; height: 2px; background: var(--vera-week-quiet); opacity: 0.5; }
+.vera-week-day {
+  font-family: var(--v7-font-mono, 'IBM Plex Mono', monospace);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--v7-text-mute, #7c8494);
+  line-height: 1;
+}
+.vera-week-col.is-today .vera-week-day { color: var(--vera-week-accent); }
+
+.vera-week-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--v7-border, rgba(255, 255, 255, 0.08));
+}
+.vera-week-key,
+.vera-week-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--v7-font-mono, 'IBM Plex Mono', monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--v7-text-mute, #7c8494);
+}
+/* Must come after .vera-week-seg — the swatch reuses the segment classes for
+   its fill, and those set flex-basis: 0, which would collapse it to nothing
+   inside the inline-flex legend key. */
+.vera-week-swatch { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 2px; min-height: 0; }
+
+/* Alloy: machined. Square wells cut with a hairline, tight gaps, today
+   marked by a hard rule under the column. */
+html[data-skin="alloy"] .vera-week-plot { gap: 5px; }
+html[data-skin="alloy"] .vera-week-well {
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px var(--v7-border);
+}
+html[data-skin="alloy"] .vera-week-col.is-today .vera-week-well {
+  box-shadow: inset 0 0 0 1px var(--v7-cyan-strong), inset 0 -2px 0 0 var(--v7-cyan);
+}
+
+/* Vessel: tactile. Narrow capsules standing in a rounded bowl, wider gaps,
+   today marked by the bowl itself warming rather than by a cut rule. */
+html[data-skin="vessel"] .vera-week-plot { gap: 9px; }
+html[data-skin="vessel"] .vera-week-well {
+  width: 13px;
+  margin: 0 auto;
+  height: 66px;
+  border-radius: 999px;
+}
+html[data-skin="vessel"] .vera-week-stack { border-radius: 999px; overflow: hidden; }
+html[data-skin="vessel"] .vera-week-col.is-today .vera-week-well { background: var(--v7-cyan-soft); }
+html[data-skin="vessel"] .vera-week-swatch { border-radius: 999px; }
+
+/* The streak, as the tile's headline rather than a badge. Alloy sets the
+   count in the measured mono face; Vessel takes its emphasis from scale in
+   the display serif, which is the difference between the two skins stated
+   in one number. */
+html[data-skin] .vera-streak {
+  display: flex;
+  align-items: baseline;
+  gap: 11px;
+  padding: 15px 16px 3px;
+}
+html[data-skin] .vera-streak-n {
+  font-family: var(--v7-font-mono);
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--v7-cyan);
+  flex-shrink: 0;
+}
+html[data-skin="vessel"] .vera-streak-n {
+  font-family: var(--vera-font-display);
+  font-weight: var(--vera-display-weight);
+  font-size: 40px;
+  letter-spacing: var(--vera-display-tracking);
 }
 
 /* ---------- Sidebar rows ----------------------------------------------

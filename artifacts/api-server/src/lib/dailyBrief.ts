@@ -211,6 +211,25 @@ export interface UsageStats {
   // item actually acted on (accepted/edited — opening Command Center and
   // looking doesn't count). 0 the moment a day is skipped entirely.
   queueStreakDays: number;
+
+  // The same activity the counters above total up, but kept per day so the
+  // board can draw the shape of a week instead of only its sum. Always
+  // exactly ACTIVITY_WINDOW_DAYS entries, oldest first, zero-filled — a
+  // chart whose column count depends on how busy the founder was would
+  // change shape as it fills, which is the one thing a week strip must not
+  // do.
+  activityByDay: UsageDay[];
+}
+
+export interface UsageDay {
+  /** UTC calendar day, YYYY-MM-DD. Same bucketing as countDistinctDays. */
+  date: string;
+  /** 0 = Sunday … 6 = Saturday, so the client needn't re-parse the date. */
+  weekday: number;
+  /** Things the founder did with Vera that day — messages, decisions, facts. */
+  touches: number;
+  /** Queue items actually accepted or edited that day. The streak's currency. */
+  actions: number;
 }
 
 function countDistinctDays(dateLists: (Date | null)[][]): number {
@@ -247,6 +266,50 @@ function computeQueueStreak(resolvedDates: (Date | null)[]): number {
     cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
   return streak;
+}
+
+// One week, ending today. Long enough that a weekly rhythm (quiet weekends,
+// a Monday spike) is visible, short enough to stay legible as columns in a
+// rail tile without scrolling or aggregation.
+const ACTIVITY_WINDOW_DAYS = 7;
+
+function dayKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+// Per-day rollup over the exact same rows the totals above are computed
+// from — nothing new is read or stored, this is the same activity sliced by
+// date instead of summed. Days outside the window are simply not counted;
+// days inside it with nothing on them stay at zero rather than being
+// dropped, so the strip always has seven columns.
+function buildActivityByDay(touchLists: (Date | null)[][], resolvedDates: (Date | null)[]): UsageDay[] {
+  const touches = new Map<string, number>();
+  for (const list of touchLists) {
+    for (const d of list) {
+      if (d) touches.set(dayKey(new Date(d)), (touches.get(dayKey(new Date(d))) ?? 0) + 1);
+    }
+  }
+  const actions = new Map<string, number>();
+  for (const d of resolvedDates) {
+    if (d) actions.set(dayKey(new Date(d)), (actions.get(dayKey(new Date(d))) ?? 0) + 1);
+  }
+
+  const cursor = new Date();
+  cursor.setUTCHours(0, 0, 0, 0);
+  cursor.setUTCDate(cursor.getUTCDate() - (ACTIVITY_WINDOW_DAYS - 1));
+
+  const days: UsageDay[] = [];
+  for (let i = 0; i < ACTIVITY_WINDOW_DAYS; i++) {
+    const key = dayKey(cursor);
+    days.push({
+      date: key,
+      weekday: cursor.getUTCDay(),
+      touches: touches.get(key) ?? 0,
+      actions: actions.get(key) ?? 0,
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
 }
 
 // A flat per-item estimate, not a measured value — there's no real timer on
@@ -311,6 +374,7 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
   const automationsCompleted = automationRows.length;
   const timeSavedMinutes = automationRows.length * MINUTES_SAVED_PER_AUTOMATION + instantActionRows.length * MINUTES_SAVED_PER_INSTANT_ACTION;
   const queueStreakDays = computeQueueStreak(resolvedQueueRows.map((r) => r.resolvedAt));
+  const activityByDay = buildActivityByDay([messageDays, decisionDays, factDays], resolvedQueueRows.map((r) => r.resolvedAt));
 
   return {
     decisionsResolved,
@@ -323,5 +387,6 @@ export async function getUsageStats(userId: string): Promise<UsageStats> {
     automationsCompleted,
     timeSavedMinutes,
     queueStreakDays,
+    activityByDay,
   };
 }

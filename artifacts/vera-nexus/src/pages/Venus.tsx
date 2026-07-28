@@ -18,7 +18,6 @@ import { NotificationBell } from './NotificationBell';
 import { CommandCenterSection } from './CommandCenter';
 import { AttachMenu } from './AttachMenu';
 import { VeraSettingsModal } from './VeraSettingsModal';
-import { LivingContextBar } from './LivingContextBar';
 import { useVenusTheme } from '../lib/venusTheme';
 import { useVeraSkin } from '../lib/veraSkin';
 import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
@@ -956,18 +955,15 @@ export function VenusPage() {
           Chat itself swaps into (see mainView state), never a separate
           route/page. */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Persistent business context. It was previously mounted inside the
-            Command Center board only, which meant the surface described as
-            "the one thing always visible" was absent from the default view
-            entirely — you had to navigate away from chat to see it. Mounted
-            here, outside the mainView switch, it is genuinely persistent:
-            chat and the board both sit underneath it. Renders nothing under
-            Classic and nothing before there is anything real to show. */}
-        {skinned && (
-          <div className="shrink-0" style={{ padding: isNarrow ? '12px 16px 0' : '14px 32px 0' }}>
-            <LivingContextBar />
-          </div>
-        )}
+        {/* The Living Context bar used to sit here, above both views. It
+            printed days-active / streak / decisions / automations / free
+            time — the same five figures the Command Center's own rail
+            already lists, immediately below it, on the one screen a founder
+            actually reads them on. Two copies of one set of numbers, one of
+            them permanently occupying the top of the chat view as well.
+            Deleted: the rail keeps the figures (with a week strip the bar
+            never had), and the connector glyphs the bar alone carried moved
+            into the rail's Connected tile. */}
         {mainView === 'command-center' ? (
           <CommandCenterSection
             theme={theme}

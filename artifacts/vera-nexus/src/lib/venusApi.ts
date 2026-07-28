@@ -209,6 +209,15 @@ export interface DailyBriefAssumptionChange {
   changedAt: string | null;
 }
 
+// One column of the board's week strip. See getUsageStats on the server —
+// the same activity the totals below are summed from, sliced by UTC day.
+export interface UsageDay {
+  date: string;
+  weekday: number;
+  touches: number;
+  actions: number;
+}
+
 export interface DailyBriefStats {
   decisionsResolved: number;
   goalsCompleted: number;
@@ -220,6 +229,10 @@ export interface DailyBriefStats {
   automationsCompleted: number;
   timeSavedMinutes: number;
   queueStreakDays: number;
+  // Optional on purpose: a server that predates the week strip returns a
+  // brief without it, and the board should render its counters rather than
+  // crash on an older deploy.
+  activityByDay?: UsageDay[];
 }
 
 export interface DailyBrief {
