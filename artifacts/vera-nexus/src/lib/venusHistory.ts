@@ -41,6 +41,18 @@ export interface ContradictionEntry {
   precedentIds?: number[];
 }
 
+// Response-integrity signals. The server computes both on every answer
+// (arithmeticCheck.ts ships live; lengthConstraintNote is written when a
+// stated word/character target couldn't be met) and both were being
+// returned and then silently discarded here — computed honesty that never
+// reached the person it was for. Persisted with the message so a reopened
+// analysis still carries its caveats.
+export interface ArithmeticIssueEntry {
+  description: string;
+  mentionA?: string;
+  mentionB?: string;
+}
+
 export interface ChatMessage {
   role: 'user' | 'venus';
   content?: string;
@@ -50,6 +62,8 @@ export interface ChatMessage {
   contextQuery?: string;
   evidenceRefs?: EvidenceRefEntry[];
   contradictions?: ContradictionEntry[];
+  arithmeticIssues?: ArithmeticIssueEntry[];
+  lengthConstraintNote?: string;
 }
 
 export interface ChatSession {

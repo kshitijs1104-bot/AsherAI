@@ -2,8 +2,9 @@ import { Router } from "express";
 import { db, companiesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { ListCompaniesQueryParams } from "@workspace/api-zod";
-import { getGroqClient, buildAutopsyFallback, callGroqJSON } from "../lib/groq";
+import { getGroqClient, buildAutopsyFallback, callGroqJSON, NAMED_ENTITY_GUARD } from "../lib/groq";
 import { retrievePrecedents, formatPrecedentsForPrompt } from "../lib/retrieval";
+import { requireAuth, requireUserId } from "../middlewares/auth";
 
 const router = Router();
 
@@ -49,7 +50,7 @@ router.get("/companies", async (req, res) => {
 
 router.get("/companies/:id", async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid company id" });
     const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, id)).limit(1);
     if (!company) return res.status(404).json({ error: "Company not found" });
@@ -60,14 +61,21 @@ router.get("/companies/:id", async (req, res) => {
   }
 });
 
-router.post("/companies/:id/autopsy", async (req, res) => {
+// requireAuth ADDED. This route calls an LLM and, with no verified session,
+// getGroqClient falls straight through to process.env.GROQ_API_KEY — an
+// unauthenticated, unmetered, billable generation endpoint anyone could hit.
+// The identity it used ("x-session-id" header, else req.ip, else "default")
+// is the exact pattern middlewares/auth.ts was written to delete everywhere
+// else; this file was simply missed. No frontend calls this route, so
+// gating it breaks nothing today.
+router.post("/companies/:id/autopsy", requireAuth, async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid company id" });
     const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, id)).limit(1);
     if (!company) return res.status(404).json({ error: "Company not found" });
 
-    const sessionId = (req.headers["x-session-id"] as string) || req.ip || "default";
+    const sessionId = requireUserId(req);
     const groq = await getGroqClient(sessionId);
 
     if (!groq) {
@@ -81,7 +89,18 @@ router.post("/companies/:id/autopsy", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: `You are an elite post-mortem analyst for failed companies. You think causally — you explain exactly why they failed, step by step. Use real facts, real numbers, real names. Return ONLY valid JSON, no markdown.`,
+            // WAS: "...Use real facts, real numbers, real names." — with no
+            // web search, no precedent block, and nothing in the prompt but
+            // the company row below, that was a direct instruction to
+            // produce specifics the model had no source for. "Use real
+            // numbers" to a model holding no numbers is an instruction to
+            // invent numbers that look real, which is the worst possible
+            // failure shape: confident, specific, and unfalsifiable to the
+            // reader. The rule is now the same one every other Vera answer
+            // follows (see NAMED_ENTITY_GUARD in groq.ts) — reason freely,
+            // but a specific figure or name must have a source or be named
+            // as an estimate.
+            content: `You are an elite post-mortem analyst for failed companies. You think causally — you explain exactly why they failed, step by step. Your causal reasoning should be sharp, specific and opinionated.\n\n${NAMED_ENTITY_GUARD}\n\nThe ONLY source you have here is the company record in the next message. Reason from it and from well-established, widely-documented facts about this company. Where you don't have a figure, describe the mechanism in words instead of attaching a number to it, or mark it plainly as an estimate ("roughly", "on the order of"). Never state a precise funding amount, headcount, revenue figure or date as established fact unless it is genuinely well-known — a wrong specific is worse than an honest omission. Return ONLY valid JSON, no markdown.`,
           },
           {
             role: "user",
@@ -107,13 +126,18 @@ Return JSON: { "rootCause": "The single root cause in 1-2 sharp sentences", "tim
     return res.json({ companyId: id, rootCause: raw.slice(0, 500) || "Autopsy generation failed after retry.", timeline: "", lessonsLearned: [], causalChain: [], analogy: null });
   } catch (err) {
     req.log.error(err);
-    return res.json({ companyId: parseInt(req.params.id), ...buildAutopsyFallback("this company") });
+    return res.json({ companyId: parseInt(String(req.params.id), 10), ...buildAutopsyFallback("this company") });
   }
 });
 
-router.post("/companies/:id/autopsy/chat", async (req, res) => {
+// requireAuth ADDED for the same reason as the autopsy route above: this is
+// an LLM endpoint that falls back to the server's own Groq key when it can't
+// identify the caller. It also accepts a client-supplied `history` array that
+// is replayed straight into the model, so leaving it open meant anyone could
+// drive arbitrary generations on our key.
+router.post("/companies/:id/autopsy/chat", requireAuth, async (req, res) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid company id" });
     const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, id)).limit(1);
     if (!company) return res.status(404).json({ error: "Company not found" });
@@ -125,7 +149,7 @@ router.post("/companies/:id/autopsy/chat", async (req, res) => {
     };
     const normalizedHistory = normalizeHistory(history);
 
-    const sessionId = (req.headers["x-session-id"] as string) || req.ip || "default";
+    const sessionId = requireUserId(req);
     const headerKey = req.headers["x-groq-api-key"] as string | undefined;
     const groq = headerKey
       ? new (await import("groq-sdk").then(m => m.default))({ apiKey: headerKey })
@@ -236,7 +260,7 @@ Keep replies concise. No long paragraphs. When attempt reaches 5, set gameOver t
     });
   } catch (err) {
     req.log.error(err);
-    const id = Number.parseInt(req.params.id, 10);
+    const id = Number.parseInt(String(req.params.id), 10);
     const fallbackCompanyName = Number.isNaN(id) ? "this company" : `company ${id}`;
     return res.json({
       reply: `The company simulator hit a transient issue while processing ${fallbackCompanyName}. Please try again in a moment.`,

@@ -735,6 +735,57 @@ function isOversizedPayload(err: any): boolean {
 // turn, stale-answer failures reported from testing that day. Losing whole
 // old turns is an honest gap the model can reason around; corrupting
 // recent/current ones is not.
+// How far back from the requested cut point we'll hunt for a clean break
+// before giving up and cutting where we were told to. Generous enough to
+// find a paragraph or sentence end in normal prose, small enough that it
+// can't discard a meaningful share of an already-shrunken tail.
+const SAFE_BOUNDARY_LOOKBACK = 400;
+
+const TRUNCATION_NOTICE = "\n\n[Context truncated here to fit the request size limit — some supporting material above was omitted. Do not treat any figure or name near this point as complete, and do not infer what was cut.]";
+
+/**
+ * Cuts `text` to at most `maxLen` characters, at a boundary that doesn't
+ * land in the middle of something meaningful.
+ *
+ * WHY THIS ISN'T JUST `.slice(0, maxLen)`, which is what it used to be: the
+ * dynamic tail being cut here is the grounding material — web search
+ * snippets, the precedent block, business context, memory. A raw character
+ * cut lands wherever it lands, which routinely means mid-number
+ * ("...revenue was $4" from "$4.2M") or mid-name ("...acquired by Sales").
+ * The model has no way to know it received a mutilated figure, so it reasons
+ * from it as though it were whole — a fabricated fact produced by our own
+ * truncation rather than by the model.
+ *
+ * That matters far more than it sounds, because on the free tier shrinking
+ * is not the rare path: VENUS_SYSTEM_PROMPT alone is ~6,807 estimated tokens
+ * against a ~6,800 budget, so nearly every broad request gets here.
+ *
+ * Preference order is paragraph break, then sentence end, then any
+ * whitespace. An explicit notice is appended so the model is told content
+ * was removed instead of silently inferring across the seam.
+ */
+export function sliceAtSafeBoundary(text: string, maxLen: number): string {
+  if (maxLen >= text.length) return text;
+  if (maxLen <= 0) return TRUNCATION_NOTICE.trimStart();
+
+  const window = text.slice(0, maxLen);
+  const floor = Math.max(0, maxLen - SAFE_BOUNDARY_LOOKBACK);
+
+  const candidates = [
+    window.lastIndexOf("\n\n"),
+    // Sentence end followed by whitespace — `. ` / `.\n` / `?\n` etc.
+    (() => {
+      const m = window.match(/[.!?](?=\s)(?![\s\S]*[.!?](?=\s))/);
+      return m?.index != null ? m.index + 1 : -1;
+    })(),
+    window.lastIndexOf("\n"),
+    window.lastIndexOf(" "),
+  ];
+
+  const cut = candidates.find((i) => i > floor);
+  return `${text.slice(0, cut != null && cut > 0 ? cut : maxLen).trimEnd()}${TRUNCATION_NOTICE}`;
+}
+
 export function shrinkMessages(messages: GroqJsonParams["messages"], keepFraction: number): GroqJsonParams["messages"] {
   if (messages.length === 0) return messages;
   const lastIdx = messages.length - 1; // the current turn — never touched, whatever role it has
@@ -746,8 +797,8 @@ export function shrinkMessages(messages: GroqJsonParams["messages"], keepFractio
       const dynamicTail = m.content.slice(protectedLen);
       if (dynamicTail.length === 0) return m;
       const targetLen = Math.floor(dynamicTail.length * keepFraction);
-      const shrunkTail = targetLen < dynamicTail.length ? dynamicTail.slice(0, targetLen) : dynamicTail;
-      return { ...m, content: head + shrunkTail };
+      if (targetLen >= dynamicTail.length) return m;
+      return { ...m, content: head + sliceAtSafeBoundary(dynamicTail, targetLen) };
     }
     return m; // no other message's content is ever sliced — see the drop pass below
   });
@@ -1068,6 +1119,48 @@ export const VENUS_PROMPT = VENUS_SYSTEM_PROMPT;
 export const MODERATE_TIER_PRECEDENT_NOTE = `
 
 IMPORTANT — LIMITED PRECEDENT MODE (moderate confidence): The VERIFIED PRECEDENTS below are real, but there are few of them and/or they come from an adjacent or analogous sector/decision type rather than an exact match to this query. You must still reason ONLY from these real precedents — never invent a company, outcome, or causal mechanism not present in the block below, and explicitly name which precedent(s) you are drawing from and why they are still relevant even though the match is imperfect. Do NOT put any caveat about confidence, precedent coverage, or data limitations as the first sentence of the summary field, and do not use the phrase "exploratory signal" or similar hedging language anywhere in the summary — the summary must open directly with the causal bottleneck and recommendation, exactly as it would for a fully-grounded answer. The lower-confidence signal is communicated separately through the confidenceNote field, not by prefacing or softening the actual answer — a founder reading the summary should get a real, direct, confident-sounding recommendation, not a hedged one, even when the precedent match is imperfect.`;
+
+// ---- Shared grounding guards ----
+//
+// MOVED HERE FROM ai.ts's /ai/analyze handler, where it was a local const.
+// Being local is what made it a divergence bug: /ai/idea-review — a second
+// full LLM pipeline in the same file, answering the same kind of question
+// with the same VENUS_PROMPT — never had a grounding guard at all, and
+// neither did the company-autopsy route. Every hardening pass applied to
+// /ai/analyze quietly did not apply to them. The guard is a property of
+// "Vera answering anything", not of one route, so it lives with the prompt
+// it guards and every call site imports the same string.
+//
+// NAMED-ENTITY GROUNDING GUARD: separate from the precedent-card rule in
+// VENUS_SYSTEM_PROMPT (which only ever policed *company* names against the
+// curated dataset). Nothing previously stopped the model from inventing
+// OTHER specific named real-world entities — school names, addresses, exact
+// enrollment figures, named people, named products — when it had no real
+// source for them. That gap, combined with a since-fixed bug where
+// webSearch() silently returned zero results for EVERY query (a broken
+// DuckDuckGo result-link regex — see websearch.ts), produced exactly this
+// failure: asked for real Cambridge-curriculum schools in Mumbai, the model
+// confidently invented plausible-sounding school names with fabricated
+// student counts and neighborhoods. Reasoning, opinions and strategic
+// advice should stay direct and concrete — that's still encouraged — but a
+// SPECIFIC factual claim about a real-world named entity must come from an
+// actual source, never be invented to fill a gap.
+export const NAMED_ENTITY_GUARD = `GROUNDING OF NAMED ENTITIES (applies to every answer): a specific factual claim about a real-world named entity — the name of a school/company/product/person/place, an exact statistic, an address, a date, a current price — must come from an actual source available to you right now: the web search results in this prompt, the verified precedent dataset, or something the user themselves told you. If you do not have a real source for the specific names or figures the question needs, say so plainly and briefly, then offer what you CAN do (search for it, or reason about how to evaluate options once they have the list). Never fill the gap with plausible-sounding invented specifics — a confident wrong name is far worse than an honest "I don't have verified data on that." This governs concrete factual claims ONLY. Your strategic reasoning, causal analysis, opinions, and recommendations are NOT affected by this rule and must stay as direct, specific, and opinionated as always — hedging your advice is not the goal here, and "I'm not sure" is never an acceptable substitute for judgment on a question that calls for judgment.`;
+
+// Grounding rules specific to a factual/lookup question (see
+// queryClassifier.ts). Kept separate from NAMED_ENTITY_GUARD so a
+// consultation question never picks up "cite your sources" framing that
+// would make ordinary strategic advice read like a research report.
+const FACTUAL_LOOKUP_GROUNDING = `\n\nTHIS IS A FACTUAL LOOKUP: the founder is asking for real-world information, not (only) judgment. Ground every specific fact in the WEB SEARCH RESULTS provided, and attribute naturally in the prose where it matters ("per <source>…"). If the search results don't actually contain what was asked for, say exactly that — name what you did and didn't find — rather than filling the gap from memory. If sources disagree, say they disagree instead of silently picking one. Do not present a fact from your own training data as if it were retrieved and current.`;
+
+/**
+ * The grounding block every Vera answer carries. `isFactualLookup` adds the
+ * source-attribution rules on top; it never removes the named-entity guard,
+ * which applies unconditionally.
+ */
+export function buildGroundingInstructions(isFactualLookup: boolean): string {
+  return `${NAMED_ENTITY_GUARD}${isFactualLookup ? FACTUAL_LOOKUP_GROUNDING : ""}`;
+}
 
 // Feeds shadow-mode fact-conflict detection (see factConflicts.ts and
 // ai.ts's [factConflict] logging) — a founder can contradict themselves

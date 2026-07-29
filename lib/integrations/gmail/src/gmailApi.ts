@@ -28,6 +28,58 @@ export interface UnreadThreadSummary {
   from: string;
   subject: string;
   snippet: string;
+  // The actual message body, plain text, truncated (see BODY_CHAR_LIMIT).
+  // ADDED because `snippet` alone — Gmail's ~200-character preview — was the
+  // ONLY thing the auto-reply drafter ever saw (see the api-server's
+  // pollGmailConnector). Vera was drafting replies to emails it had read the
+  // first sentence of, which is a guaranteed source of invented content: the
+  // actual ask is almost never in the first 200 characters. Empty string
+  // when the body can't be extracted, in which case callers should fall
+  // back to `snippet` and say so rather than pretending they have more.
+  bodyText: string;
+}
+
+// Gmail returns message bodies as base64url inside a (possibly deeply
+// nested) MIME part tree. Prefer text/plain; fall back to text/html with
+// tags stripped, since plenty of senders ship HTML-only mail.
+function decodePart(data: string | undefined): string {
+  if (!data) return "";
+  try {
+    return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+function collectBody(payload: any, wanted: string): string {
+  if (!payload) return "";
+  if (payload.mimeType === wanted && payload.body?.data) return decodePart(payload.body.data);
+  if (Array.isArray(payload.parts)) {
+    for (const part of payload.parts) {
+      const found = collectBody(part, wanted);
+      if (found) return found;
+    }
+  }
+  return "";
+}
+
+// Enough for the model to understand what is actually being asked without
+// dragging a 40KB quoted thread into a drafting prompt on a shared TPM pool.
+const BODY_CHAR_LIMIT = 4000;
+
+function extractBodyText(payload: any): string {
+  const plain = collectBody(payload, "text/plain");
+  const raw = plain || collectBody(payload, "text/html").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
+  const cleaned = raw
+    // Drop quoted history and signature blocks — for a REPLY draft, what
+    // matters is the new message, and the quoted chain is mostly duplicate
+    // tokens that crowd out the part that needs answering.
+    .split(/\n\s*(?:On .+ wrote:|-{2,}\s*Original Message|_{5,})/)[0]
+    .replace(/\r/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return cleaned.length > BODY_CHAR_LIMIT ? `${cleaned.slice(0, BODY_CHAR_LIMIT)}\n…[truncated]` : cleaned;
 }
 
 // Only the first page, newest-first (Gmail's default order) — a connector
@@ -40,13 +92,17 @@ export async function listUnreadThreads(accessToken: string, maxResults = 10): P
 
   return Promise.all(
     ids.map(async (id) => {
-      const msg = await gmailFetch(accessToken, `/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`);
+      // format=full, not format=metadata: metadata returns headers and the
+      // snippet only, which is why nothing downstream could ever see the
+      // real message. Same single request per message either way.
+      const msg = await gmailFetch(accessToken, `/messages/${id}?format=full`);
       return {
         messageId: msg.id,
         threadId: msg.threadId,
         from: header(msg.payload?.headers, "From"),
         subject: header(msg.payload?.headers, "Subject"),
         snippet: msg.snippet ?? "",
+        bodyText: extractBodyText(msg.payload),
       };
     }),
   );

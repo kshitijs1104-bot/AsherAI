@@ -233,6 +233,62 @@ export async function findPotentialContradiction(
   }
 }
 
+// ---- Business-context blob merging ----
+//
+// The blob (settings/business_profiles' contextBlob) was grown by literal
+// string concatenation — `${stored} | ${newMessage}` — at every call site,
+// with no cap, no dedupe, and nothing ever removed. It is injected into
+// EVERY prompt as the "Business Context:" line, so on a long-lived account
+// it grows without bound against a token budget the static system prompt
+// already exhausts by itself (see groq.ts's TPM math). Two consequences,
+// both bad and both silent: requests get shrink-retried, which cuts real
+// grounding material; and context the founder corrected months ago keeps
+// being replayed forever alongside the correction, so Vera reasons from
+// both at once.
+//
+// Bounded, deduped, newest-first-preserved merging fixes both. Superseding
+// individual claims is company_facts' job (see supersedeFact above) — this
+// only stops the freeform blob from becoming an ever-growing transcript.
+const MAX_CONTEXT_BLOB_CHARS = 1500;
+const CONTEXT_SEGMENT_SEPARATOR = " | ";
+
+export function mergeContextBlob(stored: string | undefined, addition: string): string {
+  const clean = addition.trim();
+  const existing = (stored ?? "")
+    .split(CONTEXT_SEGMENT_SEPARATOR)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // Case-insensitive exact-duplicate drop. Deliberately not fuzzy: a
+  // near-duplicate that adds one new number is genuinely new information,
+  // and dropping it would lose the update this merge exists to record.
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  // Newest first while filling the budget, so the oldest segments are the
+  // ones that fall off the end rather than the freshest.
+  for (const segment of [clean, ...existing.reverse()]) {
+    if (!segment) continue;
+    const key = segment.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ordered.push(segment);
+  }
+
+  const kept: string[] = [];
+  let total = 0;
+  for (const segment of ordered) {
+    const cost = segment.length + CONTEXT_SEGMENT_SEPARATOR.length;
+    if (kept.length > 0 && total + cost > MAX_CONTEXT_BLOB_CHARS) break;
+    kept.push(segment);
+    total += cost;
+  }
+
+  // Restored to chronological order so the blob still reads as a history
+  // rather than a reversed one; the newest segment is simply guaranteed to
+  // have survived the budget.
+  return kept.reverse().join(CONTEXT_SEGMENT_SEPARATOR);
+}
+
 export function formatCompanyFactsForPrompt(facts: CompanyFact[]): string {
   if (facts.length === 0) return "";
   // A user_reported_belief fact is the founder's own claim about themselves —

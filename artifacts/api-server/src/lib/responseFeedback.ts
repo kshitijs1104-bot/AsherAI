@@ -75,6 +75,60 @@ export async function markFeedbackConsumed(ids: number[]): Promise<void> {
   }
 }
 
+// ---- Feeding corrections back into the answer ----
+//
+// recordCorrection has been writing to this table for a while, and until now
+// NOTHING read it back into a prompt: getUnconsumedFeedback and
+// markFeedbackConsumed are both exported and both had zero call sites
+// anywhere in the codebase. So "Vera learns from your corrections" was, in
+// the only sense a founder would care about, false — every correction was
+// captured, stored, and never consulted again. The same founder could
+// correct the same mistake every week and get the same mistake back.
+//
+// This is the read that makes the loop real: the last few corrections THIS
+// founder gave, injected into their prompt so the model can see what it has
+// already been told it gets wrong. Deliberately small and recent — this is a
+// standing reminder, not a training set, and it competes for the same token
+// budget as the grounding material that keeps answers correct.
+export interface PastCorrection {
+  correctionText: string;
+  detectedIssue: string | null;
+  issueClass: string | null;
+}
+
+export async function getRecentCorrections(userId: string, limit = 4): Promise<PastCorrection[]> {
+  try {
+    const rows = await db
+      .select()
+      .from(responseFeedbackTable)
+      .where(eq(responseFeedbackTable.userId, userId))
+      .orderBy(desc(responseFeedbackTable.createdAt))
+      .limit(limit);
+    return rows.map((r) => ({
+      correctionText: r.correctionText,
+      detectedIssue: r.detectedIssue,
+      issueClass: r.issueClass,
+    }));
+  } catch (err) {
+    console.error("[responseFeedback] failed to load recent corrections, continuing without them", err);
+    return [];
+  }
+}
+
+const CORRECTION_TEXT_LIMIT = 200;
+
+export function formatCorrectionsForPrompt(corrections: PastCorrection[]): string {
+  if (corrections.length === 0) return "";
+  const lines = corrections.map((c) => {
+    const text = c.correctionText.length > CORRECTION_TEXT_LIMIT
+      ? `${c.correctionText.slice(0, CORRECTION_TEXT_LIMIT)}…`
+      : c.correctionText;
+    const issue = c.detectedIssue ? ` (what went wrong: ${c.detectedIssue}${c.issueClass ? `; type: ${c.issueClass}` : ""})` : "";
+    return `- "${text}"${issue}`;
+  });
+  return `THINGS THIS FOUNDER HAS ALREADY CORRECTED YOU ON (their own words, most recent first). These are your OWN past mistakes with THIS person — read them before answering and do not repeat the same class of error. Do not mention this list, apologise for the past, or bring up an old correction that isn't relevant to the current question; just don't make the same mistake twice:\n${lines.join("\n")}`;
+}
+
 export interface IssueClassCount {
   issueClass: string;
   count: number;

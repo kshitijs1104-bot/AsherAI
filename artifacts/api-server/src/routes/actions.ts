@@ -61,7 +61,11 @@ router.post("/actions/:type/run", requireAuth, async (req, res) => {
     const groq = await getGroqClient(userId);
     if (!groq) return res.status(400).json({ error: "No Groq API key configured — add one in Settings" });
 
-    const result = await draftText(groq, systemPrompt, body.data.input);
+    // untrustedInput: false — unlike the connector pollers, `input` here is
+    // text the founder typed themselves in their own workspace, so fencing
+    // it as third-party content would be both wrong and unhelpful (it would
+    // tell the model not to follow the founder's own instructions).
+    const result = await draftText(groq, systemPrompt, body.data.input, { untrustedInput: false });
     if (!result) return res.status(502).json({ error: "Failed to generate a result — try again" });
 
     if (body.data.mode === "instant") {

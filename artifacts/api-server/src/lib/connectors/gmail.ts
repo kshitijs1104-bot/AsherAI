@@ -31,7 +31,12 @@ export async function getValidGmailAccessToken(connector: Connector): Promise<st
 }
 
 const DRAFT_SYSTEM_PROMPT =
-  "You draft short, direct email replies for a busy founder. Write only the reply body text — no subject line, no greeting-only filler, no sign-off unless natural. 2-5 sentences. Match a professional but plain, non-corporate tone.";
+  "You draft short, direct email replies for a busy founder. Write only the reply body text — no subject line, no greeting-only filler, no sign-off unless natural. 2-5 sentences. Match a professional but plain, non-corporate tone. " +
+  // The founder edits and sends this — so a draft that invents a commitment
+  // is worse than a draft that's too cautious. Only the incoming email is
+  // available here (no business context, no memory, no prior thread), so
+  // anything the reply asserts beyond it is necessarily made up.
+  "You are working from the incoming email ALONE — you have no other knowledge of this founder's business, prior conversations with this person, or their availability. Never invent facts, prices, dates, availability, numbers, or agreements, and never commit the founder to anything they haven't already stated. If the email asks something you cannot answer from its own contents, write a short reply that acknowledges it and asks the one question needed, or leaves the specifics for the founder to fill in — a placeholder the founder completes in five seconds beats a confident sentence they have to catch and delete.";
 
 // Gmail's "From" header comes back as "Name <email@x.com>" or a bare
 // address — accepting a drafted reply needs the bare address to actually
@@ -59,10 +64,23 @@ export async function pollGmailConnector(userId: string, connector: Connector): 
       for (const thread of threads) {
         let draftBody = `(Reply drafting unavailable — no Groq API key configured. Original: "${thread.snippet}")`;
         if (groq) {
+          // WAS `thread.snippet` — Gmail's ~200-character preview, and the
+          // only thing this drafter had ever seen. Replying to the first
+          // sentence of an email is a fabrication machine: the actual
+          // request usually isn't in it, so the model filled the gap. The
+          // Gmail client now returns the real decoded body (see
+          // integrations/gmail's extractBodyText); snippet stays as the
+          // fallback for messages whose body can't be extracted, and the
+          // label says which one the model is looking at so it can't
+          // mistake a preview for the whole message.
+          const hasBody = Boolean(thread.bodyText?.trim());
+          const messageBlock = hasBody
+            ? `Message body:\n${thread.bodyText}`
+            : `Preview only (the full body could not be read — do not assume anything beyond this text):\n${thread.snippet}`;
           const drafted = await draftText(
             groq,
             DRAFT_SYSTEM_PROMPT,
-            `From: ${thread.from}\nSubject: ${thread.subject}\nMessage: ${thread.snippet}`,
+            `From: ${thread.from}\nSubject: ${thread.subject}\n${messageBlock}`,
           );
           if (drafted) draftBody = drafted;
         }
