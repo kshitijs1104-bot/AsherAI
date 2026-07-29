@@ -41,6 +41,95 @@ signal (a personal "my/our/mine" reference) was even checked.
 **Pass:** does NOT re-ask for context, uses the actual numbers/industry you gave.
 **Fail:** re-asks "what industry are you in" after you already said it.
 
+## Section 2b — Corrections (the founder pushing back mid-conversation)
+
+Every row here is a real message from a live transcript where Vera answered
+`Got it — noted: "<your own words>". What would you like help with?` instead of
+answering, or re-issued the recommendation the founder had just rejected.
+
+Run this as ONE continuous conversation, in order. Ask any question that gets a
+real recommendation with a number in it first (e.g. "we're losing customers to
+Zepto-like services — where should I spend my testing budget?"), then:
+
+| # | Prompt | Pass criteria |
+|---|--------|----------------|
+| 2b.1 | `no im saying 25% wld be losing out on too much profit` | Answers the profit objection. Never "Got it — noted". |
+| 2b.2 | `im correcting u` | Re-examines the previous answer. Does NOT restate it with an agreeable "Yes, ..." opener. |
+| 2b.3 | `not testing budget giving 25% as dscount is unreasonable` | Recognises it read "25%" as a budget share when the founder meant a discount, says so in one clause, answers the discount question. |
+| 2b.4 | `ans my question` | Answers. Never asks what they'd like help with. |
+| 2b.5 | `no, we're B2B not a marketplace` | Answers using the corrected framing AND the correction sticks (ask a follow-up — it should not still think you're a marketplace). |
+| 2b.6 (negative control) | Start a NEW chat, paste `We operate a subscription platform for gyms, 450 paying customers, $35,000 MRR` | Still acknowledges the context and asks what you need. If this starts answering with cards, the reply guard is over-firing. |
+
+**Root cause if 2b.1/2b.3 fail:** `isPureContextStatement` in `ai.ts` swallowed the
+message. Check `BUSINESS_METRICS_SIGNAL` hasn't regained a loose numeric pattern
+(a bare `\d+%` was the original culprit), and that the answer-withholding gate
+guard still consults `looksLikeReplyToPriorTurn` / `correctsPriorAnswer`.
+
+**Root cause if 2b.2 fails:** the message reached the model but
+`correctionInstruction` wasn't in the prompt — check `classification.correctsPriorAnswer`
+in the `[queryClassifier]` log line for that turn.
+
+Server-side confirmation for any row: a `[turnIntent] routed=answer` log line
+means the guard caught it; `[queryClassifier] corrects=true` means the model
+agreed it was a correction.
+
+Unit coverage for the guard itself:
+
+```bash
+cd artifacts/api-server && npx tsx --test src/lib/turnIntent.test.mjs
+```
+
+## Section 2c — Length constraints (must not hijack ordinary answers)
+
+`parseLengthConstraint` runs on EVERY message, not just drafting requests. It
+used to match any `<n> words|characters` anywhere and default a bare number to
+*exact*, so an ordinary question could have its whole answer forced to an
+absurd length — plus 3 wasted revision calls trying to hit it.
+
+| # | Prompt | Pass criteria |
+|---|--------|----------------|
+| 2c.1 | `we only have 50 characters left in the product title field, what should we do` | A normal, full-length answer. NOT 50 characters. |
+| 2c.2 | `our top 3 words customers use are speed, price, trust — how do I use that` | A normal answer. NOT 3 words. |
+| 2c.3 | `draft a 100 word linkedin post about our launch` | Roughly 100 words (±10). Should not visibly pad or amputate to hit exactly 100. |
+| 2c.4 | `keep it under 280 characters` (after any draft request) | 280 characters or fewer. |
+| 2c.5 | `summarise that in exactly 50 words` | Exactly 50 words, or an explicit note saying what it actually landed on. |
+
+Unit coverage: `npx tsx --test src/lib/lengthConstraint.test.mjs`
+
+## Section 2d — Attachments (never analyse a file Vera can't read)
+
+| # | Action | Pass criteria |
+|---|--------|----------------|
+| 2d.1 | Attach a PNG screenshot, ask `what's wrong with these numbers?` | Says plainly it can't read that file type yet and asks you to paste the numbers. It must NOT describe or analyse the image. |
+| 2d.2 | Attach a `.csv` of real numbers, ask the same | Actually answers, using values from the file. |
+| 2d.3 | Attach a PDF, ask `summarise this` | Declines to summarise, offers the paste-the-text path. No invented summary. |
+
+If 2d.1 or 2d.3 produce an analysis, the attachment block isn't reaching the
+prompt — check `buildAttachmentBlock` in `lib/attachmentContext.ts` and that
+the composer still emits the `[Attached file: name]` marker it parses.
+
+## Section 2e — Dossier (company file + monthly wrap)
+
+Requires the `company_dossiers` migration (`pnpm --filter @workspace/db run push`).
+Reached from the sidebar entry under Workflows, or `/vera/dossier`.
+
+| # | Action | Pass criteria |
+|---|--------|----------------|
+| 2e.1 | Paste a few paragraphs about a business, hit "Build my file" | A structured file appears. Every field it shows must trace to something you actually wrote — nothing invented. |
+| 2e.2 | Check the "Not known yet" list | Names the things your paste genuinely didn't cover. |
+| 2e.3 | Read the gap questions | They reference YOUR business specifics, not a generic form. Each has a "why". None asks about something you already stated. |
+| 2e.4 | Answer one, then go ask Vera a question in chat | The answer is used. It reached the prompt via the company-file block. |
+| 2e.5 | Upload a text-based PDF instead of pasting | File builds from the PDF's contents. |
+| 2e.6 | Upload a scanned/photographed PDF | Clear error saying there's no text layer and to send a digital version. Never a file built from guesses. |
+| 2e.7 | Open "Monthly wrap" on a quiet month | Says the month was quiet. No fabricated highlights, no page of zeroes dressed up. |
+| 2e.8 | Open it on an active month | Real counts, month-over-month comparison, and a narrative containing no number that isn't in the stats above it. |
+
+**The one thing to watch:** every number on the wrap is computed in code and only
+the narrative is model-written. If the narrative ever states a figure that isn't in
+the stat tiles, that's the bug — check `NARRATIVE_SYSTEM_PROMPT` in `lib/monthlyWrap.ts`.
+
+Unit coverage: `npx tsx --test src/lib/documentText.test.mjs`
+
 ## Section 3 — Founder Math (needs context from Section 2 first)
 
 Ask a stay-vs-pivot / survival-shaped question, e.g.:

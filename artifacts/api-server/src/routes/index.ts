@@ -19,6 +19,7 @@ import actionsRouter from "./actions";
 import workflowsRouter from "./workflows";
 import recapsRouter from "./recaps";
 import attachmentsRouter from "./attachments";
+import dossierRouter from "./dossier";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(actionsRouter);
 router.use(workflowsRouter);
 router.use(recapsRouter);
 router.use(attachmentsRouter);
+router.use(dossierRouter);
 
 export default router;

@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { VenusPage } from "@/pages/Venus";
 import { WorkflowsPage } from "@/pages/Workflows";
+import { DossierPage } from "@/pages/Dossier";
 import { GoalsOverview } from "@/pages/GoalsOverview";
 import { DecisionsOverview } from "@/pages/DecisionsOverview";
 import { SettingsPage } from "@/pages/Settings";
@@ -102,6 +103,9 @@ function Router() {
       <Route path="/vera/workflows">
         <AuthGate component={WorkflowsPage} />
       </Route>
+      <Route path="/vera/dossier">
+        <AuthGate component={DossierPage} />
+      </Route>
       <Route path="/vera/goals">
         <AuthGate component={GoalsOverview} />
       </Route>
@@ -113,6 +117,11 @@ function Router() {
       </Route>
       <Route path="/venus/workflows">
         <AuthGate component={WorkflowsPage} />
+      </Route>
+      {/* /venus/* stays registered as the legacy alias set — see the comment
+          above the /vera routes. */}
+      <Route path="/venus/dossier">
+        <AuthGate component={DossierPage} />
       </Route>
       <Route path="/venus/goals">
         <AuthGate component={GoalsOverview} />

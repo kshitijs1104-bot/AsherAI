@@ -3,7 +3,7 @@ import { db, settingsTable, venusDecisionsTable, goalsTable, type VenusDecision,
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { VenusAnalyzeBody, IdeaReviewBody } from "@workspace/api-zod";
-import { getGroqClient, VENUS_PROMPT, buildFallbackVenusResponse, buildTransientErrorResponse, callGroqJSON, isContentPolicyRefusal, isQuotaExhaustedError, quotaRetryAfterMs, MODERATE_TIER_PRECEDENT_NOTE, EXTRACTED_FACTS_INSTRUCTION, EVIDENCE_CONVERGENCE_INSTRUCTION, sanitizeVenusResponse, estimateTokens, tpmLimitForModel, TPM_SAFETY_MARGIN, MIN_USABLE_MAX_TOKENS } from "../lib/groq";
+import { getGroqClient, VENUS_PROMPT, buildFallbackVenusResponse, buildTransientErrorResponse, callGroqJSON, isContentPolicyRefusal, isQuotaExhaustedError, quotaRetryAfterMs, MODERATE_TIER_PRECEDENT_NOTE, EXTRACTED_FACTS_INSTRUCTION, EVIDENCE_CONVERGENCE_INSTRUCTION, sanitizeVenusResponse, estimateTokens, tpmLimitForModel, TPM_SAFETY_MARGIN, MIN_USABLE_MAX_TOKENS, buildGroundingInstructions } from "../lib/groq";
 import { retrievePrecedents, formatPrecedentsForPrompt, retrieveOwnResolvedDecisions, formatOwnDecisionsForPrompt, retrieveOpenSessionDecisions, formatOpenSessionDecisionsForPrompt, type RetrievalResult } from "../lib/retrieval";
 import { computeConfidence } from "../lib/confidence";
 import { detectFactConflicts, type ExtractedFact } from "../lib/factConflicts";
@@ -16,9 +16,11 @@ import { requireAuth, requireUserId } from "../middlewares/auth";
 import { applyResolvedEvidence } from "../lib/goalEvidence";
 import { classifyDecisionType, archiveStaleOpenDecisions } from "../lib/decisionMemory";
 import { materializeRoadmapFromCard } from "../lib/roadmap";
-import { addCompanyFact, getActiveCompanyFacts, getActivePreferenceFacts, formatCompanyFactsForPrompt, formatPreferenceFactsForPrompt, findPotentialContradiction, supersedeFact } from "../lib/companyMemory";
+import { addCompanyFact, getActiveCompanyFacts, getActivePreferenceFacts, formatCompanyFactsForPrompt, formatPreferenceFactsForPrompt, findPotentialContradiction, supersedeFact, mergeContextBlob } from "../lib/companyMemory";
 import { getOrCreateActiveProfile, findMatchingProfile, createProfile, setActiveProfile, updateProfileContext } from "../lib/businessProfiles";
-import { logMessage, getRelevantMessages } from "../lib/messageLog";
+import { logMessage, getRelevantMessages, getRecentMessages } from "../lib/messageLog";
+import { buildAttachmentBlock } from "../lib/attachmentContext";
+import { getDossier, formatDossierForPrompt } from "../lib/dossier";
 import {
   looksLikeCorrection,
   looksLikeGeneralizablePreference,
@@ -28,7 +30,8 @@ import {
 } from "../lib/preferenceDetection";
 import { parseLengthConstraint, verifyLengthConstraint, describeLengthConstraint } from "../lib/lengthConstraint";
 import { classifyQuery } from "../lib/queryClassifier";
-import { recordCorrection } from "../lib/responseFeedback";
+import { looksLikeReplyToPriorTurn, buildCorrectionInstruction, type ReplyDetectionSource } from "../lib/turnIntent";
+import { recordCorrection, getRecentCorrections, formatCorrectionsForPrompt } from "../lib/responseFeedback";
 
 const router = Router();
 
@@ -280,37 +283,19 @@ function classifyQueryScope(
   return "broad";
 }
 
-function buildShortQueryFallback(message: string) {
-  const routing = inferDecisionRouting(message);
-  if (!routing) return null;
-
-  const recommendation = routing.subtype === "binary"
-    ? "Give a direct yes/no or wait/launch verdict based on the stated situation."
-    : "Choose the option that best avoids the strongest risk you just identified, after scoring every option including the one the founder proposed.";
-
-  return {
-    summary: "Direct decision query received. Venus will answer the choice directly rather than treating the prompt as malformed input.",
-    confidence: "exploratory",
-    confidenceNote: "The response is a structured fallback because the model did not return a fully parsed response for this short-form query.",
-    cards: [
-      {
-        type: "decision",
-        title: "Decision",
-        content: {
-          options: [
-            {
-              name: "Primary path",
-              reasoning: "The request should be handled as a direct decision question.",
-              scores: { viability: 6, speed: 7, defensibility: 6, capital_efficiency: 6 },
-            },
-          ],
-          recommendation,
-        },
-      },
-    ],
-    confidenceTier: "none",
-  };
-}
+// REMOVED: buildShortQueryFallback. It ran when the model failed to return
+// parseable JSON for a short decision-shaped query, and returned a decision
+// card holding one option named "Primary path" with the fixed scores
+// viability 6 / speed 7 / defensibility 6 / capital_efficiency 6. Those
+// numbers were not derived from anything — not the founder's message, not a
+// precedent, not the model. The UI renders them exactly like real scored
+// analysis, so the one moment a founder's request had actually failed was
+// also the moment they were shown invented figures wearing Vera's judgment.
+// The whole point of namedEntityGuard, the retrieval gate and the
+// groundedness checks is that Vera does not make numbers up; this had us
+// doing it in code, on the failure path, where nobody would think to look.
+// A failed response now returns buildTransientErrorResponse — the one
+// honest "that didn't work" message (see its comment in groq.ts).
 
 // Code-side mirror of groq.ts's DRAFTING MODE trigger ("asking you to draft
 // actual copy... as opposed to asking for strategic advice about content"),
@@ -361,7 +346,23 @@ const BUSINESS_CONTEXT_SIGNAL = /\b(i run|i own|my business|my startup|my compan
 // isPureContextStatement and deriveContextFromHistory as a result. Real
 // business descriptions are reliably identifiable by concrete metrics even
 // when they don't use one of the fixed openers — catch those too.
-const BUSINESS_METRICS_SIGNAL = /(\$\s?[\d,]+|\d+%|\d+\s+(paying\s+)?customers|monthly recurring revenue|\bmrr\b|\bchurn\b|\barr\b)/i;
+//
+// FIX: a bare `\d+%` used to be on this list and was by far the loosest
+// entry on it — ANY sentence containing a percentage was classified as a
+// business description. That is what made "not testing budget giving 25% as
+// dscount is unreasonable" and "im saying wldnt giving 20% for discounts be
+// too much loss" — both plainly corrections of Vera's previous answer — read
+// as founders describing their company, so both were answered with "Got it —
+// noted: ..." instead of an answer (confirmed live, twice in one session).
+// A percentage on its own carries no information about what a business IS;
+// it is just a number in a sentence about anything at all. Every other entry
+// here names a real business quantity (currency amount, customer count,
+// MRR/ARR/churn), and a genuine metric stated as a percentage still matches
+// through those — "churn is 8%" on `churn`, "$35,000 MRR" on both the
+// currency amount and `mrr`. So dropping it loses no real business
+// description while removing the false-positive class at the root, rather
+// than exempting phrasings one at a time downstream.
+const BUSINESS_METRICS_SIGNAL = /(\$\s?[\d,]+|\d+\s+(paying\s+)?customers|monthly recurring revenue|\bmrr\b|\bchurn\b|\barr\b)/i;
 
 function looksLikeBusinessContext(message: string): boolean {
   return BUSINESS_CONTEXT_SIGNAL.test(message) || BUSINESS_METRICS_SIGNAL.test(message);
@@ -656,6 +657,69 @@ function summarizeCardForLogging(card: any): string | null {
     return [firstPhase.title, actions].filter(Boolean).join(" — ") || null;
   }
   return null;
+}
+
+// ---- What the conversation log remembers of a card ----
+//
+// Only `summary` was ever written to the message log, so every option name,
+// score, risk, phase and action Vera produced vanished the moment the
+// response was rendered. The founder can see the card on screen; Vera
+// cannot see it on the next turn. That is why "what was option B again?",
+// "you said the risk was medium", or a correction aimed at a number that
+// only ever existed inside a card land on a Vera that has no record of
+// saying it — and a model with no record either agrees with whatever the
+// founder asserts or contradicts itself. It reads as amnesia because it is.
+//
+// A compact digest, not the card JSON: enough for Vera to recognise and
+// stand behind what it said, cheap enough to replay every turn. Full card
+// content is already durable in venus_decisions (see autoLogDecisionCards).
+function digestCardsForLog(cards: unknown): string {
+  if (!Array.isArray(cards) || cards.length === 0) return "";
+
+  const lines: string[] = [];
+  for (const card of cards) {
+    if (!card || typeof card !== "object") continue;
+    const c = card as any;
+    const content = c.content ?? {};
+    const label = typeof c.title === "string" && c.title ? c.title : c.type;
+
+    if (c.type === "decision" && Array.isArray(content.options)) {
+      const options = content.options
+        .map((o: any) => (typeof o?.name === "string" ? o.name : null))
+        .filter(Boolean)
+        .join(" vs ");
+      const call = typeof content.recommendation === "string" ? content.recommendation : "";
+      lines.push(`decision "${label}": ${options}${call ? ` → ${call}` : ""}`);
+    } else if (c.type === "risk" && Array.isArray(content.risks)) {
+      const risks = content.risks
+        .map((r: any) => (r?.name ? `${r.name} (${r.probability ?? "?"}%, ${r.impact ?? "?"} impact)` : null))
+        .filter(Boolean)
+        .join("; ");
+      lines.push(`risks "${label}": ${risks}`);
+    } else if (c.type === "roadmap" && Array.isArray(content.phases)) {
+      const phases = content.phases
+        .map((p: any) => (p?.period || p?.title ? `${p.period ?? ""} ${p.title ?? ""}`.trim() : null))
+        .filter(Boolean)
+        .join("; ");
+      lines.push(`roadmap "${label}": ${phases}`);
+    } else if (c.type === "analysis" && Array.isArray(content.points)) {
+      const points = content.points
+        .map((p: any) => (p?.label ? `${p.label}: ${p.value ?? ""}`.trim() : null))
+        .filter(Boolean)
+        .join("; ");
+      lines.push(`analysis "${label}": ${points}`);
+    } else if (c.type === "precedent" && Array.isArray(content.precedents)) {
+      const names = content.precedents.map((p: any) => p?.company).filter(Boolean).join(", ");
+      lines.push(`precedents "${label}": ${names}`);
+    } else {
+      lines.push(`${c.type} card "${label}"`);
+    }
+  }
+
+  if (lines.length === 0) return "";
+  const digest = lines.join("\n");
+  const CARD_DIGEST_CHAR_LIMIT = 900;
+  return digest.length > CARD_DIGEST_CHAR_LIMIT ? `${digest.slice(0, CARD_DIGEST_CHAR_LIMIT)}…` : digest;
 }
 
 // Writes a row for every decision/roadmap card Venus returns — this is what
@@ -969,9 +1033,56 @@ function buildInsufficientPrecedentResponse(query: string, retrieval: RetrievalR
   };
 }
 
+// ---- Server-side input bounds ----
+//
+// VenusAnalyzeBody (generated from the API spec) validates `message` only as
+// `string().min(1)` and `sessionHistory` as an unbounded array of unbounded
+// strings — and the frontend replays its ENTIRE conversation on every single
+// request (see Venus.tsx's analyze call). So request size grows without
+// limit as a chat gets longer, on a budget the static system prompt already
+// exhausts by itself. That shows up as the 413 shrink-and-retry storms this
+// file's comments document, and every shrink cuts real grounding material.
+//
+// Bounded here rather than in the generated schema so the contract stays
+// generated and this stays a server-side safety property: a request over the
+// bound is trimmed and answered, never rejected. The founder's CURRENT
+// message is what matters most, so it keeps the largest allowance; history
+// is capped by turn count first (oldest dropped) and then per-turn length.
+const MAX_MESSAGE_CHARS = 12_000;
+const MAX_HISTORY_TURNS = 24;
+const MAX_HISTORY_TURN_CHARS = 4_000;
+
+function boundAnalyzeInput(data: { message: string; sessionHistory?: { role: string; content: string }[] }) {
+  const message =
+    data.message.length > MAX_MESSAGE_CHARS
+      ? `${data.message.slice(0, MAX_MESSAGE_CHARS)}\n\n[Message truncated at ${MAX_MESSAGE_CHARS} characters.]`
+      : data.message;
+
+  const sessionHistory = (data.sessionHistory ?? []).slice(-MAX_HISTORY_TURNS).map((h) => ({
+    // The generated schema types `role` as a free-form string, so a client
+    // can send anything here. Everything downstream already follows the
+    // tolerant "not 'user' means it's Vera's turn" convention (the frontend
+    // labels its own turns "venus"), so normalise to that once, at the
+    // boundary, instead of re-deriving it at five call sites.
+    role: h.role === "user" ? "user" : "assistant",
+    content:
+      typeof h.content === "string" && h.content.length > MAX_HISTORY_TURN_CHARS
+        ? `${h.content.slice(0, MAX_HISTORY_TURN_CHARS)}…`
+        : (h.content ?? ""),
+  }));
+
+  return { message, sessionHistory };
+}
+
 router.post("/ai/analyze", requireAuth, async (req, res) => {
-  const body = VenusAnalyzeBody.safeParse(req.body);
-  if (!body.success) return res.status(400).json({ error: "Invalid request body" });
+  const parsedBody = VenusAnalyzeBody.safeParse(req.body);
+  if (!parsedBody.success) return res.status(400).json({ error: "Invalid request body" });
+
+  const bounded = boundAnalyzeInput(parsedBody.data);
+  // Shadowing the parse result with a bounded copy means every `body.data.*`
+  // read below this line — there are dozens — sees the trimmed values
+  // automatically, with no chance of one call site missing the bound.
+  const body = { data: { ...parsedBody.data, ...bounded } };
 
   try {
     // Previously `(req.headers["x-session-id"] as string) || req.ip || "default"`
@@ -985,7 +1096,39 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       ? new (await import("groq-sdk").then(m => m.default))({ apiKey: headerKey })
       : await getGroqClient(sessionId);
 
+    // ---- Every turn gets logged, including the ones that never reach the model ----
+    //
+    // logMessage for the founder's turn sits far below this point, AFTER
+    // every gate has had its chance to return. So the durable message log
+    // had holes exactly where the conversation did its most important work:
+    // a founder's first business-context dump, their answer to "same
+    // business or new?", a stored preference, a resolved contradiction —
+    // none of it recorded, on either side. And because serverHistory
+    // (sourced from that same log) overrides the client's copy whenever a
+    // chatId exists, those turns were invisible on later requests too. Vera
+    // would ask a question, be told the answer, and have no record that
+    // either happened.
+    //
+    // Every gated response now goes through here instead of a bare
+    // res.json, so "did we log this turn?" stops being a question anyone has
+    // to remember to ask at each of the dozen early returns below.
+    // `object` rather than a precise shape because the gate builders
+    // (buildContextAcknowledgment, buildBusinessContextConfirmation, …) are
+    // typed as returning plain `object`; the summary is read defensively.
+    const respondGated = (payload: object) => {
+      logMessage({ userId: sessionId, chatId: body.data.chatId, role: "user", content: body.data.message }).catch(() => {});
+      const summary = (payload as { summary?: unknown }).summary;
+      if (typeof summary === "string") {
+        logMessage({ userId: sessionId, chatId: body.data.chatId, role: "assistant", content: summary }).catch(() => {});
+      }
+      return res.json(payload);
+    };
+
     if (!groq) {
+      // Not routed through respondGated: with no Groq client this turn never
+      // became part of a conversation at all, and logging a configuration
+      // error as if it were Vera's reply would poison the history that later
+      // turns reason from.
       return res.json(buildFallbackVenusResponse(body.data.message));
     }
 
@@ -1028,7 +1171,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         // vs. create a genuinely new one) now waits for the founder's answer
         // to buildFreshContextIntake() below — see awaitingNewProfileIntake.
         await setPendingNewProfileIntake(sessionId, true);
-        return res.json(buildFreshContextIntake());
+        return respondGated(buildFreshContextIntake());
       }
       if (reply === "same") {
         await setPendingContextConfirmation(sessionId, false);
@@ -1038,7 +1181,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       } else {
         // Reply didn't clearly answer new-vs-same — re-ask rather than
         // guessing, so we never silently pick a side.
-        return res.json(buildBusinessContextConfirmation());
+        return respondGated(buildBusinessContextConfirmation());
       }
     }
 
@@ -1063,7 +1206,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         const matched = await findMatchingProfile(sessionId, body.data.message, activeProfile?.id ?? undefined);
         if (matched) {
           await setActiveProfile(sessionId, matched.id);
-          return res.json({
+          return respondGated({
             summary: `This sounds like **${matched.name}** — the business you told me about before. Switching back to it instead of starting fresh. What would you like help with?`,
             cards: [],
             contextAcknowledged: true,
@@ -1074,7 +1217,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           await setActiveProfile(sessionId, newProfile.id);
           addCompanyFact({ userId: sessionId, factText: body.data.message, sourceType: "chat", profileId: newProfile.id }).catch(() => {});
         }
-        return res.json(buildContextAcknowledgment(body.data.message));
+        return respondGated(buildContextAcknowledgment(body.data.message));
       }
       // Not a business description — leave the active profile as-is and let
       // the message fall through to normal handling below.
@@ -1096,7 +1239,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           sourceType: pendingContradiction.sourceType,
           profileId: activeProfile?.id ?? null,
         });
-        return res.json({ summary: "Got it — updated.", cards: [], contextAcknowledged: true });
+        return respondGated({ summary: "Got it — updated.", cards: [], contextAcknowledged: true });
       }
       if (resolution === "both") {
         await setPendingFactContradiction(sessionId, null);
@@ -1107,10 +1250,10 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           sourceType: pendingContradiction.sourceType,
           profileId: activeProfile?.id ?? null,
         });
-        return res.json({ summary: "Got it — I'll keep both as true.", cards: [], contextAcknowledged: true });
+        return respondGated({ summary: "Got it — I'll keep both as true.", cards: [], contextAcknowledged: true });
       }
       // Unclear — re-ask rather than guessing which one to keep.
-      return res.json({
+      return respondGated({
         summary: "Just to be sure — did that replace what you told me before, or are both still true?",
         cards: [],
         requiresClarification: true,
@@ -1124,15 +1267,15 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       if (reply === "yes") {
         await setPendingPreferenceText(sessionId, null);
         await addCompanyFact({ userId: sessionId, factText: pendingPreference, entryKind: "preference", claimType: "style_preference", sourceType: "chat" });
-        return res.json({ summary: "Got it — I'll remember that.", cards: [], contextAcknowledged: true });
+        return respondGated({ summary: "Got it — I'll remember that.", cards: [], contextAcknowledged: true });
       }
       if (reply === "no") {
         await setPendingPreferenceText(sessionId, null);
         // Exactly one follow-up question, then move on — never re-ask this
         // same thing again on the next message.
-        return res.json({ summary: "Got it — what should I do instead?", cards: [], requiresClarification: true });
+        return respondGated({ summary: "Got it — what should I do instead?", cards: [], requiresClarification: true });
       }
-      return res.json({
+      return respondGated({
         summary: `Got it — should I remember "${pendingPreference}" going forward?`,
         cards: [],
         requiresPreferenceConfirmation: true,
@@ -1152,14 +1295,58 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // Matches the same tolerant convention already used elsewhere in this
     // file (messageHistoryTurnCount's push loop, historyContext's label):
     // anything that isn't "user" is treated as the assistant/Vera turn.
-    const priorAssistantMessage = [...(body.data.sessionHistory ?? [])].reverse().find((h) => h.role && h.role !== "user")?.content ?? "";
+    let priorAssistantMessage = [...(body.data.sessionHistory ?? [])].reverse().find((h) => h.role && h.role !== "user")?.content ?? "";
+    let priorUserMessage = [...(body.data.sessionHistory ?? [])].reverse().find((h) => h.role === "user")?.content ?? "";
+
+    // sessionHistory is CLIENT-sent (the frontend replays its localStorage
+    // copy on every request), so it is absent or empty in every case where
+    // the client's local copy isn't there: a page refresh, a different
+    // device, cleared storage, or any non-browser caller. Everything that
+    // depends on knowing what Vera last said then goes dark at once —
+    // correction detection, the answer-withholding guard below, and the
+    // regression log — and the founder gets the "Got it — noted" non-answer
+    // again purely because they reloaded the tab.
+    //
+    // The server has the turn: it's in the durable message log. Read it back
+    // when the client didn't supply one. One small indexed query, and only
+    // on the path where the client left us blind, so the normal request pays
+    // nothing for it.
+    if (!priorAssistantMessage && body.data.chatId) {
+      const logged = await getRecentMessages(sessionId, body.data.chatId, 6);
+      priorAssistantMessage = [...logged].reverse().find((m) => m.role !== "user")?.content ?? "";
+      if (!priorUserMessage) {
+        priorUserMessage = [...logged].reverse().find((m) => m.role === "user")?.content ?? "";
+      }
+    }
+
+    // FIRED HERE, AWAITED LATER. This is the same single classification call
+    // that has always run for every message — it is only started earlier now,
+    // because two of its outputs (correctsPriorAnswer / detectedIssue) are
+    // needed by the answer-withholding gates below, and those gates used to
+    // return a response before this call was ever made. That ordering was the
+    // structural bug: the one component that understands what a message MEANS
+    // ran strictly after the components that decide whether to answer it at
+    // all, so its verdict could never influence that decision.
+    //
+    // Starting it as a floating promise keeps the fix free on the common path
+    // — a normal question never awaits it here, and it is still resolved
+    // alongside retrievePrecedents further down, exactly as before. Only a
+    // message that one of the gates is about to swallow pays the wait, and
+    // that path currently pays nothing and returns the wrong thing.
+    const classificationPromise = classifyQuery(groq, body.data.message, priorAssistantMessage);
+    // classifyQuery never rejects (it catches internally and returns
+    // DEFAULT_CLASSIFICATION), but an early return below can leave this
+    // promise unawaited — attach a no-op so a future change to that contract
+    // can't surface as an unhandled rejection instead of a degraded answer.
+    classificationPromise.catch(() => {});
+
     if (priorAssistantMessage && looksLikeCorrection(body.data.message, priorAssistantMessage) && looksLikeGeneralizablePreference(body.data.message)) {
       const existingPreferences = await getActivePreferenceFacts(sessionId, 20);
       if (!looksLikeExistingPreference(existingPreferences.map((f) => f.factText), body.data.message)) {
         const modelCheck = await confirmPreferenceWithModel(groq, body.data.message, priorAssistantMessage);
         if (modelCheck?.isStandingPreference && modelCheck.preferenceText) {
           await setPendingPreferenceText(sessionId, modelCheck.preferenceText);
-          return res.json({
+          return respondGated({
             summary: `Got it — should I remember "${modelCheck.preferenceText}" going forward?`,
             cards: [],
             requiresPreferenceConfirmation: true,
@@ -1168,9 +1355,80 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       }
     }
 
-    const effectiveBusinessContext = body.data.businessContext || sessionHistoryContext || storedContext;
+    // `let`, not `const`: a correction that also carries business context
+    // updates this in place further down, so the answer produced THIS turn
+    // already reasons from the corrected version rather than the stale one.
+    let effectiveBusinessContext = body.data.businessContext || sessionHistoryContext || storedContext;
 
-    const pureContextStatement = isPureContextStatement(body.data.message);
+    // ---- ANSWER-WITHHOLDING GATE GUARD ----
+    //
+    // Both gates below (the pure-context acknowledgment and the "I need two
+    // quick details" clarification) respond WITHOUT answering. That is the
+    // right behavior for a founder opening a chat by describing their
+    // company, and the wrong behavior for essentially everything else — most
+    // damagingly for a founder correcting an answer Vera just gave, which is
+    // exactly when they are least willing to tolerate a non-answer.
+    //
+    // Both gates judged the message by its CONTENT alone (business vocabulary
+    // present, question word absent) and were blind to what the message was
+    // DOING in the conversation. See lib/turnIntent.ts for why that axis, not
+    // a longer keyword list, is the actual root of this failure class. A
+    // message that is a reply to Vera's own last turn is never a context dump
+    // and never needs an intake question — the conversation is already
+    // underway, and the founder is owed an answer.
+    //
+    // The model check is only awaited when a gate is actually about to fire,
+    // so the ordinary path costs nothing (see classificationPromise above).
+    const pureContextStatementByShape = isPureContextStatement(body.data.message);
+    const clarificationCandidate = buildContextClarification(body.data.message, effectiveBusinessContext, body.data.sessionHistory);
+    const someGateWouldWithholdAnswer = pureContextStatementByShape || Boolean(clarificationCandidate);
+
+    let replySource: ReplyDetectionSource = "none";
+    if (priorAssistantMessage && someGateWouldWithholdAnswer) {
+      if (looksLikeReplyToPriorTurn(body.data.message, priorAssistantMessage)) {
+        replySource = "structural";
+      } else {
+        const intent = await classificationPromise;
+        if (intent.correctsPriorAnswer) {
+          replySource = "model";
+        } else if (intent.failed) {
+          // Classification didn't actually run (network, quota, bad JSON) —
+          // so `correctsPriorAnswer: false` here is a placeholder, not a
+          // judgment. Treating a placeholder as "definitely not a reply"
+          // would re-arm the exact non-answer this guard exists to prevent,
+          // and would do it precisely when the system is already degraded.
+          // Resolve the unknown toward answering. See ReplyDetectionSource.
+          replySource = "fail_open";
+        }
+      }
+    }
+    const isReplyToPriorTurn = replySource !== "none";
+    if (isReplyToPriorTurn) {
+      console.error(
+        `[turnIntent] session=${sessionId} routed=answer source=${replySource} gate=${pureContextStatementByShape ? "pureContext" : "clarification"} message="${body.data.message.slice(0, 120)}"`,
+      );
+    }
+
+    const pureContextStatement = pureContextStatementByShape && !isReplyToPriorTurn;
+
+    // A reply that ALSO carries real business context ("no, we're B2B, not a
+    // marketplace") must still update what Vera knows — it just must not stop
+    // there. Captured silently and fire-and-forget, then execution falls
+    // through to the normal answer path below. Deliberately skips the
+    // blocking contradiction question that the standalone branch asks: a
+    // correction IS the founder resolving the contradiction, so asking them
+    // to confirm it is another non-answer at the worst possible moment.
+    if (pureContextStatementByShape && isReplyToPriorTurn) {
+      const combinedContext = storedContext && !looksLikeDifferentBusiness(storedContext, body.data.message)
+        ? mergeContextBlob(storedContext, body.data.message)
+        : body.data.message;
+      await saveStoredBusinessContext(activeProfile, combinedContext);
+      addCompanyFact({ userId: sessionId, factText: body.data.message, sourceType: "chat", profileId: activeProfile?.id ?? null }).catch(() => {});
+      // Answer THIS turn from the corrected context, not the version the
+      // founder just told us was wrong — persisting it for next time isn't
+      // enough when the correction is the whole point of the message.
+      effectiveBusinessContext = combinedContext;
+    }
 
     // If this message looks like a different business than what's already
     // stored, don't silently overwrite it or silently keep using the old one
@@ -1180,7 +1438,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // since that question has already been asked and answered this turn.
     if (!awaitingConfirmation && storedContext && pureContextStatement && looksLikeDifferentBusiness(storedContext, body.data.message)) {
       await setPendingContextConfirmation(sessionId, true);
-      return res.json(buildBusinessContextConfirmation());
+      return respondGated(buildBusinessContextConfirmation());
     }
 
     // Pure context statement (no question attached): save it and acknowledge
@@ -1188,7 +1446,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // hasn't asked anything.
     if (pureContextStatement) {
       const combinedContext = storedContext && !looksLikeDifferentBusiness(storedContext, body.data.message)
-        ? `${storedContext} | ${body.data.message}`
+        ? mergeContextBlob(storedContext, body.data.message)
         : body.data.message;
       await saveStoredBusinessContext(activeProfile, combinedContext);
 
@@ -1203,7 +1461,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       const conflict = await findPotentialContradiction(sessionId, "general", body.data.message, activeProfile?.id);
       if (conflict) {
         await setPendingFactContradiction(sessionId, { oldFactId: conflict.id, newFactText: body.data.message, factType: "general", sourceType: "chat" });
-        return res.json({
+        return respondGated({
           summary: `You told me before: "${conflict.factText}" — this sounds different: "${body.data.message}". Did that change, or are both true?`,
           cards: [],
           requiresClarification: true,
@@ -1215,12 +1473,17 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       // alongside the blob rather than replacing it. Fire-and-forget:
       // addCompanyFact never throws, but this must never delay the response.
       addCompanyFact({ userId: sessionId, factText: body.data.message, sourceType: "chat", profileId: activeProfile?.id ?? null }).catch(() => {});
-      return res.json(buildContextAcknowledgment(combinedContext));
+      return respondGated(buildContextAcknowledgment(combinedContext));
     }
 
-    const clarification = buildContextClarification(body.data.message, effectiveBusinessContext, body.data.sessionHistory);
-    if (clarification) {
-      return res.json(clarification);
+    // Computed above (clarificationCandidate) rather than here, so the reply
+    // guard could take it into account before deciding whether to spend a
+    // model check. Asking a founder who is mid-correction "what industry are
+    // you in?" is the same non-answer failure as the acknowledgment above,
+    // one gate later — they are replying to an answer Vera already gave, so
+    // whatever context that answer was built on is still the context here.
+    if (clarificationCandidate && !isReplyToPriorTurn) {
+      return res.json(clarificationCandidate);
     }
 
     // A real question arrived (not a pure context statement) and we now have
@@ -1278,20 +1541,23 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     }
     const effectiveSessionHistory = serverHistory ?? body.data.sessionHistory;
 
-    // Classification runs CONCURRENTLY with retrieval — it's a separate
-    // network round-trip on a separate model, so sequencing them would add
-    // its full latency to every request for no reason. Never rejects (see
-    // classifyQuery's own catch), so Promise.all is safe here.
-    // The immediately-preceding assistant turn, needed so the classifier can
-    // tell whether THIS message is rejecting it. Reuses the same tolerant
-    // role convention as priorAssistantMessage above (the frontend labels
-    // Vera's turns "venus", not "assistant").
-    const lastAssistantTurn = [...(effectiveSessionHistory ?? [])].reverse().find((h) => h.role && h.role !== "user")?.content ?? "";
-    const lastUserTurn = [...(effectiveSessionHistory ?? [])].reverse().find((h) => h.role === "user")?.content ?? "";
-
+    // Classification still resolves CONCURRENTLY with retrieval — it is just
+    // started further up now (see classificationPromise) so the gates above
+    // could consult it. Awaiting an already-in-flight promise here costs
+    // nothing; on the ordinary path this is still one round-trip overlapped
+    // with retrieval, exactly as before. Never rejects (see classifyQuery's
+    // own catch), so Promise.all is safe here.
+    //
+    // It is classified against priorAssistantMessage (the true immediately
+    // preceding turn from the client-sent history) rather than the last
+    // assistant turn in effectiveSessionHistory, which is relevance-filtered
+    // and reordered by getRelevantMessages and therefore need not be the turn
+    // the founder is actually replying to. The correction log below uses the
+    // same pair, so what gets recorded as a regression case is always the
+    // exchange the classifier actually judged.
     const [retrieval, classification] = await Promise.all([
       retrievePrecedents(body.data.message, { businessContext: effectiveBusinessContext }),
-      classifyQuery(groq, body.data.message, lastAssistantTurn),
+      classificationPromise,
     ]);
     console.error(
       `[queryClassifier] session=${sessionId} kind=${classification.kind} complexity=${classification.complexity} needsExternalFacts=${classification.needsExternalFacts} corrects=${classification.correctsPriorAnswer} query="${body.data.message.slice(0, 120)}"`,
@@ -1308,8 +1574,8 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       recordCorrection({
         userId: sessionId,
         chatId: body.data.chatId,
-        originalQuery: lastUserTurn,
-        originalResponse: lastAssistantTurn,
+        originalQuery: priorUserMessage,
+        originalResponse: priorAssistantMessage,
         correctionText: body.data.message,
         detectedIssue: classification.detectedIssue,
         issueClass: classification.issueClass,
@@ -1354,7 +1620,36 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // goals. Skipped on a narrow query, same reasoning as ownDecisions/
     // precedents above: a quick follow-up doesn't need the founder's full
     // track record re-injected.
-    const companyFacts = isNarrowScope ? [] : await getActiveCompanyFacts(sessionId, 8, activeProfile?.id);
+    // The company file (see lib/dossier.ts). Never gated by isNarrowScope:
+    // it IS the structured picture of the business, so answering a quick
+    // follow-up without it is answering about a company Vera has forgotten.
+    // Resolved BEFORE company_facts because it decides what of that block is
+    // still worth sending — see the de-duplication below.
+    const dossierBlock = formatDossierForPrompt(await getDossier(sessionId, activeProfile?.id ?? null));
+
+    // Everything stored about this founder that was previously write-only —
+    // company_facts got written on every business-context statement (see
+    // addCompanyFact calls above) but nothing ever read it back into a
+    // prompt; buildGoalHistoryBlock closes the equivalent gap for resolved
+    // goals. Skipped on a narrow query, same reasoning as ownDecisions/
+    // precedents above: a quick follow-up doesn't need the founder's full
+    // track record re-injected.
+    //
+    // DE-DUPLICATED AGAINST THE DOSSIER. Completing intake writes every
+    // dossier field into company_facts as well (see the dossier route's
+    // syncDossierToMemory — they belong there so each one stays individually
+    // correctable and visible on the memory page). Without this filter those
+    // same facts then arrive in the prompt TWICE: once as the company file,
+    // once as structured facts. On a budget the static system prompt already
+    // consumes in full, paying twice for identical content is paid for by
+    // cutting the grounding material at the other end of the shrink. The
+    // dossier is the better-shaped copy — labelled, ordered, complete — so
+    // it wins and the onboarding-sourced rows drop out. Facts learned from
+    // CHAT are untouched: those are genuinely newer than the file.
+    const allCompanyFacts = isNarrowScope ? [] : await getActiveCompanyFacts(sessionId, 8, activeProfile?.id);
+    const companyFacts = dossierBlock
+      ? allCompanyFacts.filter((f) => f.sourceType !== "onboarding")
+      : allCompanyFacts;
     const companyFactsBlock = companyFacts.length > 0
       ? `STRUCTURED FACTS VENUS HAS LEARNED ABOUT THIS FOUNDER'S BUSINESS (individually captured and correctable, higher-confidence than the freeform Business Context line below; facts tagged "user-reported" are the founder's own claim — reason from them but never restate them back as independently established fact):\n${formatCompanyFactsForPrompt(companyFacts)}`
       : "";
@@ -1367,7 +1662,27 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       ? `STANDING PREFERENCES THIS FOUNDER HAS ASKED VENUS TO ALWAYS FOLLOW (apply to every response below, regardless of topic):\n${formatPreferenceFactsForPrompt(preferenceFacts)}`
       : "";
     const goalHistoryBlock = isNarrowScope ? "" : await buildGoalHistoryBlock(sessionId);
-    const memoryBlock = `${companyFactsBlock ? `\n\n${companyFactsBlock}` : ""}${preferenceFactsBlock ? `\n\n${preferenceFactsBlock}` : ""}${goalHistoryBlock ? `\n\n${goalHistoryBlock}` : ""}`;
+
+    // Closes the correction loop. recordCorrection (further up) has been
+    // writing every correction to response_feedback for a while, but nothing
+    // in the codebase ever read that table back into a prompt — so the
+    // capture was real and the learning was not. Pulled regardless of query
+    // scope, for the same reason as standing preferences: "you got this
+    // wrong before" applies to the next answer whatever its topic, and this
+    // founder correcting Vera twice on the same thing is the exact
+    // experience that makes an advisor feel replaceable.
+    const pastCorrections = await getRecentCorrections(sessionId, isNarrowScope ? 2 : 4);
+    const correctionHistoryBlock = formatCorrectionsForPrompt(pastCorrections);
+
+    const memoryBlock =`${companyFactsBlock ? `\n\n${companyFactsBlock}` : ""}${preferenceFactsBlock ? `\n\n${preferenceFactsBlock}` : ""}${correctionHistoryBlock ? `\n\n${correctionHistoryBlock}` : ""}${goalHistoryBlock ? `\n\n${goalHistoryBlock}` : ""}`;
+
+    // Attached files. NEVER gated by isNarrowScope, and deliberately placed
+    // at the front of the dynamic tail below rather than in memoryBlock: if
+    // this is ever dropped by a shrink retry, the model is back to seeing a
+    // bare "[Attached file: x.png]" marker with nothing telling it the file
+    // is unreadable — which is precisely the state that produced confident
+    // analysis of never-opened files. See lib/attachmentContext.ts.
+    const attachmentBlock = await buildAttachmentBlock(sessionId, body.data.chatId, body.data.message);
 
     const isModerate = retrieval.tier === "moderate";
     const isNone = retrieval.tier === "none";
@@ -1477,7 +1792,24 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // -facing value, so it should be the FIRST thing sacrificed on a shrink
     // — not sit ahead of historyContext/precedentBlock, which actually
     // carry the grounding a response needs to be correct.
-    const venusPromptForTier = isModerate ? `${VENUS_PROMPT}${MODERATE_TIER_PRECEDENT_NOTE}` : VENUS_PROMPT;
+    // The other half of the correction fix. Routing (see the answer-
+    // withholding gate guard above) only decides that a correction REACHES
+    // the model; this decides what happens once it gets there. Until now
+    // correctsPriorAnswer was computed, logged to response_feedback for
+    // offline evals, and then dropped before prompt assembly — the model was
+    // never told it was being corrected, so it answered as if the message
+    // were an ordinary question. Observed live: immediately after "im
+    // correcting u", Vera re-issued its rejected recommendation nearly
+    // verbatim behind an agreeable "Yes, ..." opener.
+    //
+    // Appended to venusPromptForTier, i.e. the very FRONT of the system
+    // message's dynamic tail, because groq.ts's shrinkMessages cuts from the
+    // end on a 413 retry. A correction must survive a shrink: it changes what
+    // the answer IS, not how richly that answer is supported.
+    const correctionInstruction = classification.correctsPriorAnswer
+      ? buildCorrectionInstruction(classification.detectedIssue, classification.issueClass)
+      : "";
+    const venusPromptForTier = (isModerate ? `${VENUS_PROMPT}${MODERATE_TIER_PRECEDENT_NOTE}` : VENUS_PROMPT) + correctionInstruction;
     // REMOVED: historyContext, which rendered the last 8 turns as a text blob
     // inside the system prompt. The SAME turns are already sent as real,
     // role-tagged chat messages further down (see messageHistoryTurnCount's
@@ -1498,62 +1830,69 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // instruction text below must not claim a search ran when it didn't, or
     // claim none ran when one actually did (either way, the model might
     // reference a "WEB SEARCH RESULTS" section incorrectly).
-    // NAMED-ENTITY GROUNDING GUARD: separate from the precedent-card rule
-    // below (which only ever policed *company* names against the curated
-    // dataset). Nothing previously stopped the model from inventing OTHER
-    // specific named real-world entities — school names, addresses, exact
-    // enrollment figures, named people, named products — when it had no
-    // real source for them. That gap, combined with a since-fixed bug where
-    // webSearch() silently returned zero results for EVERY query (a broken
-    // DuckDuckGo result-link regex — see websearch.ts), produced exactly
-    // this failure: asked for real Cambridge-curriculum schools in Mumbai,
-    // the model confidently invented plausible-sounding school names with
-    // fabricated student counts and neighborhoods. Reasoning, opinions, and
-    // strategic advice should stay direct and concrete — that's still
-    // encouraged below — but a SPECIFIC factual claim about a real-world
-    // named entity (a name, address, statistic, date) must come from an
-    // actual source (WEB SEARCH RESULTS, the precedent dataset, or
-    // conversation context), never be invented to fill a gap.
-    const namedEntityGuard = `GROUNDING OF NAMED ENTITIES (applies to every answer): a specific factual claim about a real-world named entity — the name of a school/company/product/person/place, an exact statistic, an address, a date, a current price — must come from an actual source available to you right now: the web search results in this prompt, the verified precedent dataset, or something the user themselves told you. If you do not have a real source for the specific names or figures the question needs, say so plainly and briefly, then offer what you CAN do (search for it, or reason about how to evaluate options once they have the list). Never fill the gap with plausible-sounding invented specifics — a confident wrong name is far worse than an honest "I don't have verified data on that." This governs concrete factual claims ONLY. Your strategic reasoning, causal analysis, opinions, and recommendations are NOT affected by this rule and must stay as direct, specific, and opinionated as always — hedging your advice is not the goal here, and "I'm not sure" is never an acceptable substitute for judgment on a question that calls for judgment.`;
-
-    // Grounding rules specific to a factual/lookup question (see
-    // queryClassifier.ts). Kept separate from namedEntityGuard so a
-    // consultation question never picks up "cite your sources" framing that
-    // would make ordinary strategic advice read like a research report.
-    const factualGroundingInstruction = isFactualExternal
-      ? `\n\nTHIS IS A FACTUAL LOOKUP: the founder is asking for real-world information, not (only) judgment. Ground every specific fact in the WEB SEARCH RESULTS provided, and attribute naturally in the prose where it matters ("per <source>…"). If the search results don't actually contain what was asked for, say exactly that — name what you did and didn't find — rather than filling the gap from memory. If sources disagree, say they disagree instead of silently picking one. Do not present a fact from your own training data as if it were retrieved and current.`
-      : "";
-
-    // namedEntityGuard is NOT interpolated into either branch below anymore
-    // — it used to be baked in here AND appended again via
-    // groundingInstructions right after (see that constant's comment), so
-    // every isNone-tier query paid for the same ~283-token block twice for
-    // zero behavioral benefit. groundingInstructions alone now carries it,
-    // exactly once, in every branch (isNone included).
+    // The named-entity guard is NOT interpolated into either branch below —
+    // it used to be baked in here AND appended again via
+    // groundingInstructions, so every isNone-tier query paid for the same
+    // ~283-token block twice for zero behavioral benefit.
+    // groundingInstructions alone now carries it, exactly once.
     const noPrecedentInstruction = !webResult
       ? `NO VERIFIED PRECEDENT MATCH IN CURATED DATASET: This request doesn't match anything in the verified precedent dataset — that's fine, it just means you can't cite a dataset company/outcome as verified precedent. It does NOT mean you should refuse, hedge into an error, or ask the user to rephrase. This looks like a quick clarification or definition-style question, so no web search was run for it — answer directly from your own general knowledge, staying specific and concrete rather than vague. The confidence badge already shown elsewhere in the UI marks this response as exploratory/unverified, so you do NOT need to repeat a big warning inside your answer. Never fabricate a precedent-style company outcome as if it came from the curated dataset — anything you use from general knowledge is reasoning, not a "Precedent" card.`
       : `NO VERIFIED PRECEDENT MATCH IN CURATED DATASET: This request doesn't match anything in the verified precedent dataset — that's fine, it just means you can't cite a dataset company/outcome as verified precedent. It does NOT mean you should refuse, hedge into an error, or ask the user to rephrase. A live web search was run for this query (see WEB SEARCH RESULTS below); use whatever real information it surfaced — names, facts, figures, how something actually works — to give a direct, specific, useful answer. If the web search came back empty, fall back to general strategic reasoning instead — do NOT invent specific real-world names/figures to fill the gap. The confidence badge already shown elsewhere in the UI marks this response as exploratory/unverified, so you do NOT need to repeat a big warning inside your answer — a brief natural mention that this isn't from the verified dataset is enough, stated plainly rather than as a disclaimer wall. Never fabricate a precedent-style company outcome as if it came from the curated dataset — anything you use from web search or general knowledge is reasoning, not a "Precedent" card.`;
 
-    // namedEntityGuard + factualGroundingInstruction now appear in EVERY
-    // branch. Previously the guard lived only inside noPrecedentInstruction,
-    // which is only assembled when tier === "none" — so a query that matched
-    // a precedent (including one matched purely on the founder's business
-    // context) got NO grounding guard at all. That was the exact hole the
+    // Now shared with /ai/idea-review and the company-autopsy route via
+    // groq.ts — see buildGroundingInstructions there for why a per-route
+    // copy of this was itself the bug. Applies at EVERY retrieval tier:
+    // previously the guard lived only inside noPrecedentInstruction, which
+    // is only assembled when tier === "none", so a query that matched a
+    // precedent (including one matched purely on the founder's business
+    // context) got no grounding guard at all. That was the exact hole the
     // fabricated-schools answer went through: tier "moderate", guard absent,
     // search suppressed.
-    const groundingInstructions = `${namedEntityGuard}${factualGroundingInstruction}`;
+    const groundingInstructions = buildGroundingInstructions(isFactualExternal);
     // webSearchBlock is no longer tied to the isNone branch either — a factual
     // lookup now searches at any tier (see webResult above), so the results
     // must be included wherever they exist or the model would be told a search
     // ran and then never shown it.
-    const webBlockSection = webSearchBlock ? `\n\n${webSearchBlock}` : "";
 
-    const systemPrompt = (isNone
-      ? `${venusPromptForTier}\n\n${followUpInstruction}\n\n${decisionRoutingInstruction}\n\n${noPrecedentInstruction}\n\n${groundingInstructions}${webBlockSection}${effectiveBusinessContext ? `\n\nBusiness Context: ${effectiveBusinessContext}` : ""}${ownHistoryBlock ? `\n\n${ownHistoryBlock}` : ""}${openSessionBlock ? `\n\n${openSessionBlock}` : ""}${goalBlock ? `\n\n${goalBlock}` : ""}${memoryBlock}`
-      : effectiveBusinessContext
-        ? `${venusPromptForTier}\n\n${followUpInstruction}\n\n${decisionRoutingInstruction}\n\n${groundingInstructions}${webBlockSection}\n\nBusiness Context: ${effectiveBusinessContext}\n\n${precedentBlock}${ownHistoryBlock ? `\n\n${ownHistoryBlock}` : ""}${openSessionBlock ? `\n\n${openSessionBlock}` : ""}${goalBlock ? `\n\n${goalBlock}` : ""}${memoryBlock}`
-        : `${venusPromptForTier}\n\n${followUpInstruction}\n\n${decisionRoutingInstruction}\n\n${groundingInstructions}${webBlockSection}\n\n${precedentBlock}${ownHistoryBlock ? `\n\n${ownHistoryBlock}` : ""}${openSessionBlock ? `\n\n${openSessionBlock}` : ""}${goalBlock ? `\n\n${goalBlock}` : ""}${memoryBlock}`
-      ) + shadowModeInstructions; // appended LAST — see shrinkMessages: least protected, first cut on a shrink retry
+    // WAS three near-identical template literals (isNone / has-context /
+    // no-context) differing only in whether the precedent block or the
+    // no-precedent instruction appeared, and where the Business Context line
+    // sat. Three copies of one prompt is a divergence hazard of exactly the
+    // kind this file has already been bitten by: namedEntityGuard once lived
+    // in only one of the branches, so a whole tier of queries got no
+    // grounding guard at all (see the comment above groundingInstructions).
+    // One ordered list, assembled once, makes "is this block in every
+    // branch?" un-askable — a block is either in the list or it is not.
+    //
+    // Order IS the priority signal: groq.ts's shrinkMessages keeps the front
+    // of the dynamic tail and cuts from the end on a 413 retry. Attachments
+    // sit near the front because losing that block means the model silently
+    // reverts to assuming it can read a file it has never opened.
+    const systemPrompt =
+      [
+        venusPromptForTier,
+        attachmentBlock,
+        followUpInstruction,
+        decisionRoutingInstruction,
+        isNone ? noPrecedentInstruction : "",
+        groundingInstructions,
+        webSearchBlock,
+        dossierBlock,
+        // Kept alongside the dossier rather than replaced by it: the blob
+        // still carries anything said in chat since the file was last
+        // updated. The dossier is placed FIRST so that where the two
+        // disagree, the structured, founder-confirmed field is what the
+        // model reads as authoritative.
+        effectiveBusinessContext ? `Business Context: ${effectiveBusinessContext}` : "",
+        isNone ? "" : precedentBlock,
+        ownHistoryBlock,
+        openSessionBlock,
+        goalBlock,
+      ]
+        .filter(Boolean)
+        .join("\n\n") +
+      memoryBlock +
+      shadowModeInstructions; // appended LAST — see shrinkMessages: least protected, first cut on a shrink retry
 
     const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
       { role: "system", content: systemPrompt },
@@ -1573,6 +1912,24 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           const role = h.role === "user" ? "user" : "assistant";
           messages.push({ role, content: h.content });
         }
+      }
+    }
+
+    // A correction is meaningless without the turn it corrects. The history
+    // above is relevance-filtered and length-capped (getRelevantMessages +
+    // the slice), neither of which knows this particular turn is load-bearing
+    // — so on a narrow-scope correction, or one where the prior answer scored
+    // poorly on topical relevance, the model could receive
+    // correctionInstruction with nothing in context to apply it to. Restore
+    // the exchange explicitly when it's missing, immediately before the
+    // current message so it reads as the turn being replied to.
+    if (classification.correctsPriorAnswer && priorAssistantMessage) {
+      const alreadyPresent = messages.some((m) => m.content === priorAssistantMessage);
+      if (!alreadyPresent) {
+        if (priorUserMessage && !messages.some((m) => m.content === priorUserMessage)) {
+          messages.push({ role: "user", content: priorUserMessage });
+        }
+        messages.push({ role: "assistant", content: priorAssistantMessage });
       }
     }
 
@@ -1895,20 +2252,38 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       // a logging failure affect the response they actually asked for.
       autoLogDecisionCards(sessionId, body.data.message, effectiveBusinessContext, sanitized.cards, body.data.chatId).catch(() => {});
       // Completes the RAW LOG for this turn (see logMessage call for the
-      // user's message above) — logged as the plain summary text, which is
-      // the actual readable reply a founder saw, not the full cards JSON.
+      // user's message above) — the readable summary a founder saw, plus a
+      // compact digest of the cards. The digest is the fix for Vera being
+      // unable to recall its own structured output one turn later; see
+      // digestCardsForLog for why summary alone was not enough.
       if (typeof sanitized.summary === "string") {
-        logMessage({ userId: sessionId, chatId: body.data.chatId, role: "assistant", content: sanitized.summary }).catch(() => {});
+        const cardDigest = digestCardsForLog(sanitized.cards);
+        logMessage({
+          userId: sessionId,
+          chatId: body.data.chatId,
+          role: "assistant",
+          content: cardDigest ? `${sanitized.summary}\n\n[Cards shown with this answer: ${cardDigest}]` : sanitized.summary,
+        }).catch(() => {});
       }
       return res.json(sanitized);
     }
 
-    const shortQueryFallback = buildShortQueryFallback(body.data.message);
     // A parse failure (model didn't return usable JSON even after the repair
     // retry in callGroqJSON) is just another case of "nothing usable came
     // back" — it gets the same short, plain, honest fallback as any other
     // exhausted-retries case, not its own diagnostic card.
-    return res.json(shortQueryFallback || buildTransientErrorResponse(body.data.message));
+    //
+    // REMOVED: buildShortQueryFallback, which used to run first here. It
+    // returned a decision card containing a single option literally named
+    // "Primary path" with hardcoded scores — viability 6, speed 7,
+    // defensibility 6, capital_efficiency 6 — none of which came from
+    // anything. The UI renders those identically to real scored analysis, so
+    // a founder whose request had just FAILED was shown fabricated numbers
+    // presented as Vera's judgment. Every other guard in this codebase
+    // exists to stop the model inventing figures; this one had us doing it
+    // in code. There is no version of "the response failed" that should
+    // produce scores, so the fallback is gone rather than softened.
+    return res.json(buildTransientErrorResponse(body.data.message));
   } catch (err: any) {
     req.log.error(err);
     const { kind, retryAfterMs } = classifyGroqError(err);
@@ -1946,11 +2321,19 @@ router.post("/ai/idea-review", requireAuth, async (req, res) => {
     const followUpInstruction = `Conversation routing: narrow follow-up → answer directly and narrowly, at most one supporting card. Broad question → full template, cards only for facets that genuinely need one (not a default 2+). Either way, "Conversation context so far" is background only — never treat an earlier turn's request, including a past draft, as pending action this turn unless the current message asks for it.`;
     const noPrecedentInstruction = `NO VERIFIED PRECEDENT MATCH: There are no verified precedents for this request. You must not invent company names or fabricate specific precedent-based causal claims. Respond with general strategic reasoning only, clearly labeled as unverified and not derived from Venus AI's dataset.`;
 
-    const ideaSystemPrompt = isNone
-      ? `${VENUS_PROMPT}\n\n${followUpInstruction}\n\n${noPrecedentInstruction}`
-      : isModerate
-        ? `${VENUS_PROMPT}${MODERATE_TIER_PRECEDENT_NOTE}\n\n${followUpInstruction}\n\n${precedentBlock}`
-        : `${VENUS_PROMPT}\n\n${followUpInstruction}\n\n${precedentBlock}`;
+    // Same shared guard /ai/analyze uses (see groq.ts). This route had NO
+    // grounding guard at all until now: it runs the same VENUS_PROMPT over
+    // the same precedent dataset and can name real-world entities exactly
+    // the way the fabricated-schools answer did, but every hardening pass
+    // had been applied only to the handler above. `false` for the factual
+    // -lookup flag because idea review is a judgment task by definition —
+    // there's no web search on this route to attribute anything to.
+    const ideaSystemPrompt = [
+      isModerate ? `${VENUS_PROMPT}${MODERATE_TIER_PRECEDENT_NOTE}` : VENUS_PROMPT,
+      followUpInstruction,
+      buildGroundingInstructions(false),
+      isNone ? noPrecedentInstruction : precedentBlock,
+    ].join("\n\n");
 
     const ideaMessages: { role: "system" | "user"; content: string }[] = [
       { role: "system", content: ideaSystemPrompt },

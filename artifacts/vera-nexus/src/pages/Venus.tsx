@@ -8,7 +8,7 @@ import {
   type ChatSession, type ChatMessage, type SavedAnalysisType, type SavedAnalysis,
   type EvidenceRefEntry, type ContradictionEntry,
 } from '../lib/venusHistory';
-import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil, LayoutGrid, Workflow as WorkflowIcon, Paperclip, X, Loader2, AlertCircle } from 'lucide-react';
+import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil, LayoutGrid, Workflow as WorkflowIcon, Paperclip, X, Loader2, AlertCircle, FileText } from 'lucide-react';
 import { DraftWorkspace, detectDraftChannel } from './DraftWorkspace';
 import { GoalPanel } from './GoalPanel';
 import { RoadmapTracker } from './RoadmapTracker';
@@ -529,6 +529,10 @@ export function VenusPage() {
             confidenceNote: res.confidenceNote,
             evidenceRefs: res.evidenceRefs,
             contradictions: res.contradictions,
+            // Both were already on the wire and both were being thrown away
+            // here — see IntegrityNotices for why that mattered.
+            arithmeticIssues: (res as any).arithmeticIssues,
+            lengthConstraintNote: (res as any).lengthConstraintNote,
             contextQuery: text,
           };
           // Merge onto sessionRef.current (see its declaration above), not
@@ -841,6 +845,9 @@ export function VenusPage() {
         <div className="mb-[18px]" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
           <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={pendingQueueCount} skinned={skinned} />
           <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/vera/workflows')} skinned={skinned} />
+          {/* The slot the sidebar comment above explicitly left open ("room
+              left for future nav items between Workflows and Goals"). */}
+          <SidebarNavRow icon={FileText} label="Dossier" onClick={() => navigate('/vera/dossier')} skinned={skinned} />
           <div className="vera-label" style={{ padding: '10px 8px 4px' }}>Show above chat</div>
           <SidebarToggleRow icon={Target} label="Goal panel" active={showGoalPanel} onClick={toggleGoalPanel} skinned={skinned} />
           <SidebarToggleRow icon={MapIcon} label="Roadmap panel" active={showRoadmap} onClick={toggleRoadmap} skinned={skinned} />
@@ -1224,12 +1231,18 @@ export function VenusPage() {
                       })()}
 
                       {msg.role === 'venus' && !(msg as any).isError && (
-                        <EvidenceStrip
-                          confidence={msg.confidence}
-                          note={msg.confidenceNote}
-                          evidenceRefs={msg.evidenceRefs}
-                          contradictions={msg.contradictions}
-                        />
+                        <>
+                          <IntegrityNotices
+                            arithmeticIssues={msg.arithmeticIssues}
+                            lengthConstraintNote={msg.lengthConstraintNote}
+                          />
+                          <EvidenceStrip
+                            confidence={msg.confidence}
+                            note={msg.confidenceNote}
+                            evidenceRefs={msg.evidenceRefs}
+                            contradictions={msg.contradictions}
+                          />
+                        </>
                       )}
 
                       {/* Response actions: copy, download, save */}
@@ -1595,7 +1608,61 @@ function confidenceState(confidence?: 'verified' | 'exploratory', contradictions
     // is already stated honestly in the `note` text below this badge.
     return { label: 'Exploratory', color: 'var(--amber)', tone: 'warn' as const };
   }
-  return { label: 'Verified precedent', color: 'var(--mint)', tone: 'ok' as const };
+  // WAS 'Verified precedent'. Nothing in the dataset is verified: every one
+  // of the 79 rows in data/precedents.json carries verification_status
+  // "auto-extracted-unverified", and confidence.ts's verificationBoost is a
+  // documented no-op because of it. The word "verified" here referred to the
+  // RETRIEVAL tier — how strongly the question matched — and a founder has
+  // no way to read it that way. On a product whose entire pitch is causal
+  // honesty, a green badge claiming verification we have not done is the one
+  // label we cannot ship. "Precedent-backed" says what is actually true: the
+  // answer stands on real matched records from the dataset. If human
+  // verification ever lands, this is where "Verified" earns its way back.
+  return { label: 'Precedent-backed', color: 'var(--mint)', tone: 'ok' as const };
+}
+
+// Response-integrity signals the server computes on every answer and, until
+// now, no one rendered. checkArithmeticConsistency ships live (see
+// arithmeticCheck.ts) and lengthConstraintNote is written whenever a stated
+// word/character target could not be met — both were attached to the JSON
+// and dropped on the floor by this client. Surfacing them is the whole
+// point of computing them: an answer that quietly contains a period
+// -multiplier error, or that silently missed the length the founder asked
+// for, is exactly what erodes trust in everything else on the page.
+function IntegrityNotices({
+  arithmeticIssues,
+  lengthConstraintNote,
+}: {
+  arithmeticIssues?: { description: string }[];
+  lengthConstraintNote?: string;
+}) {
+  const hasArithmetic = Array.isArray(arithmeticIssues) && arithmeticIssues.length > 0;
+  if (!hasArithmetic && !lengthConstraintNote) return null;
+
+  return (
+    <div
+      className="vera-block mt-3"
+      style={{ padding: '10px 14px', borderColor: 'var(--amber)' }}
+      role="note"
+    >
+      <span className="vera-label" style={{ fontSize: '12px', color: 'var(--amber)' }}>
+        Check before you rely on this
+      </span>
+      <ul className="mt-1.5 space-y-1">
+        {hasArithmetic &&
+          arithmeticIssues!.map((issue, i) => (
+            <li key={`arith-${i}`} style={{ fontSize: '13px' }}>
+              Numbers don't reconcile: {issue.description}
+            </li>
+          ))}
+        {lengthConstraintNote && (
+          <li key="length" style={{ fontSize: '13px' }}>
+            {lengthConstraintNote}
+          </li>
+        )}
+      </ul>
+    </div>
+  );
 }
 
 // The evidence itself, rendered inline and always visible rather than hidden

@@ -3,7 +3,9 @@ import { db, pool, workflowsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { runWorkflow } from "../lib/workflows/runners";
 import { checkAutomationSuggestions } from "../lib/workflows/suggestions";
-import { ensureMonthlyRecap, isLastDayOfMonth, currentPeriodMonth } from "../lib/recap";
+import { isLastDayOfMonth, currentPeriodMonth } from "../lib/recap";
+import { buildMonthlyWrap, persistMonthlyWrap } from "../lib/monthlyWrap";
+import { getGroqClient } from "../lib/groq";
 
 // THE background execution loop. Deliberately a standalone script, not a
 // setInterval living inside the API process — this deployment's target is
@@ -59,20 +61,34 @@ async function main() {
     }
   }
 
-  // Section 8 (Recap Ritual) placeholder — see lib/recap.ts. Only fires on
-  // the actual last day of the month; "usersTouched" (this run's active
-  // workflow owners) is a scope-limited stand-in for "every founder with
-  // activity this month" since there's no users table to enumerate
-  // directly yet. Full recap design/UI is intentionally deferred.
+  // The monthly wrap, frozen on the last day of the month. Was
+  // ensureMonthlyRecap (five lifetime totals — see lib/recap.ts's own
+  // "placeholder" comment); now buildMonthlyWrap, which is month-scoped and
+  // compares against the previous month, and is the same builder /dossier/wrap
+  // serves on read. One builder means the wrap a founder reads mid-month and
+  // the wrap frozen at month end can never disagree.
+  //
+  // "usersTouched" (this run's active workflow owners) remains a scope-limited
+  // stand-in for "every founder with activity this month" — there is still no
+  // users table to enumerate. A founder with no workflows therefore gets their
+  // wrap computed on read instead of pre-generated, which is why that route
+  // computes rather than only reading.
   let recapsGenerated = 0;
   const today = new Date();
   if (isLastDayOfMonth(today)) {
     const periodMonth = currentPeriodMonth(today);
     for (const userId of usersTouched) {
       try {
-        if (await ensureMonthlyRecap(userId, periodMonth)) recapsGenerated++;
+        const groq = await getGroqClient(userId);
+        const wrap = await buildMonthlyWrap(userId, periodMonth, groq);
+        // A month with nothing in it gets no stored wrap — an empty wrap is
+        // worse than none, and storing one would freeze the emptiness even
+        // if the founder becomes active before month end on a later run.
+        if (!wrap.hasSignal) continue;
+        await persistMonthlyWrap(userId, wrap);
+        recapsGenerated++;
       } catch (err) {
-        console.error(`[dailyJob] monthly recap generation failed for user ${userId}:`, err);
+        console.error(`[dailyJob] monthly wrap generation failed for user ${userId}:`, err);
       }
     }
   }

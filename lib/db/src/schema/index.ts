@@ -18,3 +18,4 @@ export * from "./monthly_recaps";
 export * from "./attachments";
 export * from "./response_feedback";
 export * from "./business_profiles";
+export * from "./company_dossiers";

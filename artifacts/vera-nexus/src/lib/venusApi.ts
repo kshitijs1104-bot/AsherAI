@@ -469,6 +469,101 @@ export function useRunInstantAction() {
   });
 }
 
+// ---- The Dossier (company file + monthly wrap) ----
+
+export interface DossierField {
+  key: string;
+  label: string;
+  value: string | null;
+}
+
+export interface DossierQuestion {
+  id: string;
+  question: string;
+  why: string;
+  fills?: string;
+}
+
+export interface Dossier {
+  id: number;
+  companyName: string | null;
+  oneLine: string | null;
+  fields: DossierField[];
+  questions: DossierQuestion[];
+  answers: Record<string, string>;
+  status: string;
+  sourceLabel: string | null;
+  completeness: number;
+  updatedAt: string | null;
+}
+
+export function useDossier() {
+  return useQuery({
+    queryKey: ['/api/dossier'],
+    queryFn: () => apiFetch<{ dossier: Dossier | null }>('/api/dossier'),
+  });
+}
+
+export function useCreateDossier() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { sourceText?: string; attachmentId?: number }) =>
+      apiFetch<{ dossier: Dossier }>('/api/dossier', { method: 'POST', body: JSON.stringify(input) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dossier'] });
+      // The file feeds straight into chat context, so anything showing what
+      // Vera knows is stale the moment intake completes.
+      queryClient.invalidateQueries({ queryKey: ['/api/company-facts'] });
+    },
+  });
+}
+
+export function useSaveDossierAnswers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { dossierId: number; answers: Record<string, string> }) =>
+      apiFetch<{ dossier: Dossier }>(`/api/dossier/${input.dossierId}/answers`, {
+        method: 'POST',
+        body: JSON.stringify({ answers: input.answers }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dossier'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/company-facts'] });
+    },
+  });
+}
+
+export interface WrapStat {
+  key: string;
+  label: string;
+  value: number;
+  previousValue: number | null;
+  changePct: number | null;
+}
+
+export interface MonthlyWrap {
+  periodMonth: string;
+  monthLabel: string;
+  hasSignal: boolean;
+  stats: WrapStat[];
+  topics: { topic: string; count: number }[];
+  decisionsMade: { query: string; recommendation: string | null; status: string }[];
+  goalsClosed: { title: string; status: string }[];
+  lessons: string[];
+  busiestDay: { date: string; count: number } | null;
+  narrative: { headline: string; story: string; oneThingToChange: string } | null;
+}
+
+export function useMonthlyWrap(period?: string) {
+  return useQuery({
+    queryKey: ['/api/dossier/wrap', period ?? 'current'],
+    queryFn: () =>
+      apiFetch<{ wrap: MonthlyWrap; monthLabel: string }>(
+        `/api/dossier/wrap${period ? `?period=${encodeURIComponent(period)}` : ''}`,
+      ),
+  });
+}
+
 // ---- Chat attachments ----
 
 export interface UploadedAttachment {
