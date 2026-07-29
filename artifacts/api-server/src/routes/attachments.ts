@@ -6,6 +6,7 @@ import multer from "multer";
 import { db, attachmentsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { requireAuth, requireUserId } from "../middlewares/auth";
+import { UPLOADS_DIR } from "../lib/attachmentContext";
 
 const router = Router();
 
@@ -14,7 +15,11 @@ const router = Router();
 // OUTSIDE dist/ (build.mjs wipes dist/ on every rebuild) so redeploys don't
 // silently delete every founder's uploaded files. Swapping to real object
 // storage later only touches this one constant and the two handlers below.
-const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
+//
+// UPLOADS_DIR now lives in lib/attachmentContext.ts — the reader (which
+// extracts text-like file contents into the prompt) and this writer must
+// resolve to the same directory, and two independent `path.resolve` calls
+// are exactly the kind of thing that silently drifts apart.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const ALLOWED_MIME_TYPES = new Set([
