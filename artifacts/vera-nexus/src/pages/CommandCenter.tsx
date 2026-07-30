@@ -1,14 +1,15 @@
 import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useLocation } from 'wouter';
 import {
-  ArrowLeft, ArrowRight, Flame,
+  ArrowLeft, ArrowRight, Flame, X, Send, PlugZap, Check,
   Mail, MessageSquare, FileSpreadsheet, NotebookText, Ticket, Linkedin, Plug,
 } from 'lucide-react';
 import { SavedAnalysisBook, typeColor as savedTypeColor, TYPE_ORDER as SAVED_TYPE_ORDER } from './SavedAnalysisBook';
 import { ActivityWeek } from './ActivityWeek';
 import { getSavedAnalyses, typeLabel, type SavedAnalysis, type SavedAnalysisType, type ChatMessage } from '../lib/venusHistory';
 import {
-  useQueue, useQueueAction, useDailyBrief, useRunInstantAction, useConnectors,
+  useQueue, useQueueAction, useDailyBrief, useRunInstantAction, useConnectors, useDecisions,
+  startConnectorAuth,
   type QueueItem, type InstantActionType, type DailyBriefStats, type ConnectorStatus,
 } from '../lib/venusApi';
 import type { VenusTheme } from '../lib/venusTheme';
@@ -102,6 +103,36 @@ function sourceLabel(source: string): string {
   return SOURCE_LABEL[source] ?? source.toUpperCase();
 }
 
+/* ---- Clearing resolved rows ---------------------------------------------
+ *
+ * There is no DELETE on /api/queue, and adding one would be the wrong call:
+ * the queue is the record of what Vera did and what the founder decided
+ * about it, which the monthly wrap and the daily brief both count off. A
+ * founder tidying their board must not silently rewrite their own history.
+ *
+ * So "remove" is exactly that — removed from view, on this device, with the
+ * row left intact server-side. Same best-effort localStorage pattern as
+ * ve_today_seen / ve_theme.
+ */
+const HIDDEN_KEY = 've_cc_hidden';
+
+function readHidden(): Set<number> {
+  try {
+    const raw = localStorage.getItem(HIDDEN_KEY);
+    return new Set(raw ? (JSON.parse(raw) as number[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeHidden(ids: Set<number>) {
+  try {
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify([...ids]));
+  } catch {
+    // Best-effort: the row simply reappears next reload.
+  }
+}
+
 type Category = 'drafts' | 'decisions' | 'workflows' | 'notes';
 
 function categorize(item: QueueItem): Category {
@@ -133,17 +164,54 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: Palette; category: Category; fresh?: boolean }) {
+function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
+  item: QueueItem;
+  palette: Palette;
+  category: Category;
+  fresh?: boolean;
+  // Removes a resolved row from view. Local-only — see HIDDEN_KEY.
+  onHide?: (id: number) => void;
+  // Opens the chat a decision follow-up came out of, when we can find it.
+  onOpenChat?: (serverChatId: number) => void;
+}) {
   const { skin } = useVeraSkin();
   const skinned = skin !== 'classic';
   const action = useQueueAction();
   const [, navigate] = useLocation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.draftContent ?? '');
+  const [copied, setCopied] = useState(false);
   const isDone = item.status !== 'pending';
   const meta = CATEGORY_META[category];
   const isFlagged = item.type === 'schedule_alert' || item.type === 'goal_risk';
   const resolution = resolutionFor(item);
+
+  const connectors = useConnectors();
+  const plan = sendPlanFor(item, connectors.data?.connectors ?? []);
+
+  // The chat this row came from, when it is a decision follow-up. The link
+  // is the decision id encoded in externalId (`decision-<id>`) joined against
+  // the decisions list, which is the only place chatId is exposed.
+  const decisions = useDecisions({});
+  const linkedChatId = useMemo(() => {
+    if (item.type !== 'decision_followup' || !item.externalId) return null;
+    const decisionId = Number(/^decision-(\d+)$/.exec(item.externalId)?.[1]);
+    if (!Number.isFinite(decisionId)) return null;
+    return decisions.data?.decisions.find((d) => d.id === decisionId)?.chatId ?? null;
+  }, [item.type, item.externalId, decisions.data]);
+
+  const copyDraft = async () => {
+    if (!item.draftContent) return;
+    try {
+      await navigator.clipboard.writeText(item.draftContent);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // Clipboard blocked (insecure origin, denied permission). The draft is
+      // still on screen and selectable, so this is a missing convenience
+      // rather than a broken action — saying nothing is better than an error.
+    }
+  };
 
   // An item that exists because something isn't set up yet was previously
   // "resolved" by ticking it off, which cleared the row and left the actual
@@ -166,7 +234,10 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
   // post. That was a single click on a small inline link sitting directly
   // under "Dismiss", with nothing between a misclick and something the
   // founder's customers can see. These now take two deliberate clicks.
-  const outbound = outboundTargetFor(item);
+  // Only a plan that genuinely sends gets the confirm step. A draft with no
+  // send path used to take the same two-click "Yes, send it" treatment,
+  // which promised an outward action that was never going to happen.
+  const outbound = plan.kind === 'send' ? outboundTargetFor(item) : null;
   const [confirmingSend, setConfirmingSend] = useState(false);
 
   const handleAccept = () => {
@@ -213,6 +284,20 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
     >
       <span style={{ color: markColor, fontSize: '15px', lineHeight: 1.5 }}>·</span>
       <div style={{ flex: 1, minWidth: 0 }}>
+        {/* A resolved row has nothing left to do but take up space. The
+            cross clears it from view — see HIDDEN_KEY for why this is local
+            rather than a delete. */}
+        {isDone && onHide && (
+          <button
+            type="button"
+            onClick={() => onHide(item.id)}
+            aria-label="Remove from board"
+            title="Remove from board"
+            style={{ float: 'right', background: 'transparent', border: 'none', padding: '2px', marginLeft: '8px', cursor: 'pointer', color: palette.faint, lineHeight: 0 }}
+          >
+            <X style={{ width: 13, height: 13 }} />
+          </button>
+        )}
         <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', letterSpacing: '0.04em', color: isUnprompted ? 'var(--vera-unprompted)' : isFlagged ? palette.coral : palette.faint, margin: '0 0 4px' }}>
           {isUnprompted ? 'VERA FOLLOWED UP · ' : ''}{sourceLabel(item.source)} · {item.createdAt ? formatTime(item.createdAt) : ''}
           {/* A resolved item was previously only struck through, which made
@@ -227,6 +312,60 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
         {!isDone && item.draftContent && !editing && (
           <div style={{ fontSize: '12.5px', whiteSpace: 'pre-wrap', color: palette.muted, background: palette.paperEdge, borderRadius: '6px', padding: '8px 10px', marginBottom: '8px' }}>
             {item.draftContent}
+          </div>
+        )}
+
+        {/* What pressing the primary button will actually do, stated before
+            it is pressed. This is the whole fix for "I clicked Accept and
+            nothing happened" — the outcome was never wrong, it was just
+            never said. */}
+        {!isDone && plan.kind !== 'none' && (
+          <div
+            style={{
+              display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '10px',
+              fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', lineHeight: 1.5,
+              color: plan.kind === 'send' ? palette.teal : plan.kind === 'local' ? palette.faint : palette.coral,
+            }}
+          >
+            {plan.kind === 'send' && <><Send style={{ width: 11, height: 11, flexShrink: 0, marginTop: 2 }} /><span>Accepting will {plan.label}.</span></>}
+            {plan.kind === 'local' && (
+              <>
+                <PlugZap style={{ width: 11, height: 11, flexShrink: 0, marginTop: 2 }} />
+                <span>Vera can't send this — it isn't tied to a connected account. Copy it and send it yourself; Accept just files it.</span>
+              </>
+            )}
+            {plan.kind === 'unrouted' && (
+              <>
+                <PlugZap style={{ width: 11, height: 11, flexShrink: 0, marginTop: 2 }} />
+                <span>
+                  {connectorName(plan.connector, connectors.data?.connectors ?? [])} is connected, but this row lost the
+                  thread it belongs to, so Vera can't send it. Copy the text and send it yourself.
+                </span>
+              </>
+            )}
+            {plan.kind === 'unlinked' && (
+              <>
+                <PlugZap style={{ width: 11, height: 11, flexShrink: 0, marginTop: 2 }} />
+                <span>
+                  {connectorName(plan.connector, connectors.data?.connectors ?? [])} isn't connected, so this can't be sent.{' '}
+                  <button type="button" onClick={() => navigate('/vera/workflows')} style={{ background: 'none', border: 'none', padding: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>
+                    Connect it
+                  </button>{' '}
+                  or copy the text.
+                </span>
+              </>
+            )}
+            {plan.kind === 'broken' && (
+              <>
+                <PlugZap style={{ width: 11, height: 11, flexShrink: 0, marginTop: 2 }} />
+                <span>
+                  {connectorName(plan.connector, connectors.data?.connectors ?? [])} needs reconnecting before this can send.{' '}
+                  <button type="button" onClick={() => navigate('/vera/workflows')} style={{ background: 'none', border: 'none', padding: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}>
+                    Fix it
+                  </button>.
+                </span>
+              </>
+            )}
           </div>
         )}
         {!isDone && editing && (
@@ -266,10 +405,31 @@ function Entry({ item, palette, category, fresh }: { item: QueueItem; palette: P
                 </>
               ) : (
               <>
-                <button type="button" onClick={resolution ? handleResolve : handleAccept} {...actionProps(palette, false, skinned, isFlagged)}>
-                  {resolution ? resolution.label : meta.acceptLabel}
-                </button>
+                {/* When Vera can't send it, copying IS the action — so it
+                    leads, and filing the row becomes the secondary. */}
+                {plan.kind === 'local' || plan.kind === 'unlinked' || plan.kind === 'broken' || plan.kind === 'unrouted' ? (
+                  <>
+                    <button type="button" onClick={copyDraft} {...actionProps(palette, false, skinned)}>
+                      {copied ? 'Copied' : 'Copy text'}
+                    </button>
+                    <button type="button" onClick={handleAccept} {...actionProps(palette, true, skinned)}>
+                      {meta.acceptLabel}
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" onClick={resolution ? handleResolve : handleAccept} {...actionProps(palette, false, skinned, isFlagged)}>
+                    {resolution ? resolution.label : meta.acceptLabel}
+                  </button>
+                )}
                 {item.draftContent && <button type="button" onClick={() => setEditing(true)} {...actionProps(palette, true, skinned)}>Edit</button>}
+                {/* The decisions section was read-only: it named a decision
+                    and offered no way back to the conversation it came out
+                    of, which is the only place its context lives. */}
+                {linkedChatId != null && onOpenChat && (
+                  <button type="button" onClick={() => onOpenChat(linkedChatId)} {...actionProps(palette, true, skinned)}>
+                    Open chat
+                  </button>
+                )}
                 <button type="button" onClick={handleReject} {...actionProps(palette, true, skinned)}>{meta.rejectLabel}</button>
               </>
               )
@@ -419,6 +579,87 @@ function outboundTargetFor(item: QueueItem): string | null {
   return OUTBOUND_LABELS[item.source] ?? null;
 }
 
+/* ---- What "Accept" will actually do -------------------------------------
+ *
+ * THE PROBLEM THIS SOLVES. Vera drafts a reply, the founder presses Accept,
+ * the row strikes through — and nothing was sent. That is not a bug in the
+ * send path; it is the send path working as designed and the UI never saying
+ * so. `performQueueItemSendAction` only sends for gmail/slack/linkedin, and
+ * only when the row carries routing metadata AND the connector is live.
+ * Everything else — every draft produced by the quick actions, which is most
+ * of what a founder puts on this board — has no send step at all and never
+ * did. Accepting it means "I've seen this", and the founder had no way to
+ * know that.
+ *
+ * So the row now states its own outcome before it is clicked, and the four
+ * cases are genuinely different things, not shades of one:
+ *
+ *   send        — a live connector and routing details. Accepting sends.
+ *   broken      — the channel exists but the connector is down. Say which,
+ *                 and link to the fix, rather than failing on click.
+ *   unlinked    — the channel exists but was never connected.
+ *   local       — there is no channel. The draft is text for the founder to
+ *                 use; Accept files it. Copy is the real primary action, so
+ *                 it is offered as one.
+ */
+type SendPlan =
+  | { kind: 'send'; label: string; connector: string }
+  | { kind: 'broken'; label: string; connector: string }
+  | { kind: 'unlinked'; label: string; connector: string }
+  | { kind: 'unrouted'; connector: string }
+  | { kind: 'local' }
+  | { kind: 'none' };
+
+function sendPlanFor(item: QueueItem, connectors: ConnectorStatus[]): SendPlan {
+  if (!item.draftContent) return { kind: 'none' };
+
+  const label = OUTBOUND_LABELS[item.source];
+  if (!label) return { kind: 'local' };
+
+  // gmail and slack additionally need the thread/channel the draft replies
+  // into. Without it the server throws rather than silently no-opping (see
+  // performQueueItemSendAction), so this is un-sendable up front — but for a
+  // DIFFERENT reason than "no connector", and saying "this isn't tied to a
+  // connected account" about a live Gmail account is simply untrue. Its own
+  // case, with its own sentence.
+  if ((item.source === 'gmail' || item.source === 'slack') && !item.metadataJson) {
+    return { kind: 'unrouted', connector: item.source };
+  }
+
+  const connector = connectors.find((c) => c.type === item.source);
+  if (!connector || connector.status === 'disconnected') return { kind: 'unlinked', label, connector: item.source };
+  if (connector.status === 'error') return { kind: 'broken', label, connector: item.source };
+  return { kind: 'send', label, connector: item.source };
+}
+
+// Display names for the two frames in which the connectors query has not
+// resolved yet — which is every first paint, not an edge case. Capitalising
+// the raw type instead would render "Linkedin" and "Google_sheets" on load
+// and then correct itself, which looks like a typo the product shipped.
+// Mirrors lib/connectors/registry.ts on the server.
+const CONNECTOR_NAME_FALLBACK: Record<string, string> = {
+  gmail: 'Gmail',
+  slack: 'Slack',
+  linkedin: 'LinkedIn',
+  notion: 'Notion',
+  jira: 'Jira',
+  whatsapp: 'WhatsApp',
+  sheets: 'Google Sheets',
+  google_sheets: 'Google Sheets',
+  calendar: 'Google Calendar',
+};
+
+// The connector's own display name ("LinkedIn"), not the board's all-caps
+// source tag. sourceLabel is built for the mono metadata line above a row and
+// reads as shouting inside a sentence.
+function connectorName(type: string, connectors: ConnectorStatus[]): string {
+  return (
+    connectors.find((c) => c.type === type)?.label ??
+    CONNECTOR_NAME_FALLBACK[type] ??
+    type.charAt(0).toUpperCase() + type.slice(1)
+  );
+}
+
 // Where a queue item's primary action should actually take the founder.
 // Derived from the item rather than stored on it, so no schema change is
 // needed and older rows written before this existed still route correctly.
@@ -497,20 +738,49 @@ function linkStyle(palette: Palette, quiet: boolean, flagged?: boolean): CSSProp
 // worded the way QuickActions.tsx settled on before that module was
 // retired: this is its one home, not the New Chat landing view, which was
 // already crowded with the composer and example prompts.
-const QUICK_ACTIONS: { type: InstantActionType; label: string; placeholder: string }[] = [
-  { type: 'sell_this', label: 'Pressure-test it', placeholder: "The plan or assumption you're about to commit to…" },
-  { type: 'summarize', label: 'Cut to the point', placeholder: 'Paste the thread, doc or report…' },
-  { type: 'draft_reply', label: 'Draft a reply', placeholder: 'Paste the message you need to answer…' },
-  { type: 'follow_up', label: 'Restart a thread', placeholder: 'Who went quiet, and what it was about…' },
+// `hint` is the missing half. The four labels are outcomes ("Cut to the
+// point"), which is the right register but tells a founder nothing about
+// what to feed them or what comes back — so they read as four unexplained
+// buttons. The hint says both, on hover and, once a button is picked, in
+// place above the input.
+const QUICK_ACTIONS: { type: InstantActionType; label: string; hint: string; placeholder: string }[] = [
+  {
+    type: 'sell_this',
+    label: 'Pressure-test it',
+    hint: 'Paste a plan or assumption — Vera argues the other side and finds what breaks it.',
+    placeholder: "The plan or assumption you're about to commit to…",
+  },
+  {
+    type: 'summarize',
+    label: 'Cut to the point',
+    hint: 'Paste any long thread, doc or report — Vera returns just what matters and what to do.',
+    placeholder: 'Paste the thread, doc or report…',
+  },
+  {
+    type: 'draft_reply',
+    label: 'Draft a reply',
+    hint: 'Paste a message you need to answer — Vera writes the reply for you to review.',
+    placeholder: 'Paste the message you need to answer…',
+  },
+  {
+    type: 'follow_up',
+    label: 'Restart a thread',
+    hint: 'Say who went quiet and what it was about — Vera writes the nudge that reopens it.',
+    placeholder: 'Who went quiet, and what it was about…',
+  },
 ];
 
 function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId: number) => void }) {
   const { skin } = useVeraSkin();
   const skinned = skin !== 'classic';
   const [active, setActive] = useState<InstantActionType | null>(null);
+  const [hovered, setHovered] = useState<InstantActionType | null>(null);
   const [input, setInput] = useState('');
   const run = useRunInstantAction();
   const activeMeta = QUICK_ACTIONS.find((a) => a.type === active);
+  // Hover wins over selection, so pointing at a second button while one is
+  // open explains the one under the pointer rather than the one already open.
+  const hintText = QUICK_ACTIONS.find((a) => a.type === (hovered ?? active))?.hint ?? null;
 
   const submit = () => {
     if (!active || !input.trim()) return;
@@ -527,6 +797,14 @@ function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId:
           <button
             key={a.type}
             onClick={() => setActive(a.type)}
+            onMouseEnter={() => setHovered(a.type)}
+            onMouseLeave={() => setHovered((h) => (h === a.type ? null : h))}
+            onFocus={() => setHovered(a.type)}
+            onBlur={() => setHovered((h) => (h === a.type ? null : h))}
+            // `title` as well as the inline hint below: the inline line is
+            // the one people will actually read, the attribute covers the
+            // founder who hovers and waits for a tooltip out of habit.
+            title={a.hint}
             style={{
               background: 'none', border: 'none', color: palette.teal, fontFamily: "var(--vera-font-display, 'Fraunces', serif)",
               fontSize: '13.5px', fontStyle: 'italic', borderBottom: `1px solid ${palette.tealBorder}`, padding: '0 0 2px', cursor: 'pointer',
@@ -536,6 +814,22 @@ function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId:
           </button>
         ))}
       </div>
+
+      {/* Reserves its own line so hovering the row doesn't reflow the board
+          under the pointer. Falls back to naming what the row is for when
+          nothing is hovered, which is the question a founder seeing four
+          bare verbs actually has. */}
+      <p
+        style={{
+          margin: '8px 0 0', minHeight: '15px',
+          fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10.5px', lineHeight: 1.4,
+          color: hintText ? palette.muted : palette.faint,
+          transition: 'color 200ms ease',
+        }}
+      >
+        {hintText ?? 'Shortcuts — paste something in and Vera puts the result on the board.'}
+      </p>
+
       {activeMeta && (
         <div style={{ marginTop: '14px' }}>
           <textarea
@@ -571,58 +865,148 @@ function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId:
 function ConnectedTile() {
   const [, navigate] = useLocation();
   const connectors = useConnectors();
-  const live = (connectors.data?.connectors ?? []).filter(
-    (c: ConnectorStatus) => c.status === 'connected' || c.status === 'error',
-  );
-  if (live.length === 0) return null;
+  // Every connector Vera can actually use, connected or not — not just the
+  // live ones. Hiding the tile on a fresh account was precisely backwards:
+  // an empty board is CAUSED by nothing being connected, so the one moment
+  // the founder most needs to see this list was the one moment it vanished,
+  // leaving no answer on the page to "why is nothing arriving here?".
+  const all = (connectors.data?.connectors ?? []).filter((c: ConnectorStatus) => c.implemented);
+  if (all.length === 0) return null;
 
-  const brokenCount = live.filter((c: ConnectorStatus) => c.status === 'error').length;
+  const liveCount = all.filter((c: ConnectorStatus) => c.status === 'connected').length;
+  const brokenCount = all.filter((c: ConnectorStatus) => c.status === 'error').length;
 
   return (
     <div className="vera-tile">
       <div className="vera-tile-head">
-        <span className="vera-label">Connected</span>
-        {brokenCount > 0 && (
+        <span className="vera-label">Connectors</span>
+        {brokenCount > 0 ? (
           <span className="vera-tally" style={{ color: 'var(--red)', background: 'transparent', borderColor: 'var(--red)' }}>
             {brokenCount} need{brokenCount === 1 ? 's' : ''} fixing
           </span>
+        ) : (
+          <span className="vera-tally">{liveCount}/{all.length} on</span>
         )}
       </div>
       <div className="vera-tile-body" style={{ display: 'grid', gap: '10px' }}>
-        {live.map((c: ConnectorStatus) => {
+        {/* Says plainly what the board depends on. Without this, a founder
+            with several active chats reasonably expects the board to fill
+            up from them — it never will, because chats don't feed it. */}
+        <p className="vera-t-support" style={{ margin: '0 0 2px' }}>
+          {liveCount === 0
+            ? "Nothing is connected, so nothing arrives here on its own. Your chats don't feed this board — connectors and workflows do."
+            : 'These are what Vera can see and send through.'}
+        </p>
+
+        {all.map((c: ConnectorStatus) => {
           const Icon = CONNECTOR_ICON[c.type] ?? Plug;
           const broken = c.status === 'error';
+          const connected = c.status === 'connected';
           return (
             <span key={c.type} style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-              <span className={`vera-socket ${broken ? 'vera-socket-bad' : 'vera-socket-live'}`} style={{ width: 24, height: 24 }}>
+              <span
+                className={`vera-socket ${broken ? 'vera-socket-bad' : connected ? 'vera-socket-live' : ''}`}
+                style={{ width: 24, height: 24, opacity: connected || broken ? 1 : 0.45 }}
+              >
                 <Icon className="w-3 h-3" />
               </span>
-              <span className="vera-t-support" style={{ color: broken ? 'var(--red)' : 'var(--v7-text-dim)', minWidth: 0 }}>
+              <span
+                className="vera-t-support"
+                style={{ color: broken ? 'var(--red)' : connected ? 'var(--v7-text-dim)' : 'var(--v7-text-mute)', minWidth: 0, flex: 1 }}
+              >
                 {broken ? `${c.label} — needs reconnecting` : c.label}
               </span>
+              {!connected && (
+                <button
+                  type="button"
+                  onClick={() => startConnectorAuth(c.type)}
+                  className="vera-key vera-key-3"
+                  style={{ flexShrink: 0, padding: '3px 9px', fontSize: '10.5px' }}
+                >
+                  {broken ? 'Reconnect' : 'Connect'}
+                </button>
+              )}
             </span>
           );
         })}
+
         <button
           type="button"
           onClick={() => navigate('/vera/workflows')}
           className="vera-key vera-key-3"
           style={{ marginTop: '2px', justifyContent: 'flex-start' }}
         >
-          Manage connections
+          Manage connections & workflows
         </button>
       </div>
     </div>
   );
 }
 
-export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueInChat }: {
+/**
+ * Open / Completed switch. Rendered in both board styles, so the split
+ * behaves identically whichever skin is on.
+ *
+ * The completed count is shown but never badged — done work is a place to
+ * look, not something demanding attention, and giving it a count chip that
+ * looks like the pending tally would invert exactly the priority this split
+ * exists to establish.
+ */
+function QueueTabs({ tab, onChange, openCount, doneCount, palette }: {
+  tab: 'open' | 'done';
+  onChange: (t: 'open' | 'done') => void;
+  openCount: number;
+  doneCount: number;
+  palette?: Palette;
+}) {
+  const tabs: { id: 'open' | 'done'; label: string; count: number }[] = [
+    { id: 'open', label: 'Needs you', count: openCount },
+    { id: 'done', label: 'Completed', count: doneCount },
+  ];
+
+  return (
+    <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+      {tabs.map((t) => {
+        const active = tab === t.id;
+        const accent = palette?.teal ?? 'var(--v7-cyan)';
+        const border = palette?.paperEdge ?? 'var(--v7-border)';
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onChange(t.id)}
+            style={{
+              fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)",
+              fontSize: '10.5px',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              padding: '6px 12px',
+              borderRadius: '20px',
+              cursor: 'pointer',
+              transition: 'color 220ms ease, border-color 220ms ease, background 220ms ease',
+              background: active ? (palette?.tealDim ?? 'var(--v7-cyan-soft)') : 'transparent',
+              border: `1px solid ${active ? accent : border}`,
+              color: active ? accent : (palette?.muted ?? 'var(--v7-text-mute)'),
+            }}
+          >
+            {t.label}{t.count > 0 ? ` (${t.count})` : ''}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueInChat, onOpenChatById }: {
   theme: VenusTheme;
   onBack: () => void;
   // Jump to the chat a saved analysis came out of.
   onOpenThread?: (a: SavedAnalysis) => void;
   // Hand a mini-Vera exchange over to a real chat thread.
   onContinueInChat?: (messages: ChatMessage[]) => void;
+  // Open a chat by its server id — used by a decision follow-up to get back
+  // to the conversation the decision was actually made in.
+  onOpenChatById?: (serverChatId: number) => void;
 }) {
   const { skin } = useVeraSkin();
   const skinned = skin !== 'classic';
@@ -645,7 +1029,27 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
     return SAVED_TYPE_ORDER.filter((t) => counts.has(t)).map((t) => [t, counts.get(t)!] as const);
   }, [savedAnalyses]);
 
-  const items = data?.items ?? [];
+  // Resolved rows used to stay in place, struck through, in the same list as
+  // live work — so the board's length grew with everything the founder had
+  // already dealt with, and "what still needs me" got harder to find the more
+  // they used it. Done work moves to its own tab.
+  const [hidden, setHidden] = useState<Set<number>>(readHidden);
+  const [queueTab, setQueueTab] = useState<'open' | 'done'>('open');
+
+  const hideItem = (id: number) => {
+    setHidden((prev) => {
+      const next = new Set(prev).add(id);
+      writeHidden(next);
+      return next;
+    });
+  };
+
+  const allItems = data?.items ?? [];
+  const visible = allItems.filter((i) => !hidden.has(i.id));
+  const openItems = visible.filter((i) => i.status === 'pending');
+  const doneItems = visible.filter((i) => i.status !== 'pending');
+  const items = queueTab === 'open' ? openItems : doneItems;
+
   const grouped: Record<Category, QueueItem[]> = { drafts: [], decisions: [], workflows: [], notes: [] };
   for (const item of items) grouped[categorize(item)].push(item);
 
@@ -712,11 +1116,15 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
                 </div>
               </div>
 
+              <QueueTabs tab={queueTab} onChange={setQueueTab} openCount={openItems.length} doneCount={doneItems.length} />
+
               {isLoading && <div className="vera-tile vera-tile-body vera-t-support">Loading…</div>}
 
               {!isLoading && items.length === 0 && (
                 <div className="vera-tile vera-tile-body vera-t-support">
-                  Nothing on the board yet — it fills up as Vera drafts, decides, and finds things for you.
+                  {queueTab === 'done'
+                    ? 'Nothing completed yet — items you accept or dismiss collect here.'
+                    : "Nothing waiting on you. This board fills from connectors and workflows, not from your chats — if it stays empty, connect something in the rail."}
                 </div>
               )}
 
@@ -739,7 +1147,15 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
                     </div>
                     <div style={{ padding: '4px 16px 10px' }}>
                       {grouped[cat].map((item) => (
-                        <Entry key={item.id} item={item} palette={palette} category={cat} fresh={recentlyAdded.has(item.id)} />
+                        <Entry
+                          key={item.id}
+                          item={item}
+                          palette={palette}
+                          category={cat}
+                          fresh={recentlyAdded.has(item.id)}
+                          onHide={hideItem}
+                          onOpenChat={onOpenChatById}
+                        />
                       ))}
                     </div>
                   </div>
@@ -920,11 +1336,15 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
             }}
           />
 
+          <QueueTabs tab={queueTab} onChange={setQueueTab} openCount={openItems.length} doneCount={doneItems.length} palette={palette} />
+
           {isLoading && <div style={{ fontSize: '13px', color: palette.muted }}>Loading…</div>}
 
           {!isLoading && items.length === 0 && (
             <div style={{ fontSize: '13.5px', color: palette.muted, fontStyle: 'italic' }}>
-              Nothing on the {boardName.toLowerCase()} yet — it fills up as Vera drafts, decides, and finds things for you.
+              {queueTab === 'done'
+                ? 'Nothing completed yet — items you accept or dismiss collect here.'
+                : `Nothing waiting on you. The ${boardName.toLowerCase()} fills from connectors and workflows, not from your chats — if it stays empty, connect something on the Workflows page.`}
             </div>
           )}
 
@@ -935,7 +1355,15 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
                   {CATEGORY_META[cat].label}
                 </p>
                 {grouped[cat].map((item) => (
-                  <Entry key={item.id} item={item} palette={palette} category={cat} fresh={recentlyAdded.has(item.id)} />
+                  <Entry
+                    key={item.id}
+                    item={item}
+                    palette={palette}
+                    category={cat}
+                    fresh={recentlyAdded.has(item.id)}
+                    onHide={hideItem}
+                    onOpenChat={onOpenChatById}
+                  />
                 ))}
               </div>
             ),

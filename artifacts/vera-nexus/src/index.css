@@ -603,6 +603,12 @@
   --vera-inset-border: #e6e9ef;
   --vera-label-color: #656d7e;
 
+  /* The brand mark's enclosing ring. Its default (22% white) is tuned for the
+     dark theme and the landing page and vanishes completely on a white card,
+     leaving the V floating with no circle around it. The mark's two coloured
+     terminals are deliberately NOT themed — see components/VeraMark. */
+  --vera-mark-ring: rgba(20, 23, 31, 0.20);
+
   /* The old rule set font-weight:500 on this element, which pushed EVERY
      descendant to medium in light mode only — including 10px uppercase mono
      micro-labels, where it reads as smudged. It was compensating for the
@@ -832,6 +838,138 @@
 }
 .venus-hero-mark {
   animation: v7-breathe 3.4s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   App-surface motion — the CSS half of lib/motion.tsx
+   ==========================================================================
+
+   These pair with the React primitives in lib/motion.tsx. Anything that can
+   be done with a transition rather than a re-render is done here, because
+   these surfaces (command centre, dossier, today card) are the ones a founder
+   has open all day and the ones where a per-frame React update is most
+   expensive.
+
+   Every rule is disabled wholesale under prefers-reduced-motion at the bottom
+   of this block, rather than per-rule, so a new animation added here cannot
+   accidentally ship without honouring it. */
+
+/* Pointer-tracked highlight. The gradient is painted by CSS from two custom
+   properties that Spotlight writes on pointermove — no React state, so a grid
+   of these costs nothing to move across. */
+.ve-spot {
+  position: relative;
+  isolation: isolate;
+}
+.ve-spot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+  background: radial-gradient(
+    260px circle at var(--ve-mx, 50%) var(--ve-my, 50%),
+    color-mix(in srgb, var(--v7-cyan) 12%, transparent),
+    transparent 62%
+  );
+}
+.ve-spot:hover::after {
+  opacity: 1;
+}
+
+/* A bento tile. Lift + border warm on hover, matching the landing page's
+   .lp-rcard so the product and the marketing page share one gesture. */
+.ve-tile {
+  transition:
+    transform 480ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 480ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 480ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ve-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--v7-border-strong);
+}
+
+/* The Dossier's fingerprint mark. Draws itself once on mount — the page's
+   whole claim is "this is assembled from your material", and a mark that
+   assembles says that in a way a static icon cannot. Runs once, not looped:
+   an infinitely animating page header is a distraction on a page people read.
+
+   `stroke-dasharray` is set high enough to cover the longest path in the
+   lucide fingerprint glyph; overshooting is harmless (the dash simply
+   completes early) whereas undershooting leaves a permanently broken line. */
+@keyframes ve-trace {
+  from { stroke-dashoffset: 300; opacity: 0.25; }
+  to { stroke-dashoffset: 0; opacity: 1; }
+}
+.ve-dossier-mark path,
+.ve-dossier-mark circle {
+  stroke-dasharray: 300;
+  animation: ve-trace 1400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+/* Staggered so the arcs resolve outward instead of all at once. */
+.ve-dossier-mark path:nth-child(2) { animation-delay: 90ms; }
+.ve-dossier-mark path:nth-child(3) { animation-delay: 180ms; }
+.ve-dossier-mark path:nth-child(4) { animation-delay: 270ms; }
+.ve-dossier-mark path:nth-child(5) { animation-delay: 360ms; }
+.ve-dossier-mark path:nth-child(6) { animation-delay: 450ms; }
+
+/* A progress bar that fills from zero on first paint rather than snapping to
+   its value — used for the dossier's completeness meter. */
+@keyframes ve-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.ve-fill {
+  transform-origin: left center;
+  animation: ve-fill 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Row entrance for lists that grow while the founder is looking at them
+   (command centre queue, today card items). Short and small — this fires on
+   data arriving, not on navigation. */
+@keyframes ve-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.ve-row-in {
+  animation: ve-row-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Soft pulse for a live/working indicator. The one looping animation in this
+   block, because it encodes state that is genuinely ongoing. */
+@keyframes ve-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+.ve-pulse {
+  animation: ve-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ve-spot::after,
+  .ve-tile,
+  .ve-dossier-mark path,
+  .ve-dossier-mark circle,
+  .ve-fill,
+  .ve-row-in,
+  .ve-pulse {
+    animation: none !important;
+    transition: none !important;
+  }
+  .ve-tile:hover {
+    transform: none;
+  }
+  .ve-dossier-mark path,
+  .ve-dossier-mark circle {
+    stroke-dasharray: none;
+  }
+  .ve-fill {
+    transform: none;
+  }
 }
 
 /* ==========================================================================

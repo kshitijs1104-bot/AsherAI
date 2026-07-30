@@ -85,6 +85,31 @@ export interface ChatSession {
 const SESSIONS_KEY = 've_chat_sessions';
 const SAVED_KEY = 've_saved_analyses';
 
+/**
+ * One-shot handoff for "open this specific chat", written by a route that
+ * isn't Venus (currently DecisionsOverview) and read by Venus on mount.
+ *
+ * A key rather than a URL parameter because chat identity is local: sessions
+ * live in localStorage and only some of them have a server chat id, so a
+ * shareable /vera?chat=<id> link would be dead for anyone but this browser.
+ * Deliberately consumed on read — see takePendingChatId — so a later reload
+ * doesn't yank the founder back to a decision they already looked at.
+ */
+export const OPEN_CHAT_KEY = 've_open_chat';
+
+/** Reads and clears the pending chat id. Returns null when none is set. */
+export function takePendingChatId(): number | null {
+  try {
+    const raw = localStorage.getItem(OPEN_CHAT_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(OPEN_CHAT_KEY);
+    const id = Number(raw);
+    return Number.isFinite(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }

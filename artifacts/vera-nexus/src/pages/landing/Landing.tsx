@@ -35,26 +35,14 @@ import {
   TestimonialsSection,
 } from './Sections';
 import { Reveal, SplitText, Spotlight, useScrolledPast, useSequence } from './bits';
+import { VeraMark } from '../../components/VeraMark';
 import './landing.css';
 
 /* -------------------------------------------------------------------- mark */
 
-function VeraMark({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.22)" />
-      <path d="M6.5 8.5 L12 17 L17.5 8.5" stroke="url(#lp-mark)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="6.5" cy="8.5" r="1.9" fill="#2fdcc0" />
-      <circle cx="17.5" cy="8.5" r="1.9" fill="#8b7bff" />
-      <defs>
-        <linearGradient id="lp-mark" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor="#2fdcc0" />
-          <stop offset="100%" stopColor="#8b7bff" />
-        </linearGradient>
-      </defs>
-    </svg>
-  );
-}
+// Moved to components/VeraMark so the chat, the sidebar and this page draw
+// the same logo from one file — see the note there on why the V won over the
+// compass the app used to show.
 
 /* --------------------------------------------------------------------- nav */
 

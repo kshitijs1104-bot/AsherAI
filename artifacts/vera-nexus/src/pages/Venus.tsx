@@ -4,12 +4,13 @@ import { useLocation } from 'wouter';
 import {
   getSessions, saveSession, deleteSession, createSession,
   getSavedAnalyses, saveAnalysis, deleteSavedAnalysis,
-  detectAnalysisType, typeLabel, titleFromMessage,
+  detectAnalysisType, typeLabel, titleFromMessage, takePendingChatId,
   type ChatSession, type ChatMessage, type SavedAnalysisType, type SavedAnalysis,
   type EvidenceRefEntry, type ContradictionEntry,
 } from '../lib/venusHistory';
-import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil, LayoutGrid, Workflow as WorkflowIcon, Paperclip, X, Loader2, AlertCircle, FileText } from 'lucide-react';
+import { Settings, Plus, Trash2, ChevronDown, ChevronRight, Copy, Download, Check, Target, ListChecks, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Pencil, LayoutGrid, Workflow as WorkflowIcon, Paperclip, X, Loader2, AlertCircle, Fingerprint, GitBranch, ShieldAlert, TrendingDown, Landmark, Tag } from 'lucide-react';
 import { DraftWorkspace, detectDraftChannel } from './DraftWorkspace';
+import { VeraMark } from '../components/VeraMark';
 import { GoalPanel } from './GoalPanel';
 import { RoadmapTracker } from './RoadmapTracker';
 import { TodayCard } from './TodayCard';
@@ -89,12 +90,24 @@ function SidebarToggleRow({ icon: Icon, label, active, onClick, skinned }: { ico
   );
 }
 
-const EXAMPLE_PROMPTS = [
-  "Map the causal chain for my business from the most significant market shifts right now",
-  "What's my biggest risk right now and how do I fix it?",
-  "Build me a 6-month roadmap based on similar companies at my stage",
-  "Find 3 failed companies most similar to mine and why they failed",
-  "Run an investor-fit analysis — which VCs are most likely to fund us?",
+// SIX, not five. Five in a two-column grid leaves one tile alone on the last
+// row, which reads as a missing card rather than as whitespace — the same
+// problem the landing page's monthly-review grid hit and solved the same way
+// (see REVIEW_CARDS in pages/landing/Sections.tsx). The sixth is a real
+// question, not filler: pricing is the most common thing founders bring and
+// was the obvious gap in the original five.
+//
+// Each also carries its own icon. All five previously drew the identical
+// bar-chart glyph, so the icon column conveyed nothing and the set read as
+// one repeated button — the icons now say what KIND of question each is
+// before the text is read.
+const EXAMPLE_PROMPTS: { text: string; Icon: typeof Target }[] = [
+  { text: 'Map the causal chain for my business from the most significant market shifts right now', Icon: GitBranch },
+  { text: "What's my biggest risk right now and how do I fix it?", Icon: ShieldAlert },
+  { text: 'Build me a 6-month roadmap based on similar companies at my stage', Icon: MapIcon },
+  { text: 'Find 3 failed companies most similar to mine and why they failed', Icon: TrendingDown },
+  { text: 'Run an investor-fit analysis — which VCs are most likely to fund us?', Icon: Landmark },
+  { text: "Pressure-test my pricing — where am I leaving money on the table?", Icon: Tag },
 ];
 
 interface CompanyReportSnapshot {
@@ -298,6 +311,13 @@ export function VenusPage() {
   const [sessions, setSessions] = useState<ChatSession[]>(getSessions);
   const [currentSession, setCurrentSession] = useState<ChatSession>(() => {
     const existing = getSessions();
+    // A route that isn't this one (Decisions) can ask for a specific chat by
+    // leaving its server id behind — see OPEN_CHAT_KEY. Read here rather than
+    // in an effect so the correct thread is the first thing painted, instead
+    // of the most recent one flashing up and being replaced.
+    const pending = takePendingChatId();
+    const requested = pending != null ? existing.find((s) => s.serverChatId === pending) : undefined;
+    if (requested) return requested;
     return existing.length > 0 ? existing[0] : createSession();
   });
   const [saved, setSaved] = useState(getSavedAnalyses);
@@ -612,6 +632,19 @@ export function VenusPage() {
     setMainView('chat');
   };
 
+  // Opens a chat by its SERVER id. The command centre's decision follow-ups
+  // know which chat they came from as a server chat id, but sessions are
+  // keyed locally — `serverChatId` is the join between the two. Returns
+  // silently when there's no local session for it (a chat started on another
+  // device, or cleared history): navigating to a blank thread would be worse
+  // than leaving the founder where they are.
+  const handleOpenChatById = (serverChatId: number) => {
+    const source = getSessions().find((s) => s.serverChatId === serverChatId);
+    if (!source) return;
+    setCurrentSession(source);
+    setMainView('chat');
+  };
+
   // A refinement rewrites the draft in place and is persisted, so the
   // revised text survives a reload or a switch between chats. Without this
   // the workspace would hold the newest version only in component state and
@@ -738,14 +771,7 @@ export function VenusPage() {
               className="w-6 h-6 flex items-center justify-center shrink-0"
               style={{ borderRadius: '9px', background: 'var(--v7-bg-raised-2)', border: '1px solid var(--v7-border-strong)' }}
             >
-              <svg viewBox="0 0 24 24" fill="none" className="w-[14px] h-[14px]">
-                <circle cx="12" cy="12" r="9.5" stroke="#3a3d47" strokeWidth="0.8"/>
-                <g transform="rotate(-16 12 12)">
-                  <path d="M12 4.5L13.6 12H10.4L12 4.5Z" fill="#00e5b0"/>
-                  <path d="M12 19.5L11.1 12H12.9L12 19.5Z" fill="#5b4fe8"/>
-                </g>
-                <circle cx="12" cy="12" r="1.1" fill="var(--v7-bg-raised-2)" stroke="#3a3d47" strokeWidth="0.5"/>
-              </svg>
+              <VeraMark size={14} />
             </div>
             <span className="font-extrabold text-[15px]" style={{ letterSpacing: '-0.01em' }}>Vera</span>
           </div>
@@ -847,7 +873,7 @@ export function VenusPage() {
           <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/vera/workflows')} skinned={skinned} />
           {/* The slot the sidebar comment above explicitly left open ("room
               left for future nav items between Workflows and Goals"). */}
-          <SidebarNavRow icon={FileText} label="Dossier" onClick={() => navigate('/vera/dossier')} skinned={skinned} />
+          <SidebarNavRow icon={Fingerprint} label="Dossier" onClick={() => navigate('/vera/dossier')} skinned={skinned} />
           <div className="vera-label" style={{ padding: '10px 8px 4px' }}>Show above chat</div>
           <SidebarToggleRow icon={Target} label="Goal panel" active={showGoalPanel} onClick={toggleGoalPanel} skinned={skinned} />
           <SidebarToggleRow icon={MapIcon} label="Roadmap panel" active={showRoadmap} onClick={toggleRoadmap} skinned={skinned} />
@@ -980,6 +1006,7 @@ export function VenusPage() {
             onBack={() => setMainView('chat')}
             onOpenThread={handleOpenSavedThread}
             onContinueInChat={handleContinueFromMiniVera}
+            onOpenChatById={handleOpenChatById}
           />
         ) : (
         <>
@@ -1030,14 +1057,10 @@ export function VenusPage() {
                   className="w-14 h-14 flex items-center justify-center relative venus-hero-mark"
                   style={{ borderRadius: '18px', background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border-strong)' }}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" className="w-[30px] h-[30px]">
-                    <circle cx="12" cy="12" r="9.5" stroke="#3a3d47" strokeWidth="0.8"/>
-                    <g transform="rotate(-16 12 12)">
-                      <path d="M12 4.5L13.6 12H10.4L12 4.5Z" fill="#00e5b0"/>
-                      <path d="M12 19.5L11.1 12H12.9L12 19.5Z" fill="#5b4fe8"/>
-                    </g>
-                    <circle cx="12" cy="12" r="1.1" fill="var(--v7-bg-raised)" stroke="#3a3d47" strokeWidth="0.5"/>
-                  </svg>
+                  {/* Was a compass needle, which appeared nowhere else —
+                      not on the landing page, not in the launch film. One
+                      mark now, from components/VeraMark. */}
+                  <VeraMark size={30} />
                 </div>
                 <span className="font-extrabold" style={{ fontSize: '28px', letterSpacing: '-0.01em', color: 'var(--v7-text)' }}>Vera</span>
               </div>
@@ -1115,12 +1138,12 @@ export function VenusPage() {
               </form>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-[10px] w-full">
-                {EXAMPLE_PROMPTS.map((prompt, i) => (
+                {EXAMPLE_PROMPTS.map(({ text: prompt, Icon }, i) => (
                   <button
                     key={prompt}
                     onClick={() => handleSend(prompt)}
-                    className={`text-left flex items-start gap-3 transition-all group ${skinned ? 'vera-suggest' : ''}`}
-                    style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border)', borderRadius: 'var(--vera-r-card, 16px)', padding: '16px 17px' }}
+                    className={`ve-row-in text-left flex items-start gap-3 transition-all group ${skinned ? 'vera-suggest' : ''}`}
+                    style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border)', borderRadius: 'var(--vera-r-card, 16px)', padding: '16px 17px', animationDelay: `${i * 45}ms` }}
                     {...(skinned
                       ? {}
                       : {
@@ -1135,9 +1158,7 @@ export function VenusPage() {
                       className={`w-[30px] h-[30px] flex items-center justify-center shrink-0 ${skinned ? 'vera-socket' : 'rounded-[10px]'}`}
                       style={skinned ? undefined : { background: 'var(--v7-bg-raised-2)' }}
                     >
-                      <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" stroke={i % 2 === 0 ? 'var(--v7-cyan)' : 'var(--v7-pink)'}>
-                        <path d="M4 19V13M10 19V8M16 19V15M21 19V5" strokeWidth="2.2" strokeLinecap="round"/>
-                      </svg>
+                      <Icon className="w-4 h-4" style={{ color: i % 2 === 0 ? 'var(--v7-cyan)' : 'var(--v7-pink)' }} />
                     </div>
                     <p className="text-[13px] font-medium leading-[1.45] pt-1" style={{ color: 'var(--v7-text-dim)' }}>
                       {prompt}
@@ -1332,26 +1353,16 @@ function stripStrayCodeFences(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '').replace(/```[\s\S]*$/g, '');
 }
 
-// The compass brand mark, shrunk to fit the per-message avatar slot —
-// replaces a plain gradient circle with "V" in it so every Vera response
-// carries the same mark as the sidebar/hero, in both themes. Needle colors
-// stay fixed brand colors (not theme-driven, same choice as the sidebar
-// mark); the ring and center dot use --v7-* tokens so they still blend
-// into the badge correctly whichever theme is active.
+// The brand mark shrunk to the per-message avatar slot, so every Vera
+// response carries the same logo as the sidebar, the hero, the landing page
+// and the launch film. One definition — see components/VeraMark.
 function VeraAvatar({ pulse = false }: { pulse?: boolean }) {
   return (
     <div
       className={`w-5 h-5 rounded-full shrink-0 flex items-center justify-center${pulse ? ' animate-pulse' : ''}`}
       style={{ background: 'var(--v7-bg-raised-2)', border: '1px solid var(--v7-border-strong)' }}
     >
-      <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3">
-        <circle cx="12" cy="12" r="9.5" stroke="#3a3d47" strokeWidth="1" />
-        <g transform="rotate(-16 12 12)">
-          <path d="M12 4.5L13.6 12H10.4L12 4.5Z" fill="#00e5b0" />
-          <path d="M12 19.5L11.1 12H12.9L12 19.5Z" fill="#5b4fe8" />
-        </g>
-        <circle cx="12" cy="12" r="1.3" fill="var(--v7-bg-raised-2)" stroke="#3a3d47" strokeWidth="0.6" />
-      </svg>
+      <VeraMark size={12} />
     </div>
   );
 }
@@ -1397,10 +1408,88 @@ function VenusMessage({ content, confidence }: { content: string; confidence?: '
           );
         }
         if (line.trim() === '') return <div key={i} className="h-1" />;
+
+        // A paragraph that is really a list written inline — see
+        // parseInlineEnumeration. The lead-in keeps its paragraph; the points
+        // become points.
+        const enumeration = parseInlineEnumeration(line);
+        if (enumeration) {
+          return (
+            <div key={i} className="space-y-1.5">
+              {enumeration.lead && <p>{renderInline(enumeration.lead)}</p>}
+              <div className="space-y-1.5 pt-0.5">
+                {enumeration.items.map((item, n) => (
+                  <div key={n} className="flex items-start gap-2">
+                    <span className="text-[var(--dim)] font-mono text-xs shrink-0 pt-0.5">{n + 1}.</span>
+                    <span>{renderInline(item)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+
         return <p key={i}>{renderInline(line)}</p>;
       })}
     </div>
   );
+}
+
+/* ---- Inline enumerations ------------------------------------------------
+ *
+ * THE PROBLEM. VenusMessage only recognises structure that starts a LINE —
+ * "- ", "1. ", "### ". But the model routinely enumerates inside a running
+ * paragraph instead:
+ *
+ *   "Right now you could (1) define a concrete experiment … (2) map out the
+ *    cost and expected lift … (3) set a short-term metric …"
+ *
+ * That is three discrete actions, and it rendered as one 60-word block the
+ * founder has to parse by eye to find the three things in it. The content was
+ * already a list; only the markup was missing.
+ *
+ * This splits such a paragraph into its lead-in sentence plus its items, so
+ * prose stays prose and points become points — without touching paragraphs
+ * that are genuinely prose.
+ *
+ * DELIBERATELY CONSERVATIVE, because a false positive mangles a real
+ * sentence. Three conditions must all hold:
+ *
+ *   - at least two markers, so "(1)" used once as a footnote reference is
+ *     left alone;
+ *   - numbered exactly 1, 2, 3 … in order, so "(3) and (7)" — a citation
+ *     style, not a list — does not match;
+ *   - each marker preceded by a space or the line start, so "chapter(2)" and
+ *     decimals inside figures are never markers.
+ *
+ * Only the parenthesised forms "(1)" and "1)" are recognised. A bare "1."
+ * mid-sentence is genuinely ambiguous against decimals, version numbers and
+ * ordinary sentence-ending digits, and is not worth the risk.
+ */
+interface InlineEnumeration {
+  lead: string;
+  items: string[];
+}
+
+function parseInlineEnumeration(line: string): InlineEnumeration | null {
+  for (const pattern of [/(?:^|\s)\((\d+)\)\s+/g, /(?:^|\s)(\d+)\)\s+/g]) {
+    const matches = [...line.matchAll(pattern)];
+    if (matches.length < 2) continue;
+    if (!matches.every((m, i) => Number(m[1]) === i + 1)) continue;
+
+    const lead = line.slice(0, matches[0].index).trim();
+    const items = matches.map((match, i) => {
+      const start = match.index + match[0].length;
+      const end = i + 1 < matches.length ? matches[i + 1].index : line.length;
+      return line.slice(start, end).trim();
+    });
+
+    // An item that is empty or a single stray word is a sign the pattern
+    // matched something that wasn't a list after all.
+    if (items.some((item) => item.length < 3)) continue;
+    return { lead, items };
+  }
+  return null;
 }
 
 // Two fixes over the previous pattern:

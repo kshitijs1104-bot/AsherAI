@@ -238,7 +238,10 @@ export function WorkflowsPage() {
   const workflowByTemplate = new Map((workflowsData?.workflows ?? []).map((w) => [w.templateId, w]));
 
   return (
-    <div className={`relative min-h-screen w-full ${theme === 'light' ? 'v7-light' : ''}`} style={{ color: 'var(--v7-text)', fontFamily: 'var(--v7-font-round)' }}>
+    // Same omission the Dossier route had: without an explicit background
+    // the page falls through to <body>'s dark colour and light mode renders
+    // as light cards on a black page.
+    <div className={`relative min-h-screen w-full ${theme === 'light' ? 'v7-light' : ''}`} style={{ background: 'var(--v7-bg)', color: 'var(--v7-text)', fontFamily: 'var(--v7-font-round)' }}>
       <style>{`
         @keyframes ve-flow-dash { from { background-position: 0 0; } to { background-position: 20px 0; } }
         @keyframes ve-drift-a { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, 20px); } }

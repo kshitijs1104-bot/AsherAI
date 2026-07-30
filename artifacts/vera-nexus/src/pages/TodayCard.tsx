@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useLocation } from 'wouter';
-import { Sunrise, Sun, MoonStar, ChevronUp, ChevronDown, ThumbsUp, ThumbsDown, Minus, X, Check } from 'lucide-react';
+import { Sunrise, Sun, MoonStar, ChevronUp, ChevronDown, ChevronRight, ThumbsUp, ThumbsDown, Minus, X, Check } from 'lucide-react';
 import {
   useGoals,
   useDailyBrief,
@@ -26,22 +26,37 @@ export function formatMinutes(minutes: number): string {
 // streak renders as a fifth, equally plain counter rather than a badge —
 // "day I cleared queue," not a gamification level.
 export function StatsStrip({ stats }: { stats: DailyBriefStats }) {
+  // Label is split into a number and a NOUN, with the qualifier dropped
+  // ("decisions", not "decisions captured"). The previous version ran the
+  // full phrase inline at 10.5px, which produced a single unbroken 60-
+  // character line — "2 decisions captured 1 lesson learned 1 automation
+  // completed 12m time saved 1 day streak" — that reads as one long string
+  // rather than five separate facts. Tiles with the number on its own line
+  // are legible at a glance, which is the only way this row is ever read.
   const items: { label: string; value: string }[] = [];
-  if (stats.decisionsCaptured > 0) items.push({ label: stats.decisionsCaptured === 1 ? 'decision captured' : 'decisions captured', value: String(stats.decisionsCaptured) });
-  if (stats.lessonsLearned > 0) items.push({ label: stats.lessonsLearned === 1 ? 'lesson learned' : 'lessons learned', value: String(stats.lessonsLearned) });
-  if (stats.automationsCompleted > 0) items.push({ label: stats.automationsCompleted === 1 ? 'automation completed' : 'automations completed', value: String(stats.automationsCompleted) });
+  if (stats.decisionsCaptured > 0) items.push({ label: stats.decisionsCaptured === 1 ? 'decision' : 'decisions', value: String(stats.decisionsCaptured) });
+  if (stats.lessonsLearned > 0) items.push({ label: stats.lessonsLearned === 1 ? 'lesson' : 'lessons', value: String(stats.lessonsLearned) });
+  if (stats.automationsCompleted > 0) items.push({ label: stats.automationsCompleted === 1 ? 'automation' : 'automations', value: String(stats.automationsCompleted) });
   if (stats.timeSavedMinutes > 0) items.push({ label: 'time saved', value: formatMinutes(stats.timeSavedMinutes) });
   if (stats.queueStreakDays > 0) items.push({ label: stats.queueStreakDays === 1 ? 'day streak' : 'day streak', value: String(stats.queueStreakDays) });
 
   if (items.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 mb-2.5 pb-2.5" style={{ borderBottom: '1px solid var(--v7-tint-border)' }}>
+    <div className="flex flex-wrap gap-2">
       {items.map((item) => (
-        <span key={item.label} className="flex items-baseline gap-1">
-          <span className="text-[13px] font-bold" style={{ color: 'var(--v7-text)' }}>{item.value}</span>
-          <span className="text-[10.5px]" style={{ color: 'var(--v7-text-mute)' }}>{item.label}</span>
-        </span>
+        <div
+          key={item.label}
+          className="ve-tile rounded-xl px-3.5 py-2.5 flex-1 min-w-[92px]"
+          style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border)' }}
+        >
+          <div className="text-[20px] font-extrabold leading-none tracking-[-0.02em]" style={{ color: 'var(--v7-text)' }}>
+            {item.value}
+          </div>
+          <div className="text-[11px] mt-1.5 leading-tight" style={{ color: 'var(--v7-text-mute)' }}>
+            {item.label}
+          </div>
+        </div>
       ))}
     </div>
   );
@@ -128,7 +143,7 @@ function SubtaskStep({ subtaskId, summary, onDone }: { subtaskId: number; summar
 
   return (
     <div>
-      <div className="text-[12.5px] mb-2" style={{ color: 'var(--v7-text)' }}>
+      <div className="text-[13.5px] mb-3 leading-relaxed" style={{ color: 'var(--v7-text)' }}>
         Any movement on <span style={{ color: 'var(--v7-text-dim)' }}>&ldquo;{summary}&rdquo;</span>?
       </div>
       <div className="flex gap-1.5 mb-2">
@@ -138,7 +153,7 @@ function SubtaskStep({ subtaskId, summary, onDone }: { subtaskId: number; summar
             <button
               key={value}
               onClick={() => setSentiment(value)}
-              className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md"
+              className="flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1.5 rounded-lg"
               style={{
                 color: active ? color : 'var(--v7-text-mute)',
                 background: active ? `${color}1a` : 'transparent',
@@ -157,13 +172,13 @@ function SubtaskStep({ subtaskId, summary, onDone }: { subtaskId: number; summar
           onChange={(e) => setOutcome(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
           placeholder="What actually happened? (one line)"
-          className="flex-1 text-[12px] rounded-md px-2 py-1.5"
+          className="flex-1 text-[13px] rounded-lg px-3 py-2 outline-none"
           style={{ background: 'var(--v7-bg-raised-2)', border: '1px solid var(--v7-border, rgba(255,255,255,0.08))', color: 'var(--v7-text)' }}
         />
         <button
           disabled={!canSubmit}
           onClick={handleSubmit}
-          className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md shrink-0"
+          className="text-[12px] font-semibold px-3.5 py-2 rounded-lg shrink-0"
           style={{
             background: canSubmit ? 'var(--v7-pink-soft, rgba(255,122,209,0.14))' : 'transparent',
             border: `1px solid ${canSubmit ? 'var(--v7-pink)' : 'var(--v7-border, rgba(255,255,255,0.08))'}`,
@@ -198,20 +213,20 @@ function RoadmapStep({
 
   return (
     <div className="flex items-center justify-between gap-3">
-      <div className="text-[12.5px]" style={{ color: 'var(--v7-text)' }}>
+      <div className="text-[13.5px] leading-relaxed" style={{ color: 'var(--v7-text)' }}>
         Did you get to <span style={{ color: 'var(--v7-text-dim)' }}>&ldquo;{text}&rdquo;</span>?
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
         <button
           disabled={setAction.isPending}
           onClick={markDone}
-          className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-md"
+          className="flex items-center gap-1.5 text-[12px] font-semibold px-3 py-2 rounded-lg"
           style={{ background: 'var(--v7-pink-soft, rgba(255,122,209,0.14))', border: '1px solid var(--v7-pink)', color: 'var(--v7-pink)' }}
         >
           <Check className="w-3 h-3" />
           Done
         </button>
-        <button onClick={onDone} className="text-[11px]" style={{ color: 'var(--v7-text-mute)' }}>
+        <button onClick={onDone} className="text-[12px] px-2 py-2" style={{ color: 'var(--v7-text-mute)' }}>
           Not yet
         </button>
       </div>
@@ -231,7 +246,7 @@ function FreeformStep({ onDone }: { onDone: () => void }) {
 
   return (
     <div>
-      <div className="text-[12.5px] mb-2" style={{ color: 'var(--v7-text)' }}>
+      <div className="text-[13.5px] mb-3 leading-relaxed" style={{ color: 'var(--v7-text)' }}>
         Anything changed since last time?
       </div>
       <div className="flex items-center gap-2">
@@ -240,13 +255,13 @@ function FreeformStep({ onDone }: { onDone: () => void }) {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
           placeholder="e.g. we shipped the pricing change"
-          className="flex-1 text-[12px] rounded-md px-2 py-1.5"
+          className="flex-1 text-[13px] rounded-lg px-3 py-2 outline-none"
           style={{ background: 'var(--v7-bg-raised-2)', border: '1px solid var(--v7-border, rgba(255,255,255,0.08))', color: 'var(--v7-text)' }}
         />
         <button
           disabled={!text.trim() || addFact.isPending}
           onClick={handleSubmit}
-          className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md shrink-0"
+          className="text-[12px] font-semibold px-3.5 py-2 rounded-lg shrink-0"
           style={{
             background: text.trim() ? 'var(--v7-pink-soft, rgba(255,122,209,0.14))' : 'transparent',
             border: `1px solid ${text.trim() ? 'var(--v7-pink)' : 'var(--v7-border, rgba(255,255,255,0.08))'}`,
@@ -361,97 +376,148 @@ export function TodayCard() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="w-full text-left mb-5 flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl"
+        className="ve-tile w-full text-left mb-5 flex items-center justify-between gap-3 px-4 py-3.5 rounded-[20px]"
         style={cardStyle}
       >
-        <span className="flex items-center gap-2 min-w-0">
+        <span className="flex items-center gap-3 min-w-0">
           <span
-            className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+            className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
             style={{ background: 'var(--v7-pink-soft)' }}
           >
-            <GreetingIcon className="w-3 h-3" style={{ color: 'var(--v7-pink)' }} />
+            <GreetingIcon className="w-4 h-4" style={{ color: 'var(--v7-pink)' }} />
           </span>
-          <span className="text-[12px] font-semibold truncate" style={{ color: 'var(--v7-text)' }}>
-            {greetingText} — {parts.join(' · ')}
+          <span className="min-w-0">
+            <span className="block text-[14px] font-bold truncate" style={{ color: 'var(--v7-text)' }}>
+              {greetingText}
+            </span>
+            <span className="block text-[12px] truncate" style={{ color: 'var(--v7-text-mute)' }}>
+              {parts.join(' · ')}
+            </span>
           </span>
         </span>
-        <ChevronDown className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--v7-text-mute)' }} />
+        <ChevronDown className="w-4 h-4 shrink-0" style={{ color: 'var(--v7-text-mute)' }} />
       </button>
     );
   }
 
+  // Today's date, spelled out. The card previously said only "Good evening",
+  // which is a greeting and not information — with a date it is legible as a
+  // dated briefing, which is what it actually is.
+  const dateLine = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+
   return (
-    <div className="w-full mb-5 p-3.5 rounded-2xl text-left" style={cardStyle}>
-      <div className="flex items-center justify-between mb-2.5">
-        <span className="flex items-center gap-2 text-[12px] font-bold" style={{ color: 'var(--v7-text)' }}>
+    <div className="w-full mb-5 p-5 sm:p-6 rounded-[20px] text-left" style={cardStyle}>
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <div className="flex items-center gap-3 min-w-0">
           <span
-            className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+            className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
             style={{ background: 'var(--v7-pink-soft)' }}
           >
-            <GreetingIcon className="w-3 h-3" style={{ color: 'var(--v7-pink)' }} />
+            <GreetingIcon className="w-[18px] h-[18px]" style={{ color: 'var(--v7-pink)' }} />
           </span>
-          {greetingText}
-        </span>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setOpen(false)}>
-            <ChevronUp className="w-3.5 h-3.5" style={{ color: 'var(--v7-text-mute)' }} />
+          <div className="min-w-0">
+            <div className="text-[16px] font-extrabold leading-tight tracking-[-0.01em]" style={{ color: 'var(--v7-text)' }}>
+              {greetingText}
+            </div>
+            <div className="text-[12px] mt-0.5" style={{ color: 'var(--v7-text-mute)' }}>
+              {dateLine}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => setOpen(false)}
+            aria-label="Collapse"
+            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--v7-bg-raised)]"
+          >
+            <ChevronUp className="w-4 h-4" style={{ color: 'var(--v7-text-mute)' }} />
           </button>
-          <button onClick={handleDismiss} aria-label="Dismiss for today">
-            <X className="w-3.5 h-3.5" style={{ color: 'var(--v7-text-mute)' }} />
+          <button
+            onClick={handleDismiss}
+            aria-label="Dismiss for today"
+            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--v7-bg-raised)]"
+          >
+            <X className="w-4 h-4" style={{ color: 'var(--v7-text-mute)' }} />
           </button>
         </div>
       </div>
 
-      {hasStats && stats && <StatsStrip stats={stats} />}
+      {/* Each of the three blocks below is given a heading naming what it is
+          and why it is there. Unlabelled, the card was a stack of small grey
+          rows with no way to tell a statistic from a question from a flag —
+          which is what made it read as noise rather than a briefing. */}
+      {hasStats && stats && (
+        <Section title="Where you're at" hint="Counts that only go up, since you started.">
+          <StatsStrip stats={stats} />
+        </Section>
+      )}
 
       {checkinStep && (
-        <div className="pb-2.5 mb-2.5" style={{ borderBottom: inboxItems.length > 0 ? '1px solid var(--v7-tint-border)' : 'none' }}>
-          {checkinStep.kind === 'subtask' && (
-            <SubtaskStep subtaskId={checkinStep.subtaskId} summary={checkinStep.summary} onDone={handleDismiss} />
-          )}
-          {checkinStep.kind === 'roadmap' && (
-            <RoadmapStep
-              roadmapId={checkinStep.roadmapId}
-              phaseIndex={checkinStep.phaseIndex}
-              actionIndex={checkinStep.actionIndex}
-              text={checkinStep.text}
-              onDone={handleDismiss}
-            />
-          )}
-          {checkinStep.kind === 'freeform' && <FreeformStep onDone={handleDismiss} />}
-        </div>
+        <Section title="One question" hint="Answering this is what keeps the advice grounded.">
+          <div className="rounded-xl p-4" style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border)' }}>
+            {checkinStep.kind === 'subtask' && (
+              <SubtaskStep subtaskId={checkinStep.subtaskId} summary={checkinStep.summary} onDone={handleDismiss} />
+            )}
+            {checkinStep.kind === 'roadmap' && (
+              <RoadmapStep
+                roadmapId={checkinStep.roadmapId}
+                phaseIndex={checkinStep.phaseIndex}
+                actionIndex={checkinStep.actionIndex}
+                text={checkinStep.text}
+                onDone={handleDismiss}
+              />
+            )}
+            {checkinStep.kind === 'freeform' && <FreeformStep onDone={handleDismiss} />}
+          </div>
+        </Section>
       )}
 
       {inboxItems.length > 0 && (
-        <div className="space-y-1.5">
-          {inboxItems.map((item) => (
-            <div
-              key={item.key}
-              onClick={item.onClick}
-              role={item.onClick ? 'button' : undefined}
-              tabIndex={item.onClick ? 0 : undefined}
-              onKeyDown={item.onClick ? (e) => { if (e.key === 'Enter') item.onClick!(); } : undefined}
-              className="w-full flex items-baseline gap-2 text-left"
-              style={{ cursor: item.onClick ? 'pointer' : 'default' }}
-            >
-              <span
-                className="text-[9.5px] font-mono uppercase shrink-0 px-1.5 py-0.5 rounded"
-                style={{ background: 'var(--v7-pink-soft)', color: 'var(--v7-pink)' }}
-              >
-                {item.label}
-              </span>
-              <span
-                className="text-[12px] truncate"
+        <Section title="Needs your attention" hint={`${inboxItems.length} thing${inboxItems.length === 1 ? '' : 's'} Vera flagged from your activity.`}>
+          <div className="space-y-2">
+            {inboxItems.map((item, i) => (
+              <div
+                key={item.key}
+                onClick={item.onClick}
+                role={item.onClick ? 'button' : undefined}
+                tabIndex={item.onClick ? 0 : undefined}
+                onKeyDown={item.onClick ? (e) => { if (e.key === 'Enter') item.onClick!(); } : undefined}
+                className="ve-row-in w-full flex items-start gap-3 text-left rounded-xl p-3.5 transition-colors"
                 style={{
-                  color: item.onClick ? 'var(--v7-text-dim)' : 'var(--v7-text-mute)',
-                  textDecoration: item.onClick ? 'underline' : 'none',
-                  textUnderlineOffset: '2px',
+                  background: 'var(--v7-bg-raised)',
+                  border: '1px solid var(--v7-border)',
+                  cursor: item.onClick ? 'pointer' : 'default',
+                  animationDelay: `${i * 55}ms`,
                 }}
               >
-                {item.text}
-              </span>
-            </div>
-          ))}
+                <span
+                  className="text-[10px] font-mono uppercase shrink-0 px-2 py-1 rounded-md tracking-wider"
+                  style={{ background: 'var(--v7-pink-soft)', color: 'var(--v7-pink)' }}
+                >
+                  {item.label}
+                </span>
+                {/* Wraps to two lines instead of truncating to one. A flag
+                    whose text is cut off at "Was \"I run a seed-stage B2B
+                    fintech SaaS selling to small accounting f…" tells the
+                    founder nothing they can act on. */}
+                <span
+                  className="text-[13px] leading-relaxed flex-1 min-w-0"
+                  style={{
+                    color: item.onClick ? 'var(--v7-text)' : 'var(--v7-text-dim)',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {item.text}
+                </span>
+                {item.onClick && (
+                  <ChevronRight className="w-4 h-4 shrink-0 mt-0.5" style={{ color: 'var(--v7-text-mute)' }} />
+                )}
+              </div>
+            ))}
+          </div>
 
           {/* No question was asked this round (no active goal to check in
               on) — reading the flagged items IS the whole interaction, so
@@ -460,14 +526,36 @@ export function TodayCard() {
           {!checkinStep && (
             <button
               onClick={handleDismiss}
-              className="text-[11px] font-semibold mt-1"
-              style={{ color: 'var(--v7-pink)' }}
+              className="mt-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold px-3.5 py-2 rounded-lg transition-colors"
+              style={{ background: 'var(--v7-pink-soft)', color: 'var(--v7-pink)' }}
             >
+              <Check className="w-3.5 h-3.5" />
               Got it — clear for today
             </button>
           )}
-        </div>
+        </Section>
       )}
+    </div>
+  );
+}
+
+// A titled block inside the card. Exists so the three things this card does
+// are visibly three things.
+function Section({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
+  return (
+    <div className="mb-5 last:mb-0">
+      <div className="flex items-baseline gap-2 mb-2.5 flex-wrap">
+        <h3
+          className="text-[11px] uppercase font-semibold"
+          style={{ letterSpacing: '0.13em', color: 'var(--v7-text-dim)', fontFamily: 'var(--v7-font-mono)' }}
+        >
+          {title}
+        </h3>
+        <span className="text-[11.5px]" style={{ color: 'var(--v7-text-mute)' }}>
+          {hint}
+        </span>
+      </div>
+      {children}
     </div>
   );
 }

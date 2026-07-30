@@ -265,6 +265,13 @@ export interface QueueItem {
   status: QueueItemStatus;
   createdAt: string;
   resolvedAt: string | null;
+  // Both were always returned by GET /api/queue (the route selects whole
+  // rows) but went undeclared here, so the board couldn't use them. They are
+  // what lets a row point back at the thing it came from: `externalId` on a
+  // decision follow-up is `decision-<id>`, which is the only link between a
+  // board row and the chat the decision was made in.
+  externalId: string | null;
+  metadataJson: string | null;
 }
 
 export function useQueue() {

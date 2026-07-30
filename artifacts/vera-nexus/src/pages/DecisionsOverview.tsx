@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { ArrowLeft, ListChecks, ThumbsUp, ThumbsDown, Minus, Archive } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, ListChecks, ThumbsUp, ThumbsDown, Minus, Archive, MessageSquare, PenLine } from 'lucide-react';
 import { useDecisions, useArchiveDecision, type VenusDecisionRow, type DecisionFilters } from '../lib/venusApi';
+import { reportSubTaskOutcome, type OutcomeSentiment } from './GoalPanel';
 import { VenusThemeToggle } from './VenusThemeToggle';
 import { useVenusTheme } from '../lib/venusTheme';
+import { OPEN_CHAT_KEY } from '../lib/venusHistory';
 
 // The browse surface Decision Memory never had — the backend has logged and
 // resolved decisions since the Goal feature shipped (see venus_decisions.ts),
@@ -32,8 +35,92 @@ function sentimentBadge(sentiment: VenusDecisionRow['outcomeSentiment']) {
   return null;
 }
 
-function DecisionCard({ decision, onArchive }: { decision: VenusDecisionRow; onArchive: (id: number) => void }) {
+const SENTIMENT_OPTIONS: { value: OutcomeSentiment; label: string; Icon: typeof ThumbsUp; color: string }[] = [
+  { value: 'positive', label: 'Worked', Icon: ThumbsUp, color: 'var(--v7-cyan)' },
+  { value: 'mixed', label: 'Mixed', Icon: Minus, color: 'var(--amber, #d9a441)' },
+  { value: 'negative', label: "Didn't work", Icon: ThumbsDown, color: 'var(--red, #e5555c)' },
+];
+
+/**
+ * Inline outcome capture. Posts to the same endpoint GoalPanel's sub-task
+ * reporter uses — decisions and goal sub-tasks are rows in the same table,
+ * so there is one write path and one place for it to be wrong.
+ */
+function OutcomeForm({ decisionId, onSaved }: { decisionId: number; onSaved: () => void }) {
+  const [sentiment, setSentiment] = useState<OutcomeSentiment | null>(null);
+  const [outcome, setOutcome] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canSubmit = sentiment && outcome.trim() && !submitting;
+
+  const submit = async () => {
+    if (!canSubmit || !sentiment) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await reportSubTaskOutcome(decisionId, outcome.trim(), sentiment);
+      onSaved();
+    } catch {
+      setError('Failed to save — try again.');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--v7-border, rgba(255,255,255,0.08))' }}>
+      <div className="flex gap-1.5 mb-2 flex-wrap">
+        {SENTIMENT_OPTIONS.map(({ value, label, Icon, color }) => {
+          const active = sentiment === value;
+          return (
+            <button
+              key={value}
+              onClick={() => setSentiment(value)}
+              className="flex items-center gap-1.5 text-[11.5px] font-medium px-2.5 py-1.5 rounded-lg transition-colors"
+              style={{
+                color: active ? color : 'var(--v7-text-mute)',
+                background: active ? `${color}1a` : 'transparent',
+                border: `1px solid ${active ? color : 'var(--v7-border, rgba(255,255,255,0.1))'}`,
+              }}
+            >
+              <Icon className="w-3 h-3" />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          autoFocus
+          value={outcome}
+          onChange={(e) => setOutcome(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+          placeholder="What actually happened? (one line)"
+          className="flex-1 min-w-0 text-[12.5px] rounded-lg px-3 py-2 outline-none"
+          style={{ background: 'var(--v7-bg-raised-2)', border: '1px solid var(--v7-border, rgba(255,255,255,0.1))', color: 'var(--v7-text)' }}
+        />
+        <button
+          disabled={!canSubmit}
+          onClick={submit}
+          className="shrink-0 text-[11.5px] font-semibold px-3 py-2 rounded-lg disabled:opacity-40"
+          style={{ background: 'var(--v7-cyan-soft)', color: 'var(--v7-cyan)' }}
+        >
+          {submitting ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+      {error && <div className="text-[11.5px] mt-1.5" style={{ color: 'var(--red, #e5555c)' }}>{error}</div>}
+    </div>
+  );
+}
+
+function DecisionCard({ decision, onArchive, onOpenChat, onSaved }: {
+  decision: VenusDecisionRow;
+  onArchive: (id: number) => void;
+  onOpenChat?: (chatId: number) => void;
+  onSaved: () => void;
+}) {
   const sentiment = sentimentBadge(decision.outcomeSentiment);
+  const [logging, setLogging] = useState(false);
 
   return (
     <div
@@ -92,15 +179,60 @@ function DecisionCard({ decision, onArchive }: { decision: VenusDecisionRow; onA
       ) : (
         <div className="text-[11px] font-mono uppercase" style={{ color: 'var(--v7-text-mute)' }}>{decision.status}</div>
       )}
+
+      {/* This page listed decisions and offered nothing to do with them —
+          no way back to the conversation the decision came out of, and no
+          way to say how it turned out. Both are added here: the chat link
+          because a decision without its reasoning is just a sentence, and
+          the outcome because an unresolved decision is the only thing that
+          moves the goal's evidence score (see GoalPanel). */}
+      <div className="flex items-center gap-2 mt-3 flex-wrap">
+        {decision.chatId != null && onOpenChat && (
+          <button
+            onClick={() => onOpenChat(decision.chatId!)}
+            className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors"
+            style={{ background: 'var(--v7-cyan-soft)', color: 'var(--v7-cyan)' }}
+          >
+            <MessageSquare className="w-3 h-3" />
+            Open chat
+          </button>
+        )}
+        {decision.status === 'open' && !logging && (
+          <button
+            onClick={() => setLogging(true)}
+            className="inline-flex items-center gap-1.5 text-[11.5px] font-medium px-2.5 py-1.5 rounded-lg transition-colors"
+            style={{ border: '1px solid var(--v7-border, rgba(255,255,255,0.12))', color: 'var(--v7-text-dim)' }}
+          >
+            <PenLine className="w-3 h-3" />
+            How did it go?
+          </button>
+        )}
+      </div>
+
+      {logging && <OutcomeForm decisionId={decision.id} onSaved={() => { setLogging(false); onSaved(); }} />}
     </div>
   );
 }
 
 export function DecisionsOverview() {
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
   const { theme, toggle: toggleTheme } = useVenusTheme();
   const [filter, setFilter] = useState<ViewFilter>('all');
   const isArchivedView = filter === 'archived';
+
+  // This page is its own route, so it can't reach into Venus's session state
+  // directly. It leaves the chat id where Venus looks for it on mount and
+  // navigates — a one-shot handoff, cleared by the reader (see OPEN_CHAT_KEY).
+  const openChat = (chatId: number) => {
+    try {
+      localStorage.setItem(OPEN_CHAT_KEY, String(chatId));
+    } catch {
+      // No localStorage — the founder lands on Vera's usual chat instead of
+      // the specific one, which is a degraded jump rather than a broken one.
+    }
+    navigate('/vera');
+  };
 
   const { data, isLoading } = useDecisions({
     status: isArchivedView || filter === 'all' ? undefined : filter,
@@ -167,7 +299,13 @@ export function DecisionsOverview() {
 
         <div className="space-y-2.5 mt-4">
           {decisions.map((d) => (
-            <DecisionCard key={d.id} decision={d} onArchive={(id) => archiveMutation.mutate(id)} />
+            <DecisionCard
+              key={d.id}
+              decision={d}
+              onArchive={(id) => archiveMutation.mutate(id)}
+              onOpenChat={openChat}
+              onSaved={() => queryClient.invalidateQueries({ queryKey: ['/api/ai/decisions'] })}
+            />
           ))}
         </div>
       </div>
