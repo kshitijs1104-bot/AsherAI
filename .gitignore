@@ -12,6 +12,44 @@ out-tsc
 # these are user-uploaded files written to local disk, not build output, but must never be committed
 artifacts/api-server/uploads/
 
+# ---------------------------------------------------------------------------
+# The ad video work is local-only and must never be committed or pushed.
+#
+# This is deliberately broader than "don't commit big files": it covers the
+# pipeline source as well as the media it produces. Both ad pipelines, every
+# input they read and every file they emit stay on this machine.
+#
+# Consequences, recorded here so nobody has to rediscover them:
+#   - scripts/video-ad and scripts/video-ad-remotion exist in no commit and on
+#     no remote. A fresh clone cannot build the ads, and if this machine is
+#     lost the pipelines are lost with it. Back them up outside git.
+#   - assets/screenshots/ is ignored too, which includes regions.json — the
+#     file the Remotion composition imports at build time. That is what makes
+#     the pipeline unbuildable from a clone, not an oversight.
+#
+# An earlier version of this block ignored only the generated media and kept
+# assets/screenshots/ tracked for exactly that build reason. Superseded.
+
+# Both ad pipelines, in full — source included.
+scripts/video-ad/
+scripts/video-ad-remotion/
+
+# Everything they read or write: raw clips, style frames, music beds, the
+# screenshot corpus and its regions.json manifest.
+assets/
+
+# Rendered cuts.
+output/
+
+# Finished exports dropped at the repo root ("Advert vid.mp4" etc). Anchored
+# to the root so this cannot reach into artifacts/*/public, where opengraph.jpg
+# and any future real app media legitimately live and are tracked.
+/*.mp4
+/*.mov
+/*.webm
+/*.wav
+/*.m4a
+
 # dependencies
 node_modules
 
