@@ -439,6 +439,67 @@
   color: var(--vera-label-color);
 }
 
+/* A strip of data cells rather than a run of inline key:value pairs — the
+   decision card's option scores used to sit as `flex-wrap` prose one line
+   under the reasoning text, so nothing told the eye where reading stopped
+   and scanning could start ("info overload" on the exact card this fixes).
+   Reuses .vera-block for the recessed surface and .vera-label for the key,
+   so a score row is the same visual register as every other inset detail
+   in the card system rather than inventing a new one. grid-auto-flow:
+   column pins it to a single row — scores are always a short, fixed set —
+   which is what makes the :first-child border rule safe: there is no
+   wrapped second row that would also need its top border stripped. */
+.vera-score-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 0;
+  overflow: hidden;
+}
+.vera-score-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-left: 1px solid var(--vera-inset-border);
+  min-width: 0;
+}
+.vera-score-cell:first-child {
+  border-left: none;
+}
+.vera-score-k {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vera-score-v {
+  font-family: var(--v7-font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+/* Below ~420px a column-per-score grid runs out of room fast (three cells
+   at under 100px each starts truncating values), so it drops to one row
+   per score instead of fighting for horizontal space. */
+@media (max-width: 420px) {
+  .vera-score-strip {
+    grid-auto-flow: row;
+  }
+  .vera-score-cell {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    border-left: none;
+    border-top: 1px solid var(--vera-inset-border);
+  }
+  .vera-score-cell:first-child {
+    border-top: none;
+  }
+}
+
 /* Vera (Venus) light mode — scoped to a `.v7-light` class applied only on
    the root element of the three Vera routes (Venus.tsx, GoalsOverview.tsx,
    DecisionsOverview.tsx), never on <html>. The rest of the app never sits
@@ -1006,7 +1067,10 @@
    A machined near-black biased green-cyan at 3–5% chroma. The original
    surfaces were pinned to hue 240 at 16–45% saturation, which is what read
    as navy; this keeps a cool undertone without the blue cast. One accent —
-   brass — and it means "act on this" and nothing else. */
+   a cool azure, not the brass this shipped with first — and it means "act
+   on this" and nothing else. Brass tested as too warm/amber to read as
+   premium at low light; azure keeps the same single-accent discipline
+   while sitting nowhere near --vera-unprompted's violet. */
 html[data-skin="alloy"],
 html[data-skin="alloy"] .dark {
   --v7-bg: #0B0C0C;
@@ -1018,13 +1082,22 @@ html[data-skin="alloy"] .dark {
   --v7-text-dim: #B2BAB8;
   --v7-text-mute: #838C8A;
 
-  /* --v7-cyan is the app's "this is interactive" slot; brass takes it. */
-  --v7-cyan: #E0A33C;
-  --v7-cyan-soft: rgba(224, 163, 60, 0.13);
-  --v7-cyan-strong: rgba(224, 163, 60, 0.42);
+  /* --v7-cyan is the app's "this is interactive" slot. Was brass (#E0A33C,
+     hue 38° — amber/orange), which read as un-premium and, at low light,
+     close enough to an adult-site palette to be mentioned unprompted more
+     than once. Replaced with a cool azure at hue ~206°: confident and
+     saturated enough to still read as ONE clear accent (not a washed-out
+     "safe" blue), but far enough from both the app's original neon-cyan
+     (168°) and --vera-unprompted's violet (255°, below) to never be
+     mistaken for either. 7.69:1 against this block's #0B0C0C ground. */
+  --v7-cyan: #5AA9E6;
+  --v7-cyan-soft: rgba(90, 169, 230, 0.13);
+  --v7-cyan-strong: rgba(90, 169, 230, 0.42);
   /* --v7-pink is a card-type label slot, not an action. It deliberately gets
      a low-chroma slate rather than a second bright hue, so categories stay
-     distinguishable without competing with the accent for attention. */
+     distinguishable without competing with the accent for attention. Left
+     as-is — its hue (~200°, heavily desaturated) still reads distinct next
+     to the new accent because it is a slate, not a saturated colour. */
   --v7-pink: #7E93A8;
   --v7-pink-soft: rgba(126, 147, 168, 0.13);
 
@@ -1038,13 +1111,15 @@ html[data-skin="alloy"] .dark {
      references another is substituted where it is DECLARED, not where it is
      used — pointing it at --v7-cyan here would lock the light theme to the
      dark accent. */
-  --vera-emph-fg: #E0A33C;
+  --vera-emph-fg: #5AA9E6;
   /* Reserved product-wide for one thing: Vera raising something you didn't
      ask about. Carried across from the Vessel direction into Alloy too — it
      is the product's actual differentiator, so it earns a hue in both, and
-     nothing else is allowed to borrow it. Muted violet here so it stays
-     clearly outside Alloy's single-accent discipline without competing
-     with brass for attention. */
+     nothing else is allowed to borrow it. Muted violet here (hue ~255°) so
+     it stays clearly outside Alloy's single-accent discipline — a full 49°
+     from the accent's azure (206°), same separation the brass/violet pair
+     held before, so swapping the accent didn't quietly collapse this into
+     "two blues that both mean something." */
   --vera-unprompted: #9B8FC0;
   --vera-unprompted-soft: rgba(155, 143, 192, 0.13);
 
@@ -1068,8 +1143,11 @@ html[data-skin="alloy"] .dark {
   --dim: #838C8A;
 
   /* Card-type label slots. One action colour, three muted category hues that
-     read as distinct without any of them looking clickable. */
-  --indigo: #E0A33C;
+     read as distinct without any of them looking clickable. Only --indigo
+     moves here (it mirrors the accent by design) — --mint/--green/--amber/
+     --red are semantic category colours, not identity, and stay as they
+     were. */
+  --indigo: #5AA9E6;
   --indigo-light: #9B8FC0;
   --mint: #6FAE92;
   --green: #C98A6A;
@@ -1083,7 +1161,10 @@ html[data-skin="alloy"] .dark {
   --vera-label-color: #838C8A;
 
   /* shadcn/Radix chrome, so the shared ui/ components don't clash with the
-     surfaces around them. */
+     surfaces around them. HSL(206 74% 63%) is the azure accent above; the
+     foreground is a dark ink in the same hue family (208 46% 10%) rather
+     than pure black, matching how the brass version paired amber with a
+     dark-brown ink instead of neutral black. */
   --background: 180 4% 4%;
   --foreground: 165 8% 95%;
   --card: 180 5% 11%;
@@ -1091,15 +1172,15 @@ html[data-skin="alloy"] .dark {
   --card-border: 180 5% 18%;
   --popover: 180 5% 11%;
   --popover-foreground: 165 8% 95%;
-  --primary: 38 72% 56%;
-  --primary-foreground: 40 90% 8%;
+  --primary: 206 74% 63%;
+  --primary-foreground: 208 46% 10%;
   --secondary: 180 5% 15%;
   --secondary-foreground: 165 8% 95%;
   --muted-foreground: 165 5% 53%;
-  --accent: 38 72% 56%;
-  --accent-foreground: 40 90% 8%;
+  --accent: 206 74% 63%;
+  --accent-foreground: 208 46% 10%;
   --input: 180 5% 18%;
-  --ring: 38 72% 56%;
+  --ring: 206 74% 63%;
 
   --vera-cc-bg: #0B0C0C;
   --vera-cc-paper: #16191A;
@@ -1108,9 +1189,9 @@ html[data-skin="alloy"] .dark {
   --vera-cc-text: #F0F3F2;
   --vera-cc-muted: #B2BAB8;
   --vera-cc-faint: #838C8A;
-  --vera-cc-accent: #E0A33C;
-  --vera-cc-accent-dim: rgba(224, 163, 60, 0.13);
-  --vera-cc-accent-border: rgba(224, 163, 60, 0.34);
+  --vera-cc-accent: #5AA9E6;
+  --vera-cc-accent-dim: rgba(90, 169, 230, 0.13);
+  --vera-cc-accent-border: rgba(90, 169, 230, 0.34);
   --vera-cc-second: #7E93A8;
   --vera-cc-second-dim: rgba(126, 147, 168, 0.13);
   --vera-cc-second-border: rgba(126, 147, 168, 0.32);
@@ -1133,15 +1214,18 @@ html[data-skin="alloy"] .v7-light {
   --v7-text-dim: #464B4E;
   --v7-text-mute: #6C716F;
 
-  --v7-cyan: #8A5C0F;
-  --v7-cyan-soft: #F6EEDC;
-  --v7-cyan-strong: #8A5C0F;
+  /* Cobalt, hue ~203° — the light-mode read of the same azure accent above.
+     6.60:1 against this block's #FAF8F5 ground, comfortably past the amber
+     original's 5.47:1 on the same page. */
+  --v7-cyan: #155E8A;
+  --v7-cyan-soft: #E7F1F7;
+  --v7-cyan-strong: #155E8A;
   --v7-pink: #4E6275;
   --v7-pink-soft: #E9EDF1;
 
   --v7-tint: #F3F0EA;
   --v7-tint-border: #DAD3C7;
-  --vera-emph-fg: #8A5C0F;
+  --vera-emph-fg: #155E8A;
   --vera-unprompted: #5B4E8C;
   --vera-unprompted-soft: #ECEAF5;
 
@@ -1167,7 +1251,7 @@ html[data-skin="alloy"] .v7-light {
   --muted-text: #464B4E;
   --dim: #6C716F;
 
-  --indigo: #8A5C0F;
+  --indigo: #155E8A;
   --indigo-light: #5B4E8C;
   --mint: #1F6B54;
   --green: #8A4B22;
@@ -1187,15 +1271,15 @@ html[data-skin="alloy"] .v7-light {
   --card-border: 38 22% 86%;
   --popover: 0 0% 100%;
   --popover-foreground: 200 8% 9%;
-  --primary: 38 82% 30%;
+  --primary: 203 74% 31%;
   --primary-foreground: 0 0% 100%;
   --secondary: 38 25% 94%;
   --secondary-foreground: 200 8% 9%;
   --muted-foreground: 165 3% 43%;
-  --accent: 38 82% 30%;
+  --accent: 203 74% 31%;
   --accent-foreground: 0 0% 100%;
   --input: 38 22% 86%;
-  --ring: 38 82% 30%;
+  --ring: 203 74% 31%;
 
   --vera-cc-bg: #F3F0EA;
   --vera-cc-paper: #FFFFFF;
@@ -1204,9 +1288,9 @@ html[data-skin="alloy"] .v7-light {
   --vera-cc-text: #16181A;
   --vera-cc-muted: #464B4E;
   --vera-cc-faint: #6C716F;
-  --vera-cc-accent: #8A5C0F;
-  --vera-cc-accent-dim: #F6EEDC;
-  --vera-cc-accent-border: #DEC79C;
+  --vera-cc-accent: #155E8A;
+  --vera-cc-accent-dim: #E7F1F7;
+  --vera-cc-accent-border: #A8C7DC;
   --vera-cc-second: #4E6275;
   --vera-cc-second-dim: #E9EDF1;
   --vera-cc-second-border: #C2CDD7;

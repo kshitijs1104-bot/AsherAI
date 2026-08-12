@@ -190,18 +190,27 @@ function WorkflowCard({ template, workflow }: { template: WorkflowTemplate; work
 // "aurora" palette instead of just a dimmed version of the dark scene —
 // both built from plain CSS (radial-gradient blobs + a repeating-dot
 // starfield texture), no images, no canvas/WebGL.
+// Dark reads as a night sky without help — glowing blobs on near-black look
+// like nebulae by default. Light doesn't get that for free: the same
+// low-alpha blobs and a dimmed star-dot grid just read as flecks of dirt on
+// a white page, which is what a founder actually flagged this background
+// for. Rather than dimming the dark version, light gets its own reading of
+// the same structure — a brighter sky wash, richer blobs (opacity roughly
+// doubled, since a light ground swallows colour that a dark one doesn't),
+// a third drifting gloss layer for depth, and a fine ink line-grid instead
+// of dust — a chart on paper rather than a nebula turned down.
 function CosmicBackground({ light }: { light: boolean }) {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 0 }}>
       <div
         className="absolute inset-0"
-        style={{ background: light ? 'linear-gradient(180deg, #eef1fb 0%, #e6e9fa 100%)' : 'linear-gradient(180deg, #0a0a16 0%, #0c0a1a 100%)' }}
+        style={{ background: light ? 'linear-gradient(180deg, #f4f6fd 0%, #e3e8fa 55%, #dbe2f7 100%)' : 'linear-gradient(180deg, #0a0a16 0%, #0c0a1a 100%)' }}
       />
       <div
         className="absolute rounded-full"
         style={{
           width: '520px', height: '520px', top: '-160px', left: '-120px',
-          background: light ? 'radial-gradient(circle, rgba(91,79,232,0.16), transparent 70%)' : 'radial-gradient(circle, rgba(91,79,232,0.35), transparent 70%)',
+          background: light ? 'radial-gradient(circle, rgba(91,79,232,0.30), transparent 70%)' : 'radial-gradient(circle, rgba(91,79,232,0.35), transparent 70%)',
           filter: 'blur(10px)',
           animation: 've-drift-a 22s ease-in-out infinite',
         }}
@@ -210,19 +219,43 @@ function CosmicBackground({ light }: { light: boolean }) {
         className="absolute rounded-full"
         style={{
           width: '460px', height: '460px', bottom: '-140px', right: '-100px',
-          background: light ? 'radial-gradient(circle, rgba(0,229,176,0.14), transparent 70%)' : 'radial-gradient(circle, rgba(0,229,176,0.22), transparent 70%)',
+          background: light ? 'radial-gradient(circle, rgba(0,229,176,0.26), transparent 70%)' : 'radial-gradient(circle, rgba(0,229,176,0.22), transparent 70%)',
           filter: 'blur(10px)',
           animation: 've-drift-b 26s ease-in-out infinite',
         }}
       />
+      {light && (
+        // Exists only on paper — without it the page reads as two flat
+        // blobs on white. A slow third drift, off-beat from the other two
+        // (18s vs 22s/26s), keeps the sky from ever fully settling.
+        <div
+          className="absolute rounded-full"
+          style={{
+            width: '640px', height: '380px', top: '-120px', right: '4%',
+            background: 'radial-gradient(circle, rgba(255,205,120,0.16), transparent 70%)',
+            filter: 'blur(14px)',
+            animation: 've-drift-c 18s ease-in-out infinite',
+          }}
+        />
+      )}
       <div
         className="absolute inset-0"
-        style={{
-          backgroundImage: `radial-gradient(1px 1px, ${light ? 'rgba(60,60,90,0.35)' : 'rgba(255,255,255,0.5)'} 1px, transparent 0)`,
-          backgroundSize: '28px 28px',
-          opacity: light ? 0.25 : 0.35,
-          animation: 've-twinkle 5s ease-in-out infinite',
-        }}
+        style={
+          light
+            ? {
+                backgroundImage:
+                  'linear-gradient(rgba(50,56,110,0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(50,56,110,0.09) 1px, transparent 1px)',
+                backgroundSize: '34px 34px',
+                opacity: 0.55,
+                animation: 've-twinkle 6s ease-in-out infinite',
+              }
+            : {
+                backgroundImage: 'radial-gradient(1px 1px, rgba(255,255,255,0.5) 1px, transparent 0)',
+                backgroundSize: '28px 28px',
+                opacity: 0.35,
+                animation: 've-twinkle 5s ease-in-out infinite',
+              }
+        }
       />
     </div>
   );
@@ -246,6 +279,7 @@ export function WorkflowsPage() {
         @keyframes ve-flow-dash { from { background-position: 0 0; } to { background-position: 20px 0; } }
         @keyframes ve-drift-a { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, 20px); } }
         @keyframes ve-drift-b { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-25px, -18px); } }
+        @keyframes ve-drift-c { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(18px, -22px) scale(1.06); } }
         @keyframes ve-twinkle { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.15; } }
       `}</style>
       <CosmicBackground light={theme === 'light'} />

@@ -114,6 +114,49 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+/**
+ * Rebuilds a local session for a chat this browser has no record of, from the
+ * server's permanent message log (GET /api/chats/:id/messages).
+ *
+ * Sessions live in localStorage and are capped at 50, so a decision logged
+ * three months ago, or one made on a different device, or any chat at all
+ * after clearing history, has a server chat id with nothing local behind it.
+ * "Open chat" used to silently fall back to the most recent session in that
+ * case — it opened a real conversation, just not the one named on the card,
+ * which is worse than opening nothing because there is no sign it happened.
+ *
+ * Returns null when the chat genuinely can't be fetched; callers should say so
+ * rather than substituting a different chat. The rebuilt session is persisted,
+ * so the same jump is instant next time.
+ */
+export async function hydrateSessionFromServer(serverChatId: number): Promise<ChatSession | null> {
+  try {
+    const response = await fetch(`/api/chats/${serverChatId}/messages`);
+    if (!response.ok) return null;
+    const body = (await response.json()) as {
+      chat?: { id: number; title?: string | null; createdAt?: string | null };
+      messages?: { role: string; content: string }[];
+    };
+
+    const session: ChatSession = {
+      id: uid(),
+      title: body.chat?.title || 'Chat',
+      createdAt: body.chat?.createdAt ?? new Date().toISOString(),
+      // The log stores the words, not the cards that were rendered beside
+      // them — an honest transcript, which is what the founder came back for.
+      messages: (body.messages ?? []).map((m) => ({
+        role: m.role === 'user' ? 'user' : 'venus',
+        content: m.content,
+      })),
+      serverChatId,
+    };
+    saveSession(session);
+    return session;
+  } catch {
+    return null;
+  }
+}
+
 export function getSessions(): ChatSession[] {
   try {
     const raw = localStorage.getItem(SESSIONS_KEY);

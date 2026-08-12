@@ -1,6 +1,6 @@
 import type Groq from "groq-sdk";
 import { db, companyDossiersTable, type CompanyDossier } from "@workspace/db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { callGroqJSON, NAMED_ENTITY_GUARD } from "./groq";
 
 // ---- The Dossier: intake, gap-finding, and the company file ----
@@ -286,6 +286,46 @@ export async function getDossier(userId: string, profileId: number | null): Prom
   }
 }
 
+// The deployed schema is applied by hand (`pnpm --filter @workspace/db run
+// push`), and company_dossiers is the newest table in it — so it is exactly
+// the one that can be missing from a database provisioned before the Dossier
+// shipped. The symptom of that was the worst available: intake ran, both
+// model calls were paid for, and the founder was told "built the file but
+// couldn't save it". Created on demand instead, once per process. IF NOT
+// EXISTS makes it a no-op everywhere push has been run, and the column list
+// mirrors lib/db/src/schema/company_dossiers.ts exactly.
+//
+// The unique index on (user_id, profile_id) is deliberately NOT recreated
+// here: saveDossier no longer relies on it (see below), and a CREATE UNIQUE
+// on a table that already has duplicate rows would fail on every save.
+let dossierTableEnsured = false;
+async function ensureDossierTable(): Promise<void> {
+  if (dossierTableEnsured) return;
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS company_dossiers (
+      id serial PRIMARY KEY,
+      user_id text NOT NULL,
+      profile_id integer,
+      source_text text NOT NULL,
+      source_label text,
+      extracted_json text NOT NULL,
+      questions_json text NOT NULL,
+      answers_json text NOT NULL DEFAULT '{}',
+      status text NOT NULL DEFAULT 'draft',
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    )
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS company_dossiers_user_id_idx ON company_dossiers (user_id)`);
+  dossierTableEnsured = true;
+}
+
+/**
+ * Writes the founder's company file. Throws on a real database failure rather
+ * than returning null — the caller needs to be able to say WHY, because "try
+ * again" on a save that can never succeed is the one message that wastes a
+ * founder's afternoon.
+ */
 export async function saveDossier(input: {
   userId: string;
   profileId: number | null;
@@ -293,71 +333,103 @@ export async function saveDossier(input: {
   sourceLabel: string | null;
   extraction: DossierExtraction;
   questions: DossierQuestion[];
-}): Promise<CompanyDossier | null> {
-  try {
-    const values = {
-      userId: input.userId,
-      profileId: input.profileId,
-      sourceText: input.sourceText,
-      sourceLabel: input.sourceLabel,
-      extractedJson: JSON.stringify(input.extraction),
-      questionsJson: JSON.stringify(input.questions),
-      status: input.questions.length > 0 ? "draft" : "complete",
-      updatedAt: new Date(),
-    };
+}): Promise<CompanyDossier> {
+  await ensureDossierTable();
+
+  const values = {
+    userId: input.userId,
+    profileId: input.profileId,
+    sourceText: input.sourceText,
+    sourceLabel: input.sourceLabel,
+    extractedJson: JSON.stringify(input.extraction),
+    questionsJson: JSON.stringify(input.questions),
+    status: input.questions.length > 0 ? "draft" : "complete",
+    updatedAt: new Date(),
+  };
+
+  // Re-running intake REPLACES the file rather than creating a second one: a
+  // founder pasting an updated deck means "this is the company now", and two
+  // dossiers for one business is exactly the split-brain that
+  // business_profiles was introduced to end. Answers are reset with it because
+  // the questions themselves are regenerated — keeping old answers keyed to
+  // questions that no longer exist would silently attach them to the wrong
+  // fields.
+  //
+  // Read-then-write rather than ON CONFLICT, and both halves of that matter:
+  //   - ON CONFLICT names an inference target, so it FAILS OUTRIGHT (42P10)
+  //     on any database where the unique index hasn't been pushed. Every save
+  //     died there, which is what "couldn't save it" was.
+  //   - Even with the index, profile_id is nullable and Postgres treats NULLs
+  //     as distinct, so a founder whose profile lookup returned null would
+  //     never have conflicted — they'd have accumulated a new dossier row on
+  //     every intake, with getDossier reading whichever was newest.
+  const existing = await findDossierRow(input.userId, input.profileId);
+
+  if (existing) {
     const [row] = await db
-      .insert(companyDossiersTable)
-      .values(values)
-      // Re-running intake REPLACES the file rather than creating a second
-      // one: a founder pasting an updated deck means "this is the company
-      // now", and two dossiers for one business is exactly the split-brain
-      // that business_profiles was introduced to end. Answers are reset with
-      // it because the questions themselves are regenerated — keeping old
-      // answers keyed to questions that no longer exist would silently
-      // attach them to the wrong fields.
-      .onConflictDoUpdate({
-        target: [companyDossiersTable.userId, companyDossiersTable.profileId],
-        set: { ...values, answersJson: "{}" },
-      })
+      .update(companyDossiersTable)
+      .set({ ...values, answersJson: "{}" })
+      .where(eq(companyDossiersTable.id, existing.id))
       .returning();
-    return row ?? null;
-  } catch (err) {
-    console.error("[dossier] failed to save", err);
-    return null;
+    if (row) return row;
   }
+
+  const [row] = await db.insert(companyDossiersTable).values(values).returning();
+  if (!row) throw new Error("the database accepted the write but returned no row");
+  return row;
 }
 
+async function findDossierRow(userId: string, profileId: number | null) {
+  const [row] = await db
+    .select({ id: companyDossiersTable.id })
+    .from(companyDossiersTable)
+    .where(
+      and(
+        eq(companyDossiersTable.userId, userId),
+        profileId == null ? isNull(companyDossiersTable.profileId) : eq(companyDossiersTable.profileId, profileId),
+      ),
+    )
+    .orderBy(desc(companyDossiersTable.updatedAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Saves answers to the gap questions. Returns null ONLY when the file genuinely
+ * isn't there; a database failure throws, so the route can't report a write
+ * error as "file not found" and send the founder looking for a file that
+ * exists. Their answers are the most expensive data in the product — they were
+ * typed by hand — and silently losing them is not an option.
+ */
 export async function saveDossierAnswers(
   userId: string,
   dossierId: number,
   answers: Record<string, string>,
 ): Promise<CompanyDossier | null> {
-  try {
-    const [existing] = await db
-      .select()
-      .from(companyDossiersTable)
-      .where(and(eq(companyDossiersTable.id, dossierId), eq(companyDossiersTable.userId, userId)))
-      .limit(1);
-    if (!existing) return null;
+  await ensureDossierTable();
 
-    // Merged, not replaced — the form saves as the founder goes, and a
-    // partial save must never wipe answers given earlier in the same sitting.
-    const merged = { ...readAnswers(existing), ...answers };
-    const questions = readQuestions(existing);
-    const allAnswered = questions.length > 0 && questions.every((q) => (merged[q.id] ?? "").trim());
+  const [existing] = await db
+    .select()
+    .from(companyDossiersTable)
+    .where(and(eq(companyDossiersTable.id, dossierId), eq(companyDossiersTable.userId, userId)))
+    .limit(1);
+  if (!existing) return null;
 
-    const [row] = await db
-      .update(companyDossiersTable)
-      .set({
-        answersJson: JSON.stringify(merged),
-        status: allAnswered ? "complete" : existing.status,
-        updatedAt: new Date(),
-      })
-      .where(eq(companyDossiersTable.id, dossierId))
-      .returning();
-    return row ?? null;
-  } catch (err) {
-    console.error("[dossier] failed to save answers", err);
-    return null;
-  }
+  // Merged, not replaced — the form saves as the founder goes, and a
+  // partial save must never wipe answers given earlier in the same sitting.
+  const merged = { ...readAnswers(existing), ...answers };
+  const questions = readQuestions(existing);
+  const allAnswered = questions.length > 0 && questions.every((q) => (merged[q.id] ?? "").trim());
+
+  const [row] = await db
+    .update(companyDossiersTable)
+    .set({
+      answersJson: JSON.stringify(merged),
+      status: allAnswered ? "complete" : existing.status,
+      updatedAt: new Date(),
+    })
+    .where(eq(companyDossiersTable.id, dossierId))
+    .returning();
+  if (!row) throw new Error("the database accepted the write but returned no row");
+  return row;
 }

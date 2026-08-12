@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 //             at all, so it is the original by construction rather than by
 //             a reimplementation that could drift.
 //   alloy   — engineered instrument. Hierarchy from depth and hairline
-//             structure; graphite/stone grounds, brass accent.
+//             structure; graphite/stone grounds, azure accent.
 //   vessel  — tactile study. Hierarchy from scale; espresso/limewash grounds,
 //             verdigris accent with aubergine reserved for Vera's unprompted
 //             follow-ups.

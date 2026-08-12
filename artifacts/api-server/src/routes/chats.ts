@@ -9,6 +9,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth, requireUserId } from "../middlewares/auth";
 import { evidenceScoreToPosition, assessGoalRisk } from "../lib/goalEvidence";
+import { getRecentMessages } from "../lib/messageLog";
 
 const router = Router();
 
@@ -152,6 +153,41 @@ router.delete("/chats/:id", requireAuth, async (req, res) => {
   } catch (err) {
     req.log.error(err);
     return res.status(500).json({ error: "Failed to delete chat" });
+  }
+});
+
+// The transcript, from the permanent server-side log (see lib/messageLog.ts).
+//
+// WHY THIS EXISTS. Chat history is kept in the browser's localStorage, and a
+// server chat id is only joined to it by the local session that created it.
+// Anything that links TO a chat by its server id — a decision on the Decisions
+// page, a follow-up on the Command Centre board — therefore had nothing to
+// open when that local session was missing: cleared history, a different
+// device, or simply the 51st chat, since only 50 are kept. The client's
+// response to a miss was to fall back to the most recent session, so "Open
+// chat" on a decision opened somebody else's conversation. This endpoint is
+// what lets the client rebuild the real thread instead of guessing.
+//
+// Text only: the log stores what was said, not the cards rendered alongside
+// it. A rehydrated thread is an honest transcript rather than a pixel-perfect
+// replay, which is the right trade against opening the wrong chat entirely.
+router.get("/chats/:id/messages", requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ error: "Invalid chat id" });
+
+  try {
+    const userId = requireUserId(req);
+    const chat = await loadOwnedChat(id, userId);
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+    const rows = await getRecentMessages(userId, id, 200);
+    return res.json({
+      chat: { id: chat.id, title: chat.title, createdAt: chat.createdAt },
+      messages: rows.map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt })),
+    });
+  } catch (err) {
+    req.log.error(err);
+    return res.status(500).json({ error: "Failed to load this chat" });
   }
 });
 

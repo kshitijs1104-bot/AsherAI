@@ -86,8 +86,8 @@ const PREVIEW: Record<
   Record<'dark' | 'light', { ground: string; card: string; edge: string; text: string; dim: string; accent: string; accentInk: string }>
 > = {
   alloy: {
-    dark: { ground: '#0B0C0C', card: '#1B1E1E', edge: 'rgba(240,245,243,0.10)', text: '#F0F3F2', dim: '#838C8A', accent: '#E0A33C', accentInk: '#201603' },
-    light: { ground: '#FAF8F5', card: '#FFFFFF', edge: '#E4DED4', text: '#16181A', dim: '#6C716F', accent: '#8A5C0F', accentInk: '#FFFFFF' },
+    dark: { ground: '#0B0C0C', card: '#1B1E1E', edge: 'rgba(240,245,243,0.10)', text: '#F0F3F2', dim: '#838C8A', accent: '#5AA9E6', accentInk: '#0E1B26' },
+    light: { ground: '#FAF8F5', card: '#FFFFFF', edge: '#E4DED4', text: '#16181A', dim: '#6C716F', accent: '#155E8A', accentInk: '#FFFFFF' },
   },
   vessel: {
     dark: { ground: '#0C0A0D', card: '#1C1820', edge: 'rgba(245,240,243,0.10)', text: '#F5F0F3', dim: '#8E8290', accent: '#4FC0A5', accentInk: '#06231C' },

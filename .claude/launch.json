@@ -4,19 +4,27 @@
     {
       "name": "vera-nexus",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set PORT=5173&& set BASE_PATH=/&& npx --yes pnpm@9 --filter @workspace/vera-nexus run dev"],
+      "runtimeArgs": ["/c", "set PATH=%USERPROFILE%\\tools\\node;%PATH%&& set PORT=5173&& set BASE_PATH=/&& npx --yes pnpm@9 --filter @workspace/vera-nexus run dev"],
       "port": 5173
     },
     {
       "name": "api-server",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set PORT=8080&& npx --yes pnpm@9 --filter @workspace/api-server run dev"],
+      "runtimeArgs": ["/c", "set PATH=%USERPROFILE%\\tools\\node;%PATH%&& set PORT=8080&& npx --yes pnpm@9 --filter @workspace/api-server run dev"],
       "port": 8080
+    },
+    {
+      "//": "Same vera-nexus dev server on its own port, for the /shots.html screenshot harness that scripts/video-ad-remotion captures from. Separate entry so it can run alongside a normal vera-nexus session without fighting over 5173.",
+      "name": "vera-shots",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set PATH=%USERPROFILE%\\tools\\node;%PATH%&& set PORT=5199&& set BASE_PATH=/&& npx --yes pnpm@9 --filter @workspace/vera-nexus run dev"],
+      "port": 5199,
+      "url": "http://localhost:5199"
     },
     {
       "name": "mockup-sandbox",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set PORT=5174&& npx --yes pnpm@9 --filter @workspace/mockup-sandbox run dev"],
+      "runtimeArgs": ["/c", "set PATH=%USERPROFILE%\\tools\\node;%PATH%&& set PORT=5174&& npx --yes pnpm@9 --filter @workspace/mockup-sandbox run dev"],
       "port": 5174
     }
   ]

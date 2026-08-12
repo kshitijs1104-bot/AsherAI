@@ -14,6 +14,7 @@ import { DecisionsOverview } from "@/pages/DecisionsOverview";
 import { SettingsPage } from "@/pages/Settings";
 import { SkinPicker } from "@/pages/SkinPicker";
 import { LandingPage } from "@/pages/landing/Landing";
+import { VeraPrototype } from "@/prototype";
 import { SignupGate } from "@/pages/enterprise/Signup";
 import { OnboardingGate } from "@/pages/enterprise/Onboarding";
 import { PlanGate } from "@/pages/enterprise/Plan";
@@ -87,6 +88,13 @@ function Router() {
           it lived there keep resolving. */}
       <Route path="/" component={LandingPage} />
       <Route path="/landing" component={LandingPage} />
+      {/* The design prototype. Public and outside AuthGate on purpose — it
+          renders entirely from fixtures in src/prototype/data.ts, makes no
+          API calls, and exists to be opened and clicked through while a
+          visual direction is being settled. Nothing else imports from
+          src/prototype, so the whole folder plus this line is the entire
+          footprint. */}
+      <Route path="/prototype" component={VeraPrototype} />
       <Route path="/enterprise/signup" component={SignupGate} />
       <Route path="/enterprise/onboarding" component={OnboardingGate} />
       <Route path="/enterprise/plan" component={PlanGate} />

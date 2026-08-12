@@ -129,15 +129,25 @@ router.post("/dossier", requireAuth, async (req, res) => {
 
     const questions = await generateGapQuestions(groq, extraction);
     const profile = await getOrCreateActiveProfile(userId);
-    const saved = await saveDossier({
-      userId,
-      profileId: profile?.id ?? null,
-      sourceText,
-      sourceLabel,
-      extraction,
-      questions,
-    });
-    if (!saved) return res.status(500).json({ error: "Built the file but couldn't save it — try again" });
+
+    let saved;
+    try {
+      saved = await saveDossier({
+        userId,
+        profileId: profile?.id ?? null,
+        sourceText,
+        sourceLabel,
+        extraction,
+        questions,
+      });
+    } catch (err) {
+      // Named, not swallowed. "Try again" on a write that can never succeed
+      // (a schema that was never pushed, a connection that is refused) sends
+      // a founder round the same loop forever — the extraction is already
+      // paid for by then, so the least we owe them is the actual reason.
+      req.log.error({ err }, "[dossier] save failed");
+      return res.status(500).json({ error: `Built the file but couldn't save it — ${describeDbError(err)}` });
+    }
 
     // Feed what was extracted into the memory the CHAT reads, immediately —
     // the point of the dossier is that the next conversation is better, not
@@ -170,10 +180,24 @@ router.post("/dossier/:id/answers", requireAuth, async (req, res) => {
 
     return res.json({ dossier: serializeDossier(updated) });
   } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to save your answers" });
+    req.log.error({ err }, "[dossier] answers save failed");
+    return res.status(500).json({ error: `Couldn't save your answers — ${describeDbError(err)}` });
   }
 });
+
+// One short, honest clause about why a write failed, safe to show a founder.
+// Postgres error codes are surfaced by name because the two that actually
+// happen here are deployment problems (a table that was never created, a
+// constraint that doesn't exist), and a generic message hides the one fact
+// that would fix them in a minute.
+function describeDbError(err: unknown): string {
+  const code = (err as { code?: string } | null)?.code;
+  if (code === "42P01") return "the company_dossiers table doesn't exist in this database — run the schema push";
+  if (code === "42P10" || code === "42703") return "this database's schema is out of date — run the schema push";
+  if (code === "ECONNREFUSED" || code === "57P01") return "the database isn't reachable right now — try again in a moment";
+  const message = err instanceof Error ? err.message : "";
+  return message ? message.slice(0, 160) : "the database rejected the write";
+}
 
 // Writes the dossier's filled fields into the two stores the chat actually
 // reads (the profile's context blob and company_facts), so intake answers

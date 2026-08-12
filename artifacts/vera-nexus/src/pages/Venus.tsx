@@ -4,7 +4,7 @@ import { useLocation } from 'wouter';
 import {
   getSessions, saveSession, deleteSession, createSession,
   getSavedAnalyses, saveAnalysis, deleteSavedAnalysis,
-  detectAnalysisType, typeLabel, titleFromMessage, takePendingChatId,
+  detectAnalysisType, typeLabel, titleFromMessage, takePendingChatId, hydrateSessionFromServer,
   type ChatSession, type ChatMessage, type SavedAnalysisType, type SavedAnalysis,
   type EvidenceRefEntry, type ContradictionEntry,
 } from '../lib/venusHistory';
@@ -309,6 +309,11 @@ export function VenusPage() {
   const { skin } = useVeraSkin();
   const skinned = skin !== 'classic';
   const [sessions, setSessions] = useState<ChatSession[]>(getSessions);
+  // Set when a specific chat was asked for and this browser has no local
+  // session for it — the effect below fetches its transcript from the server.
+  // A ref rather than state because it is written from the useState
+  // initialiser (one render, no extra pass) and read once by that effect.
+  const pendingRemoteChatId = useRef<{ chatId: number; sessionId: string } | null>(null);
   const [currentSession, setCurrentSession] = useState<ChatSession>(() => {
     const existing = getSessions();
     // A route that isn't this one (Decisions) can ask for a specific chat by
@@ -316,10 +321,29 @@ export function VenusPage() {
     // in an effect so the correct thread is the first thing painted, instead
     // of the most recent one flashing up and being replaced.
     const pending = takePendingChatId();
-    const requested = pending != null ? existing.find((s) => s.serverChatId === pending) : undefined;
+    if (pending == null) return existing.length > 0 ? existing[0] : createSession();
+
+    const requested = existing.find((s) => s.serverChatId === pending);
     if (requested) return requested;
-    return existing.length > 0 ? existing[0] : createSession();
+
+    // No local session for it. This used to fall through to `existing[0]`,
+    // which opened the most recent chat instead — so "Open chat" on a
+    // decision reliably opened the WRONG conversation, with nothing on screen
+    // saying so. Hold an empty placeholder bound to the right server chat and
+    // fill it from the server's message log instead.
+    const placeholder: ChatSession = { ...createSession(), title: 'Opening chat…', serverChatId: pending };
+    pendingRemoteChatId.current = { chatId: pending, sessionId: placeholder.id };
+    return placeholder;
   });
+  // Progress of a rebuild-from-server, tagged with the placeholder session it
+  // belongs to. Keyed that way rather than as a bare boolean so switching to
+  // another chat (or starting a new one) drops the notice on its own, with no
+  // clean-up needed in every handler that changes the session.
+  const [remoteOpen, setRemoteOpen] = useState<{ sessionId: string; status: 'loading' | 'failed' } | null>(
+    pendingRemoteChatId.current
+      ? { sessionId: pendingRemoteChatId.current.sessionId, status: 'loading' }
+      : null,
+  );
   const [saved, setSaved] = useState(getSavedAnalyses);
   const [showSettings, setShowSettings] = useState(false);
   const [showGoalPanel, setShowGoalPanel] = useState(() => loadPanelPref(SHOW_GOAL_PANEL_KEY));
@@ -426,6 +450,29 @@ export function VenusPage() {
   const persistSession = useCallback((session: ChatSession) => {
     saveSession(session);
     setSessions(getSessions());
+  }, []);
+
+  // Fills the placeholder session created above from the server's transcript.
+  // Runs once, only when a chat was asked for by server id and this browser
+  // had no local copy of it.
+  useEffect(() => {
+    const pending = pendingRemoteChatId.current;
+    if (!pending) return;
+    pendingRemoteChatId.current = null;
+
+    let cancelled = false;
+    hydrateSessionFromServer(pending.chatId).then((session) => {
+      if (cancelled) return;
+      if (!session) {
+        // Say nothing happened rather than quietly showing a different chat.
+        setRemoteOpen({ sessionId: pending.sessionId, status: 'failed' });
+        return;
+      }
+      setRemoteOpen(null);
+      setCurrentSession(session);
+      setSessions(getSessions());
+    });
+    return () => { cancelled = true; };
   }, []);
 
   // Lazily creates the real server-side `chats` row the first time it's
@@ -634,15 +681,32 @@ export function VenusPage() {
 
   // Opens a chat by its SERVER id. The command centre's decision follow-ups
   // know which chat they came from as a server chat id, but sessions are
-  // keyed locally — `serverChatId` is the join between the two. Returns
-  // silently when there's no local session for it (a chat started on another
-  // device, or cleared history): navigating to a blank thread would be worse
-  // than leaving the founder where they are.
+  // keyed locally — `serverChatId` is the join between the two. When there is
+  // no local session (a chat started on another device, cleared history, or
+  // one of the older chats past the 50 localStorage keeps) the thread is
+  // rebuilt from the server's message log rather than doing nothing, which is
+  // how this button came to look broken.
   const handleOpenChatById = (serverChatId: number) => {
     const source = getSessions().find((s) => s.serverChatId === serverChatId);
-    if (!source) return;
-    setCurrentSession(source);
+    if (source) {
+      setCurrentSession(source);
+      setMainView('chat');
+      return;
+    }
+
+    const placeholder: ChatSession = { ...createSession(), title: 'Opening chat…', serverChatId };
+    setRemoteOpen({ sessionId: placeholder.id, status: 'loading' });
+    setCurrentSession(placeholder);
     setMainView('chat');
+    hydrateSessionFromServer(serverChatId).then((session) => {
+      if (!session) {
+        setRemoteOpen({ sessionId: placeholder.id, status: 'failed' });
+        return;
+      }
+      setRemoteOpen(null);
+      setCurrentSession(session);
+      setSessions(getSessions());
+    });
   };
 
   // A refinement rewrites the draft in place and is persisted, so the
@@ -1026,7 +1090,29 @@ export function VenusPage() {
         </div>
 
         {/* Messages */}
-        {messages.length === 0 ? (
+        {/* A chat opened by server id that this browser has no local copy of
+            is being rebuilt from the server's transcript. Shown in place of
+            the new-chat hero, because a founder who clicked "Open chat" on a
+            decision and landed on "What can I help with?" reasonably concludes
+            the button did nothing. */}
+        {remoteOpen && remoteOpen.sessionId === currentSession.id ? (
+          <div className="flex-1 overflow-y-auto flex items-center justify-center text-center" style={{ padding: '48px 24px' }}>
+            {remoteOpen.status === 'loading' ? (
+              <div className="flex items-center gap-2 text-[13px]" style={{ color: 'var(--v7-text-mute)' }}>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Opening that chat…
+              </div>
+            ) : (
+              <div className="max-w-[380px]">
+                <AlertCircle className="w-5 h-5 mx-auto mb-2" style={{ color: 'var(--v7-text-mute)' }} />
+                <div className="text-[13px] leading-relaxed" style={{ color: 'var(--v7-text-mute)' }}>
+                  That conversation couldn't be loaded — it may have been deleted.
+                  Nothing else was opened in its place.
+                </div>
+              </div>
+            )}
+          </div>
+        ) : messages.length === 0 ? (
           // NOTE: the outer div is scrollable and the inner div uses `m-auto`
           // instead of the parent using `justify-center`. A centered flex
           // parent with overflow content clips symmetrically and there is no
@@ -2284,12 +2370,18 @@ function VenusCard({ card, index = 0, messageIndex = 0, contextQuery = '', previ
                 {reasoningText && (
                   <div className="text-[13px] text-[var(--muted-text)] leading-relaxed">{renderInline(String(reasoningText))}</div>
                 )}
+                {/* A recessed data strip, not a run of inline key:value pairs —
+                    this was the exact card a founder flagged as "info overload":
+                    reasoning prose and metrics sat in the same visual register,
+                    so nothing told the eye where to stop reading and start
+                    scanning. Label-above-value in bordered cells gives the
+                    scores their own lane. */}
                 {option.scores && isRecord(option.scores) && (
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 pt-2.5" style={{ borderTop: '1px solid var(--vera-inset-border)' }}>
+                  <div className="vera-block vera-score-strip mt-2.5">
                     {Object.entries(option.scores).map(([scoreKey, scoreValue]) => (
-                      <div key={scoreKey} className="flex items-baseline gap-1.5">
-                        <span className="vera-label">{scoreKey.replace(/_/g, ' ')}</span>
-                        <span className="text-xs font-mono text-[var(--text)]">{String(scoreValue)}</span>
+                      <div key={scoreKey} className="vera-score-cell">
+                        <span className="vera-label vera-score-k">{scoreKey.replace(/_/g, ' ')}</span>
+                        <span className="vera-score-v">{String(scoreValue)}</span>
                       </div>
                     ))}
                   </div>
