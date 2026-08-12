@@ -307,7 +307,10 @@ export function VenusPage() {
   // skinned variants are swapped in explicitly. Classic keeps every original
   // inline value and imperative handler untouched.
   const { skin } = useVeraSkin();
-  const skinned = skin !== 'classic';
+  // Every identity is a real design now (classic, which was the absence of
+  // one, is gone), so this is constant true. Kept as a named flag because many
+  // style branches read it; collapsing those is a separate change.
+  const skinned = true;
   const [sessions, setSessions] = useState<ChatSession[]>(getSessions);
   // Set when a specific chat was asked for and this browser has no local
   // session for it — the effect below fetches its transcript from the server.
@@ -779,7 +782,7 @@ export function VenusPage() {
 
   return (
     <div
-      className={`flex h-screen w-full overflow-hidden ${theme === 'light' ? 'v7-light' : ''}`}
+      className={`vera-ground flex h-screen w-full overflow-hidden ${theme === 'light' ? 'v7-light' : ''}`}
       style={{
         background: 'var(--v7-bg)',
         color: 'var(--v7-text)',
@@ -1360,18 +1363,7 @@ export function VenusPage() {
               );
             })}
 
-            {analyzeMutation.isPending && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-3">
-                  <VeraAvatar pulse />
-                  <div className="flex gap-1">
-                    {[0, 150, 300].map(delay => (
-                      <span key={delay} className="w-1.5 h-1.5 bg-[var(--mint)] rounded-full animate-bounce" style={{ animationDelay: `${delay}ms` }} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+            {analyzeMutation.isPending && <VeraTracing />}
             <div ref={endRef} />
           </div>
         )}
@@ -1449,6 +1441,76 @@ function VeraAvatar({ pulse = false }: { pulse?: boolean }) {
       style={{ background: 'var(--v7-bg-raised-2)', border: '1px solid var(--v7-border-strong)' }}
     >
       <VeraMark size={12} />
+    </div>
+  );
+}
+
+// The waiting state used to be three dots bouncing in the accent colour, which
+// says only "something is happening" — the same thing a spinner on a failing
+// request says. This product's whole claim is that it traces a chain rather
+// than guessing, so the wait is the one moment where showing the WORK is worth
+// more than showing progress.
+//
+// Each line resolves from a spinner to a check on a stagger, then the next
+// begins. The copy is deliberately about what Vera is reading rather than a
+// fake percentage, and the last line is open-ended ("Writing it up") because
+// the real request finishes whenever it finishes — nothing here pretends to
+// know how long is left. If the response outlasts the script the final line
+// simply stays spinning, which is honest.
+const TRACING_STEPS = [
+  'Reading your Dossier and connected sources',
+  'Separating what changed from what moved with it',
+  'Testing the chain against your goals',
+  'Writing it up',
+];
+
+function VeraTracing() {
+  const [done, setDone] = useState(0);
+
+  useEffect(() => {
+    // Cleared on unmount, which happens the moment the response lands.
+    const timers = TRACING_STEPS.slice(0, -1).map((_, i) =>
+      setTimeout(() => setDone(i + 1), 700 + i * 900),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  return (
+    <div className="flex justify-start">
+      <div className="flex items-start gap-3">
+        <VeraAvatar pulse />
+        <div className="flex flex-col gap-[7px] pt-0.5">
+          {TRACING_STEPS.map((step, i) => {
+            const complete = i < done;
+            const active = i === done;
+            // Steps that haven't started yet are held at low opacity rather
+            // than hidden, so the block doesn't jump taller on every tick.
+            if (i > done) {
+              return (
+                <div
+                  key={step}
+                  className="vera-trace-line"
+                  style={{ opacity: 0.28 }}
+                  aria-hidden="true"
+                >
+                  <span className="vera-trace-tick" />
+                  <span>{step}</span>
+                </div>
+              );
+            }
+            return (
+              <div
+                key={step}
+                className={`vera-trace-line${complete ? ' is-done' : ''}`}
+                style={{ opacity: 1 }}
+              >
+                <span className="vera-trace-tick" />
+                <span>{step}{active ? '…' : ''}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -2427,8 +2489,13 @@ function VenusCard({ card, index = 0, messageIndex = 0, contextQuery = '', previ
     </div>
   );
 
+  // The title sits in its own banded region rather than floating at the top of
+  // one uniform padded box. That band is what gives the card a masthead and a
+  // body instead of a single undifferentiated block — the specific reason a
+  // stack of these read as "information overload" with nothing telling the eye
+  // where one card's argument started.
   const heading = (
-    <div className="flex items-start justify-between gap-3 text-left">
+    <div className="vera-card-head flex items-start justify-between gap-3 text-left">
       <div className="flex items-baseline gap-2 min-w-0">
         <span className="w-1.5 h-1.5 rounded-full shrink-0 translate-y-[-2px]" style={{ background: color }} />
         <h4 className="text-[11px] font-mono uppercase tracking-[0.07em] leading-[1.5]" style={{ color }}>
@@ -2447,11 +2514,11 @@ function VenusCard({ card, index = 0, messageIndex = 0, contextQuery = '', previ
   );
 
   return (
-    <div id={anchorId} className="vera-card overflow-hidden" style={primary ? { borderColor: 'var(--v7-tint-border)', boxShadow: 'inset 0 0 0 1px var(--v7-tint)' } : undefined}>
+    <div id={anchorId} className="vera-card vera-card-split overflow-hidden" style={primary ? { borderColor: 'var(--v7-tint-border)', boxShadow: 'inset 0 0 0 1px var(--v7-tint)' } : undefined}>
       {primary ? (
         <div>
           {heading}
-          {body}
+          <div className="vera-card-body">{body}</div>
         </div>
       ) : (
         <>
@@ -2463,9 +2530,9 @@ function VenusCard({ card, index = 0, messageIndex = 0, contextQuery = '', previ
               was worth reading. One line of the card's own content costs
               nothing and turns the stack into something scannable. */}
           {!expanded && previewLine && (
-            <p className="mt-2 text-[13px] leading-relaxed text-[var(--dim)] line-clamp-2 text-left">{previewLine}</p>
+            <p className="vera-card-body text-[13px] leading-relaxed text-[var(--dim)] line-clamp-2 text-left">{previewLine}</p>
           )}
-          {expanded && body}
+          {expanded && <div className="vera-card-body">{body}</div>}
         </>
       )}
     </div>

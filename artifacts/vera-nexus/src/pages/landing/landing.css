@@ -32,6 +32,13 @@
   --lp-violet-dim: #6355e0;
   --lp-amber: #e0a340;
 
+  /* The shared Vera mark reads this, falling back to the app's accent when
+     nothing sets it. Pinned to teal here so the logo on the public page stays
+     on the page's OWN palette: the app's accent moves with whichever identity
+     a founder has picked, and the front door should not change colour because
+     of a preference stored in someone's browser. */
+  --vera-mark-ink: var(--lp-teal);
+
   --lp-text: #f2f4f8;
   --lp-text-2: #a4abbb;
   --lp-text-3: #6f7686;

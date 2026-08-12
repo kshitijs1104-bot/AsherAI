@@ -214,8 +214,16 @@
   --v7-glow-2: rgba(91,79,232,0.06);
   --v7-glow-shadow-a: rgba(0,229,176,0.35);
   --v7-glow-shadow-b: rgba(0,229,176,0.55);
-  --v7-font-round: 'M PLUS Rounded 1c', sans-serif;
-  --v7-font-mono: 'IBM Plex Mono', monospace;
+  /* Base fallbacks only — every identity overrides these (see the geometry
+     block further down). Kept off the old rounded face regardless: a soft
+     geometric sans is the default "friendly app" choice and reads as a
+     template no matter what palette sits on top of it. */
+  --v7-font-round: "Segoe UI Variable Text", "SF Pro Text", -apple-system,
+                   BlinkMacSystemFont, system-ui, sans-serif;
+  --v7-font-small: "Segoe UI Variable Small", "SF Pro Text", -apple-system,
+                   BlinkMacSystemFont, system-ui, sans-serif;
+  --v7-font-mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono",
+                  "JetBrains Mono", Menlo, Consolas, monospace;
 
   /* ---- Response-card surface system (dark) --------------------------------
      One named pair for "a card" and one for "a block nested inside a card",
@@ -1034,19 +1042,20 @@
 }
 
 /* ==========================================================================
-   SKINS — Alloy and Vessel
+   IDENTITIES — Deep Tech, Midnight Minimalist, Nordic Green
    ==========================================================================
 
-   Everything below is ADDITIVE. Not one rule above this line was changed, so
-   the original look is still fully described by the stylesheet and is what
-   renders when no skin is selected. `lib/veraSkin.ts` writes
-   `data-skin="alloy" | "vessel"` onto <html>, or removes the attribute
-   entirely for Classic — which means Classic is the *absence* of these
-   overrides rather than a reimplementation of them, and therefore cannot
-   drift away from the original.
+   Everything below is ADDITIVE: not one rule above this line was changed, so
+   the pre-redesign look is still fully described by the stylesheet. Nothing
+   reaches it any more, though — `lib/veraSkin.ts` always writes
+   `data-skin="deep" | "midnight" | "nordic"` onto <html>, with `deep` as the
+   default, so there is no state in which the product renders as its own
+   fallback. (The previous set had a third option, `classic`, defined as the
+   ABSENCE of the attribute. That made the unstyled original reachable, and it
+   is what most sessions actually saw.)
 
-   Two selector groups per skin, because the app applies its palettes at two
-   different levels:
+   Two selector groups per identity, because the app applies its palettes at
+   two different levels:
 
      html[data-skin="X"], html[data-skin="X"] .dark   → dark values
      html[data-skin="X"] .v7-light                    → light values
@@ -1058,426 +1067,539 @@
    silently ignored for every token `.dark` also defines. Both selectors carry
    higher specificity than the originals (0,2,1 vs 0,1,0), so these win.
 
-   Both skins define EVERY token the originals define. A partially covered
-   family would leave the uncovered half showing through from `:root`, which
-   is exactly the "three parallel ramps" problem this replaces.
+   Between them the mode-shared block and the six identity blocks define EVERY
+   token the originals define. A partially covered family would leave the
+   uncovered half showing through from `:root`, which is exactly the "three
+   parallel ramps" problem this replaces.
    ---------------------------------------------------------------------- */
 
-/* ---------- ALLOY · dark ("graphite") ----------------------------------
-   A machined near-black biased green-cyan at 3–5% chroma. The original
-   surfaces were pinned to hue 240 at 16–45% saturation, which is what read
-   as navy; this keeps a cool undertone without the blue cast. One accent —
-   a cool azure, not the brass this shipped with first — and it means "act
-   on this" and nothing else. Brass tested as too warm/amber to read as
-   premium at low light; azure keeps the same single-accent discipline
-   while sitting nowhere near --vera-unprompted's violet. */
-html[data-skin="alloy"],
-html[data-skin="alloy"] .dark {
-  --v7-bg: #0B0C0C;
-  --v7-bg-raised: #1B1E1E;
-  --v7-bg-raised-2: #232827;
-  --v7-border: rgba(240, 245, 243, 0.07);
-  --v7-border-strong: rgba(240, 245, 243, 0.14);
-  --v7-text: #F0F3F2;
-  --v7-text-dim: #B2BAB8;
-  --v7-text-mute: #838C8A;
+/* ---------- Mode-shared values ----------------------------------------
+   Semantic colours, the glow kill and the grain are the same in every
+   identity — they carry meaning (risk, success, caution) or they are
+   structural, and neither should drift between palettes. Only the ground
+   and the accent family are identity-specific, and those live in the six
+   blocks below. Splitting it this way is also what keeps the "every skin
+   defines every token" rule honest without writing the semantic ramp out
+   six times and letting one copy fall behind. */
+html[data-skin] {
+  --mint: #6FBE95;
+  --green: #C98A6A;
+  --amber: #D9A94F;
+  --red: #E5798A;
 
-  /* --v7-cyan is the app's "this is interactive" slot. Was brass (#E0A33C,
-     hue 38° — amber/orange), which read as un-premium and, at low light,
-     close enough to an adult-site palette to be mentioned unprompted more
-     than once. Replaced with a cool azure at hue ~206°: confident and
-     saturated enough to still read as ONE clear accent (not a washed-out
-     "safe" blue), but far enough from both the app's original neon-cyan
-     (168°) and --vera-unprompted's violet (255°, below) to never be
-     mistaken for either. 7.69:1 against this block's #0B0C0C ground. */
-  --v7-cyan: #5AA9E6;
-  --v7-cyan-soft: rgba(90, 169, 230, 0.13);
-  --v7-cyan-strong: rgba(90, 169, 230, 0.42);
-  /* --v7-pink is a card-type label slot, not an action. It deliberately gets
-     a low-chroma slate rather than a second bright hue, so categories stay
-     distinguishable without competing with the accent for attention. Left
-     as-is — its hue (~200°, heavily desaturated) still reads distinct next
-     to the new accent because it is a slate, not a saturated colour. */
-  --v7-pink: #7E93A8;
-  --v7-pink-soft: rgba(126, 147, 168, 0.13);
-
-  /* The user's own chat bubble is not an action — it's their words. Neutral
-     raised surface instead of the old indigo wash. */
-  --v7-tint: #232827;
-  --v7-tint-border: #3B4241;
-
-  /* Retires the gradient-filled word in the hero headline. Written as a
-     literal rather than var(--v7-cyan) because a custom property that
-     references another is substituted where it is DECLARED, not where it is
-     used — pointing it at --v7-cyan here would lock the light theme to the
-     dark accent. */
-  --vera-emph-fg: #5AA9E6;
-  /* Reserved product-wide for one thing: Vera raising something you didn't
-     ask about. Carried across from the Vessel direction into Alloy too — it
-     is the product's actual differentiator, so it earns a hue in both, and
-     nothing else is allowed to borrow it. Muted violet here (hue ~255°) so
-     it stays clearly outside Alloy's single-accent discipline — a full 49°
-     from the accent's azure (206°), same separation the brass/violet pair
-     held before, so swapping the accent didn't quietly collapse this into
-     "two blues that both mean something." */
-  --vera-unprompted: #9B8FC0;
-  --vera-unprompted-soft: rgba(155, 143, 192, 0.13);
-
-  /* Kills the 460px radial-gradient blob behind the hero and the 3.4s
-     breathing halo without touching Venus.tsx: both render straight from
-     these tokens, so transparent values make them no-ops. */
+  /* The original stylesheet's hero blob and 3.4s breathing halo render
+     straight from these, so transparent values switch both off without
+     touching a component. */
   --v7-glow-1: transparent;
   --v7-glow-2: transparent;
   --v7-glow-shadow-a: transparent;
   --v7-glow-shadow-b: transparent;
 
-  --bg: #0B0C0C;
-  --surface: #1B1E1E;
-  --surface2: #232827;
-  --surface3: #2B3130;
-  --border: rgba(240, 245, 243, 0.08);
-  --border2: rgba(240, 245, 243, 0.15);
-  --text: #F0F3F2;
-  --muted: #B2BAB8;
-  --muted-text: #B2BAB8;
-  --dim: #838C8A;
-
-  /* Card-type label slots. One action colour, three muted category hues that
-     read as distinct without any of them looking clickable. Only --indigo
-     moves here (it mirrors the accent by design) — --mint/--green/--amber/
-     --red are semantic category colours, not identity, and stay as they
-     were. */
-  --indigo: #5AA9E6;
-  --indigo-light: #9B8FC0;
-  --mint: #6FAE92;
-  --green: #C98A6A;
-  --amber: #DE9A46;
-  --red: #E06A64;
-
-  --vera-card-bg: #1B1E1E;
-  --vera-card-border: rgba(240, 245, 243, 0.09);
-  --vera-inset-bg: #232827;
-  --vera-inset-border: rgba(240, 245, 243, 0.07);
-  --vera-label-color: #838C8A;
-
-  /* shadcn/Radix chrome, so the shared ui/ components don't clash with the
-     surfaces around them. HSL(206 74% 63%) is the azure accent above; the
-     foreground is a dark ink in the same hue family (208 46% 10%) rather
-     than pure black, matching how the brass version paired amber with a
-     dark-brown ink instead of neutral black. */
-  --background: 180 4% 4%;
-  --foreground: 165 8% 95%;
-  --card: 180 5% 11%;
-  --card-foreground: 165 8% 95%;
-  --card-border: 180 5% 18%;
-  --popover: 180 5% 11%;
-  --popover-foreground: 165 8% 95%;
-  --primary: 206 74% 63%;
-  --primary-foreground: 208 46% 10%;
-  --secondary: 180 5% 15%;
-  --secondary-foreground: 165 8% 95%;
-  --muted-foreground: 165 5% 53%;
-  --accent: 206 74% 63%;
-  --accent-foreground: 208 46% 10%;
-  --input: 180 5% 18%;
-  --ring: 206 74% 63%;
-
-  --vera-cc-bg: #0B0C0C;
-  --vera-cc-paper: #16191A;
-  --vera-cc-paper-edge: #2B3130;
-  --vera-cc-line: rgba(240, 245, 243, 0.08);
-  --vera-cc-text: #F0F3F2;
-  --vera-cc-muted: #B2BAB8;
-  --vera-cc-faint: #838C8A;
-  --vera-cc-accent: #5AA9E6;
-  --vera-cc-accent-dim: rgba(90, 169, 230, 0.13);
-  --vera-cc-accent-border: rgba(90, 169, 230, 0.34);
-  --vera-cc-second: #7E93A8;
-  --vera-cc-second-dim: rgba(126, 147, 168, 0.13);
-  --vera-cc-second-border: rgba(126, 147, 168, 0.32);
-  --vera-cc-rule: rgba(126, 147, 168, 0.30);
-  --vera-cc-dogear: #0B0C0C;
+  --vera-grain-opacity: 0.028;
+  --vera-grain-blend: overlay;
 }
 
-/* ---------- ALLOY · light ("stone") ------------------------------------
-   Warm, biased clay at under 4% chroma — warm without reading as cream
-   paper. Elevation in light mode is carried by shadow rather than by the
-   face stepping up the ramp, because a white face has nowhere lighter to go;
-   see the elevation tokens further down. */
-html[data-skin="alloy"] .v7-light {
-  --v7-bg: #FAF8F5;
-  --v7-bg-raised: #FFFFFF;
-  --v7-bg-raised-2: #F3F0EA;
-  --v7-border: #E4DED4;
-  --v7-border-strong: #C9C1B2;
-  --v7-text: #16181A;
-  --v7-text-dim: #464B4E;
-  --v7-text-mute: #6C716F;
+html[data-skin] .v7-light {
+  --mint: #1F6B54;
+  --green: #8A4B22;
+  --amber: #78500F;
+  --red: #A32B3C;
 
-  /* Cobalt, hue ~203° — the light-mode read of the same azure accent above.
-     6.60:1 against this block's #FAF8F5 ground, comfortably past the amber
-     original's 5.47:1 on the same page. */
-  --v7-cyan: #155E8A;
-  --v7-cyan-soft: #E7F1F7;
-  --v7-cyan-strong: #155E8A;
+  --vera-grain-opacity: 0.04;
+  --vera-grain-blend: multiply;
+}
+
+/* ---------- DEEP TECH · dark ------------------------------------------
+   Slate near-black with indigo and violet light behind it. The default
+   identity, and the most atmospheric of the three. */
+html[data-skin="deep"],
+html[data-skin="deep"] .dark {
+  --v7-bg: #06070D;
+  --v7-bg-raised: #0E1017;
+  --v7-bg-raised-2: #161923;
+  --v7-border: rgba(230, 235, 245, 0.085);
+  --v7-border-strong: rgba(230, 235, 245, 0.16);
+  --v7-text: #EDEFF5;
+  --v7-text-dim: #B6BDCC;
+  --v7-text-mute: #99A2B4;
+
+  --v7-cyan: #7C88F0;
+  --v7-cyan-soft: rgba(124, 136, 240, 0.14);
+  --v7-cyan-strong: rgba(124, 136, 240, 0.42);
+  --v7-pink: #A78BFA;
+  --v7-pink-soft: rgba(167, 139, 250, 0.13);
+
+  --v7-tint: #161923;
+  --v7-tint-border: #2A2F3E;
+  --vera-emph-fg: #7C88F0;
+  /* Reserved product-wide for one thing: Vera raising something you didn't
+     ask about. Warm on purpose — this identity's own accent and category
+     hues are both cool, so a third cool tone would be indistinguishable
+     from "some other kind of link". */
+  --vera-unprompted: #E0B37A;
+  --vera-unprompted-soft: rgba(224, 179, 122, 0.13);
+
+  --vera-wash-1: rgba(124, 136, 240, 0.16);
+  --vera-wash-2: rgba(139, 92, 246, 0.11);
+
+  --bg: #06070D;
+  --surface: #0E1017;
+  --surface2: #161923;
+  --surface3: #1E2231;
+  --border: rgba(230, 235, 245, 0.09);
+  --border2: rgba(230, 235, 245, 0.17);
+  --text: #EDEFF5;
+  --muted: #B6BDCC;
+  --muted-text: #B6BDCC;
+  --dim: #99A2B4;
+
+  --indigo: #7C88F0;
+  --indigo-light: #A78BFA;
+
+  --vera-card-bg: #0E1017;
+  --vera-card-border: rgba(230, 235, 245, 0.10);
+  --vera-inset-bg: #161923;
+  --vera-inset-border: rgba(230, 235, 245, 0.075);
+  --vera-label-color: #99A2B4;
+
+  --background: 231 40% 4%;
+  --foreground: 228 24% 95%;
+  --card: 228 22% 8%;
+  --card-foreground: 228 24% 95%;
+  --card-border: 228 18% 16%;
+  --popover: 228 22% 8%;
+  --popover-foreground: 228 24% 95%;
+  --primary: 234 79% 71%;
+  --primary-foreground: 235 45% 12%;
+  --secondary: 228 20% 13%;
+  --secondary-foreground: 228 24% 95%;
+  --muted-foreground: 225 14% 65%;
+  --accent: 234 79% 71%;
+  --accent-foreground: 235 45% 12%;
+  --input: 228 18% 16%;
+  --ring: 234 79% 71%;
+
+  --vera-cc-bg: #06070D;
+  --vera-cc-paper: #0E1017;
+  --vera-cc-paper-edge: #232838;
+  --vera-cc-line: rgba(230, 235, 245, 0.085);
+  --vera-cc-text: #EDEFF5;
+  --vera-cc-muted: #B6BDCC;
+  --vera-cc-faint: #99A2B4;
+  --vera-cc-accent: #7C88F0;
+  --vera-cc-accent-dim: rgba(124, 136, 240, 0.14);
+  --vera-cc-accent-border: rgba(124, 136, 240, 0.34);
+  --vera-cc-second: #A78BFA;
+  --vera-cc-second-dim: rgba(167, 139, 250, 0.13);
+  --vera-cc-second-border: rgba(167, 139, 250, 0.32);
+  --vera-cc-rule: rgba(167, 139, 250, 0.30);
+  --vera-cc-dogear: #06070D;
+}
+
+/* ---------- DEEP TECH · light ----------------------------------------- */
+html[data-skin="deep"] .v7-light {
+  --v7-bg: #F7F8FB;
+  --v7-bg-raised: #FFFFFF;
+  --v7-bg-raised-2: #EDF0F6;
+  --v7-border: #E1E5EE;
+  --v7-border-strong: #C7CDDC;
+  --v7-text: #10131C;
+  --v7-text-dim: #454C5E;
+  --v7-text-mute: #4B5265;
+
+  --v7-cyan: #4149BE;
+  --v7-cyan-soft: #E9EAF8;
+  --v7-cyan-strong: #4149BE;
+  --v7-pink: #6B3A7C;
+  --v7-pink-soft: #F1E9F4;
+
+  --v7-tint: #EDF0F6;
+  --v7-tint-border: #D5DBE8;
+  --vera-emph-fg: #4149BE;
+  --vera-unprompted: #8A5A14;
+  --vera-unprompted-soft: #F7EEDF;
+
+  --vera-wash-1: rgba(65, 73, 190, 0.09);
+  --vera-wash-2: rgba(120, 90, 190, 0.07);
+
+  --bg: #F7F8FB;
+  --surface: #FFFFFF;
+  --surface2: #EDF0F6;
+  --surface3: #E2E7F1;
+  --border: #E1E5EE;
+  --border2: #CFD6E4;
+  --text: #10131C;
+  --muted: #454C5E;
+  --muted-text: #454C5E;
+  --dim: #4B5265;
+
+  --indigo: #4149BE;
+  --indigo-light: #6B3A7C;
+
+  --vera-card-bg: #FFFFFF;
+  --vera-card-border: #E1E5EE;
+  --vera-inset-bg: #F4F6FA;
+  --vera-inset-border: #E4E8F1;
+  --vera-label-color: #4B5265;
+
+  --background: 228 40% 98%;
+  --foreground: 228 28% 9%;
+  --card: 0 0% 100%;
+  --card-foreground: 228 28% 9%;
+  --card-border: 222 26% 91%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 228 28% 9%;
+  --primary: 236 49% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 225 38% 95%;
+  --secondary-foreground: 228 28% 9%;
+  --muted-foreground: 226 15% 35%;
+  --accent: 236 49% 50%;
+  --accent-foreground: 0 0% 100%;
+  --input: 222 26% 91%;
+  --ring: 236 49% 50%;
+
+  --vera-cc-bg: #EDF0F6;
+  --vera-cc-paper: #FFFFFF;
+  --vera-cc-paper-edge: #D5DBE8;
+  --vera-cc-line: rgba(16, 19, 28, 0.11);
+  --vera-cc-text: #10131C;
+  --vera-cc-muted: #454C5E;
+  --vera-cc-faint: #4B5265;
+  --vera-cc-accent: #4149BE;
+  --vera-cc-accent-dim: #E9EAF8;
+  --vera-cc-accent-border: #B9BDE8;
+  --vera-cc-second: #6B3A7C;
+  --vera-cc-second-dim: #F1E9F4;
+  --vera-cc-second-border: #D9C5E1;
+  --vera-cc-rule: rgba(107, 58, 124, 0.32);
+  --vera-cc-dogear: #EDF0F6;
+}
+
+/* ---------- MIDNIGHT MINIMALIST · dark --------------------------------
+   Flat matte graphite. No wash to speak of, hairline rules, and a steel
+   blue that is the only saturated thing on the page. */
+html[data-skin="midnight"],
+html[data-skin="midnight"] .dark {
+  --v7-bg: #08090A;
+  --v7-bg-raised: #121314;
+  --v7-bg-raised-2: #1A1C1D;
+  --v7-border: rgba(255, 255, 255, 0.075);
+  --v7-border-strong: rgba(255, 255, 255, 0.15);
+  --v7-text: #F4F4F5;
+  --v7-text-dim: #B9BABE;
+  --v7-text-mute: #A0A2A8;
+
+  --v7-cyan: #7FB6C8;
+  --v7-cyan-soft: rgba(127, 182, 200, 0.12);
+  --v7-cyan-strong: rgba(127, 182, 200, 0.40);
+  --v7-pink: #8E9BA6;
+  --v7-pink-soft: rgba(142, 155, 166, 0.13);
+
+  --v7-tint: #1A1C1D;
+  --v7-tint-border: #2C2F31;
+  --vera-emph-fg: #7FB6C8;
+  --vera-unprompted: #C9A66B;
+  --vera-unprompted-soft: rgba(201, 166, 107, 0.13);
+
+  --vera-wash-1: rgba(127, 182, 200, 0.06);
+  --vera-wash-2: transparent;
+
+  --bg: #08090A;
+  --surface: #121314;
+  --surface2: #1A1C1D;
+  --surface3: #232527;
+  --border: rgba(255, 255, 255, 0.08);
+  --border2: rgba(255, 255, 255, 0.16);
+  --text: #F4F4F5;
+  --muted: #B9BABE;
+  --muted-text: #B9BABE;
+  --dim: #A0A2A8;
+
+  --indigo: #7FB6C8;
+  --indigo-light: #8E9BA6;
+
+  --vera-card-bg: #121314;
+  --vera-card-border: rgba(255, 255, 255, 0.095);
+  --vera-inset-bg: #1A1C1D;
+  --vera-inset-border: rgba(255, 255, 255, 0.07);
+  --vera-label-color: #A0A2A8;
+
+  --background: 210 6% 4%;
+  --foreground: 240 5% 96%;
+  --card: 200 4% 7%;
+  --card-foreground: 240 5% 96%;
+  --card-border: 200 4% 15%;
+  --popover: 200 4% 7%;
+  --popover-foreground: 240 5% 96%;
+  --primary: 195 40% 64%;
+  --primary-foreground: 193 65% 7%;
+  --secondary: 200 4% 12%;
+  --secondary-foreground: 240 5% 96%;
+  --muted-foreground: 220 5% 64%;
+  --accent: 195 40% 64%;
+  --accent-foreground: 193 65% 7%;
+  --input: 200 4% 15%;
+  --ring: 195 40% 64%;
+
+  --vera-cc-bg: #08090A;
+  --vera-cc-paper: #121314;
+  --vera-cc-paper-edge: #2A2D2F;
+  --vera-cc-line: rgba(255, 255, 255, 0.075);
+  --vera-cc-text: #F4F4F5;
+  --vera-cc-muted: #B9BABE;
+  --vera-cc-faint: #A0A2A8;
+  --vera-cc-accent: #7FB6C8;
+  --vera-cc-accent-dim: rgba(127, 182, 200, 0.12);
+  --vera-cc-accent-border: rgba(127, 182, 200, 0.32);
+  --vera-cc-second: #8E9BA6;
+  --vera-cc-second-dim: rgba(142, 155, 166, 0.13);
+  --vera-cc-second-border: rgba(142, 155, 166, 0.30);
+  --vera-cc-rule: rgba(142, 155, 166, 0.28);
+  --vera-cc-dogear: #08090A;
+}
+
+/* ---------- MIDNIGHT MINIMALIST · light -------------------------------- */
+html[data-skin="midnight"] .v7-light {
+  --v7-bg: #FAFAFA;
+  --v7-bg-raised: #FFFFFF;
+  --v7-bg-raised-2: #F1F1F2;
+  --v7-border: #E4E4E5;
+  --v7-border-strong: #C9CACB;
+  --v7-text: #0C0D0E;
+  --v7-text-dim: #46484D;
+  --v7-text-mute: #4F5258;
+
+  --v7-cyan: #27606F;
+  --v7-cyan-soft: #E6EFF2;
+  --v7-cyan-strong: #27606F;
   --v7-pink: #4E6275;
   --v7-pink-soft: #E9EDF1;
 
-  --v7-tint: #F3F0EA;
-  --v7-tint-border: #DAD3C7;
-  --vera-emph-fg: #155E8A;
-  --vera-unprompted: #5B4E8C;
-  --vera-unprompted-soft: #ECEAF5;
+  --v7-tint: #F1F1F2;
+  --v7-tint-border: #D8D9DA;
+  --vera-emph-fg: #27606F;
+  --vera-unprompted: #7A5310;
+  --vera-unprompted-soft: #F6EEDF;
 
-  --v7-glow-1: transparent;
-  --v7-glow-2: transparent;
-  --v7-glow-shadow-a: transparent;
-  --v7-glow-shadow-b: transparent;
+  --vera-wash-1: rgba(39, 96, 111, 0.06);
+  --vera-wash-2: transparent;
 
-  --bg: #FAF8F5;
+  --bg: #FAFAFA;
   --surface: #FFFFFF;
-  /* The original light palette set --surface and --surface2 to the same
-     #ffffff, so an intended step in the ramp did nothing. Every remaining
-     --surface2 consumer is an inset (form fields, chips, the composer well,
-     inline code), never a card face — response cards paint --vera-card-bg —
-     so giving it a real recessed value fixes the dead step without turning
-     any card into a hole. */
-  --surface2: #F3F0EA;
-  --surface3: #E9E4DB;
-  --border: #E4DED4;
-  --border2: #D3CBBD;
-  --text: #16181A;
-  --muted: #464B4E;
-  --muted-text: #464B4E;
-  --dim: #6C716F;
+  --surface2: #F1F1F2;
+  --surface3: #E7E7E8;
+  --border: #E4E4E5;
+  --border2: #D2D3D4;
+  --text: #0C0D0E;
+  --muted: #46484D;
+  --muted-text: #46484D;
+  --dim: #4F5258;
 
-  --indigo: #155E8A;
-  --indigo-light: #5B4E8C;
-  --mint: #1F6B54;
-  --green: #8A4B22;
-  --amber: #8A5A14;
-  --red: #A62E2E;
+  --indigo: #27606F;
+  --indigo-light: #4E6275;
 
   --vera-card-bg: #FFFFFF;
-  --vera-card-border: #E4DED4;
-  --vera-inset-bg: #F3F0EA;
-  --vera-inset-border: #E7E1D8;
-  --vera-label-color: #6C716F;
+  --vera-card-border: #E4E4E5;
+  --vera-inset-bg: #F5F5F6;
+  --vera-inset-border: #E8E8E9;
+  --vera-label-color: #4F5258;
 
-  --background: 40 25% 97%;
-  --foreground: 200 8% 9%;
+  --background: 0 0% 98%;
+  --foreground: 210 8% 5%;
   --card: 0 0% 100%;
-  --card-foreground: 200 8% 9%;
-  --card-border: 38 22% 86%;
+  --card-foreground: 210 8% 5%;
+  --card-border: 240 3% 90%;
   --popover: 0 0% 100%;
-  --popover-foreground: 200 8% 9%;
-  --primary: 203 74% 31%;
+  --popover-foreground: 210 8% 5%;
+  --primary: 193 48% 29%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 38 25% 94%;
-  --secondary-foreground: 200 8% 9%;
-  --muted-foreground: 165 3% 43%;
-  --accent: 203 74% 31%;
+  --secondary: 240 3% 95%;
+  --secondary-foreground: 210 8% 5%;
+  --muted-foreground: 225 6% 33%;
+  --accent: 193 48% 29%;
   --accent-foreground: 0 0% 100%;
-  --input: 38 22% 86%;
-  --ring: 203 74% 31%;
+  --input: 240 3% 90%;
+  --ring: 193 48% 29%;
 
-  --vera-cc-bg: #F3F0EA;
+  --vera-cc-bg: #F1F1F2;
   --vera-cc-paper: #FFFFFF;
-  --vera-cc-paper-edge: #DAD3C7;
-  --vera-cc-line: rgba(74, 60, 36, 0.11);
-  --vera-cc-text: #16181A;
-  --vera-cc-muted: #464B4E;
-  --vera-cc-faint: #6C716F;
-  --vera-cc-accent: #155E8A;
-  --vera-cc-accent-dim: #E7F1F7;
-  --vera-cc-accent-border: #A8C7DC;
+  --vera-cc-paper-edge: #D8D9DA;
+  --vera-cc-line: rgba(12, 13, 14, 0.11);
+  --vera-cc-text: #0C0D0E;
+  --vera-cc-muted: #46484D;
+  --vera-cc-faint: #4F5258;
+  --vera-cc-accent: #27606F;
+  --vera-cc-accent-dim: #E6EFF2;
+  --vera-cc-accent-border: #A9C6CF;
   --vera-cc-second: #4E6275;
   --vera-cc-second-dim: #E9EDF1;
   --vera-cc-second-border: #C2CDD7;
-  --vera-cc-rule: rgba(78, 98, 117, 0.34);
-  --vera-cc-dogear: #F3F0EA;
+  --vera-cc-rule: rgba(78, 98, 117, 0.32);
+  --vera-cc-dogear: #F1F1F2;
 }
 
-/* ---------- VESSEL · dark ("espresso") ---------------------------------
-   Warm near-black with a plum undertone. Verdigris is the action colour —
-   an oxidised version of the mint already in the product, keeping the brand
-   equity while removing the neon. Aubergine is reserved product-wide for one
-   thing: Vera speaking unprompted. */
-html[data-skin="vessel"],
-html[data-skin="vessel"] .dark {
-  --v7-bg: #0C0A0D;
-  --v7-bg-raised: #1C1820;
-  --v7-bg-raised-2: #262029;
-  --v7-border: rgba(245, 240, 243, 0.075);
-  --v7-border-strong: rgba(245, 240, 243, 0.15);
-  --v7-text: #F5F0F3;
-  --v7-text-dim: #C0B5BE;
-  --v7-text-mute: #8E8290;
+/* ---------- NORDIC GREEN · dark ---------------------------------------
+   A slate-stone canvas carrying a green undertone, with muted pine as the
+   action colour. The quietest of the three. */
+html[data-skin="nordic"],
+html[data-skin="nordic"] .dark {
+  --v7-bg: #101614;
+  --v7-bg-raised: #18201D;
+  --v7-bg-raised-2: #1F2825;
+  --v7-border: rgba(224, 238, 230, 0.09);
+  --v7-border-strong: rgba(224, 238, 230, 0.17);
+  --v7-text: #E9EFEB;
+  --v7-text-dim: #B3C0B8;
+  --v7-text-mute: #9AA89F;
 
-  --v7-cyan: #4FC0A5;
-  --v7-cyan-soft: rgba(79, 192, 165, 0.13);
-  --v7-cyan-strong: rgba(79, 192, 165, 0.44);
-  --v7-pink: #B98BC9;
-  --v7-pink-soft: rgba(185, 139, 201, 0.13);
+  --v7-cyan: #82B295;
+  --v7-cyan-soft: rgba(130, 178, 149, 0.14);
+  --v7-cyan-strong: rgba(130, 178, 149, 0.40);
+  --v7-pink: #A3B8AC;
+  --v7-pink-soft: rgba(163, 184, 172, 0.13);
 
-  --v7-tint: #262029;
-  --v7-tint-border: #3E3543;
-  --vera-emph-fg: #4FC0A5;
-  /* Vessel's second voice, and the reason it exists. */
-  --vera-unprompted: #B98BC9;
-  --vera-unprompted-soft: rgba(185, 139, 201, 0.13);
+  --v7-tint: #1F2825;
+  --v7-tint-border: #31403A;
+  --vera-emph-fg: #82B295;
+  --vera-unprompted: #C9A66B;
+  --vera-unprompted-soft: rgba(201, 166, 107, 0.13);
 
-  --v7-glow-1: transparent;
-  --v7-glow-2: transparent;
-  --v7-glow-shadow-a: transparent;
-  --v7-glow-shadow-b: transparent;
+  --vera-wash-1: rgba(94, 143, 115, 0.14);
+  --vera-wash-2: rgba(110, 130, 120, 0.08);
 
-  --bg: #0C0A0D;
-  --surface: #1C1820;
-  --surface2: #262029;
-  --surface3: #332C36;
-  --border: rgba(245, 240, 243, 0.085);
-  --border2: rgba(245, 240, 243, 0.16);
-  --text: #F5F0F3;
-  --muted: #C0B5BE;
-  --muted-text: #C0B5BE;
-  --dim: #8E8290;
+  --bg: #101614;
+  --surface: #18201D;
+  --surface2: #1F2825;
+  --surface3: #29332E;
+  --border: rgba(224, 238, 230, 0.095);
+  --border2: rgba(224, 238, 230, 0.18);
+  --text: #E9EFEB;
+  --muted: #B3C0B8;
+  --muted-text: #B3C0B8;
+  --dim: #9AA89F;
 
-  --indigo: #4FC0A5;
-  --indigo-light: #B98BC9;
-  --mint: #7FB98F;
-  --green: #D08A6A;
-  --amber: #DDA05A;
-  --red: #E0707F;
+  --indigo: #82B295;
+  --indigo-light: #A3B8AC;
 
-  --vera-card-bg: #1C1820;
-  --vera-card-border: rgba(245, 240, 243, 0.09);
-  --vera-inset-bg: #262029;
-  --vera-inset-border: rgba(245, 240, 243, 0.07);
-  --vera-label-color: #8E8290;
+  --vera-card-bg: #18201D;
+  --vera-card-border: rgba(224, 238, 230, 0.10);
+  --vera-inset-bg: #1F2825;
+  --vera-inset-border: rgba(224, 238, 230, 0.075);
+  --vera-label-color: #9AA89F;
 
-  --background: 285 8% 5%;
-  --foreground: 315 15% 95%;
-  --card: 280 13% 11%;
-  --card-foreground: 315 15% 95%;
-  --card-border: 285 12% 19%;
-  --popover: 280 13% 11%;
-  --popover-foreground: 315 15% 95%;
-  --primary: 166 47% 53%;
-  --primary-foreground: 166 65% 8%;
-  --secondary: 285 12% 15%;
-  --secondary-foreground: 315 15% 95%;
-  --muted-foreground: 288 6% 54%;
-  --accent: 166 47% 53%;
-  --accent-foreground: 166 65% 8%;
-  --input: 285 12% 19%;
-  --ring: 166 47% 53%;
+  --background: 160 18% 6%;
+  --foreground: 150 14% 93%;
+  --card: 156 14% 11%;
+  --card-foreground: 150 14% 93%;
+  --card-border: 156 12% 19%;
+  --popover: 156 14% 11%;
+  --popover-foreground: 150 14% 93%;
+  --primary: 144 24% 60%;
+  --primary-foreground: 150 40% 5%;
+  --secondary: 156 12% 15%;
+  --secondary-foreground: 150 14% 93%;
+  --muted-foreground: 145 8% 63%;
+  --accent: 144 24% 60%;
+  --accent-foreground: 150 40% 5%;
+  --input: 156 12% 19%;
+  --ring: 144 24% 60%;
 
-  --vera-cc-bg: #0C0A0D;
-  --vera-cc-paper: #181420;
-  --vera-cc-paper-edge: #322B38;
-  --vera-cc-line: rgba(245, 240, 243, 0.08);
-  --vera-cc-text: #F5F0F3;
-  --vera-cc-muted: #C0B5BE;
-  --vera-cc-faint: #8E8290;
-  --vera-cc-accent: #4FC0A5;
-  --vera-cc-accent-dim: rgba(79, 192, 165, 0.13);
-  --vera-cc-accent-border: rgba(79, 192, 165, 0.32);
-  --vera-cc-second: #B98BC9;
-  --vera-cc-second-dim: rgba(185, 139, 201, 0.13);
-  --vera-cc-second-border: rgba(185, 139, 201, 0.32);
-  --vera-cc-rule: rgba(185, 139, 201, 0.34);
-  --vera-cc-dogear: #0C0A0D;
+  --vera-cc-bg: #101614;
+  --vera-cc-paper: #18201D;
+  --vera-cc-paper-edge: #2C3833;
+  --vera-cc-line: rgba(224, 238, 230, 0.085);
+  --vera-cc-text: #E9EFEB;
+  --vera-cc-muted: #B3C0B8;
+  --vera-cc-faint: #9AA89F;
+  --vera-cc-accent: #82B295;
+  --vera-cc-accent-dim: rgba(130, 178, 149, 0.14);
+  --vera-cc-accent-border: rgba(130, 178, 149, 0.32);
+  --vera-cc-second: #A3B8AC;
+  --vera-cc-second-dim: rgba(163, 184, 172, 0.13);
+  --vera-cc-second-border: rgba(163, 184, 172, 0.30);
+  --vera-cc-rule: rgba(163, 184, 172, 0.28);
+  --vera-cc-dogear: #101614;
 }
 
-/* ---------- VESSEL · light ("limewash") --------------------------------
-   Warm, but violet-clay warm (~350–20°, chroma under 3%) rather than the
-   yellow-cream that a warm light mode usually reaches for. That is what
-   keeps it from reading as aged paper next to cool accents — the exact
-   objection recorded against the earlier beige pass. */
-html[data-skin="vessel"] .v7-light {
-  --v7-bg: #F7F3F2;
+/* ---------- NORDIC GREEN · light --------------------------------------- */
+html[data-skin="nordic"] .v7-light {
+  --v7-bg: #F6F8F6;
   --v7-bg-raised: #FFFFFF;
-  --v7-bg-raised-2: #EEE9E8;
-  --v7-border: #E2DADA;
-  --v7-border-strong: #C6BABC;
-  --v7-text: #1A1519;
-  --v7-text-dim: #4B4149;
-  --v7-text-mute: #6E626A;
+  --v7-bg-raised-2: #ECF1EE;
+  --v7-border: #E0E7E2;
+  --v7-border-strong: #C5CFC8;
+  --v7-text: #101613;
+  --v7-text-dim: #414B45;
+  --v7-text-mute: #49534C;
 
-  --v7-cyan: #0E6E5C;
-  --v7-cyan-soft: #E3F0EC;
-  --v7-cyan-strong: #0E6E5C;
-  --v7-pink: #6B3A7C;
-  --v7-pink-soft: #F0E8F3;
+  --v7-cyan: #35604A;
+  --v7-cyan-soft: #E6F0EA;
+  --v7-cyan-strong: #35604A;
+  --v7-pink: #4A5F52;
+  --v7-pink-soft: #E9EFEB;
 
-  --v7-tint: #EEE9E8;
-  --v7-tint-border: #D5CCCD;
-  --vera-emph-fg: #0E6E5C;
-  --vera-unprompted: #6B3A7C;
-  --vera-unprompted-soft: #F0E8F3;
+  --v7-tint: #ECF1EE;
+  --v7-tint-border: #D3DDD7;
+  --vera-emph-fg: #35604A;
+  --vera-unprompted: #7A5310;
+  --vera-unprompted-soft: #F6EEDF;
 
-  --v7-glow-1: transparent;
-  --v7-glow-2: transparent;
-  --v7-glow-shadow-a: transparent;
-  --v7-glow-shadow-b: transparent;
+  --vera-wash-1: rgba(53, 96, 74, 0.09);
+  --vera-wash-2: rgba(100, 120, 110, 0.06);
 
-  --bg: #F7F3F2;
+  --bg: #F6F8F6;
   --surface: #FFFFFF;
-  --surface2: #EEE9E8;
-  --surface3: #E4DDDD;
-  --border: #E2DADA;
-  --border2: #D2C7C9;
-  --text: #1A1519;
-  --muted: #4B4149;
-  --muted-text: #4B4149;
-  --dim: #6E626A;
+  --surface2: #ECF1EE;
+  --surface3: #E1E8E4;
+  --border: #E0E7E2;
+  --border2: #CDD7D1;
+  --text: #101613;
+  --muted: #414B45;
+  --muted-text: #414B45;
+  --dim: #49534C;
 
-  --indigo: #0E6E5C;
-  --indigo-light: #6B3A7C;
-  --mint: #0F6B57;
-  --green: #8C4A2F;
-  --amber: #8A5A14;
-  --red: #A83244;
+  --indigo: #35604A;
+  --indigo-light: #4A5F52;
 
   --vera-card-bg: #FFFFFF;
-  --vera-card-border: #E2DADA;
-  --vera-inset-bg: #F7F3F2;
-  --vera-inset-border: #E7E0E0;
-  --vera-label-color: #6E626A;
+  --vera-card-border: #E0E7E2;
+  --vera-inset-bg: #F3F7F4;
+  --vera-inset-border: #E4EBE7;
+  --vera-label-color: #49534C;
 
-  --background: 12 21% 96%;
-  --foreground: 300 11% 9%;
+  --background: 140 20% 97%;
+  --foreground: 156 18% 7%;
   --card: 0 0% 100%;
-  --card-foreground: 300 11% 9%;
-  --card-border: 0 14% 87%;
+  --card-foreground: 156 18% 7%;
+  --card-border: 145 15% 90%;
   --popover: 0 0% 100%;
-  --popover-foreground: 300 11% 9%;
-  --primary: 168 77% 24%;
+  --popover-foreground: 156 18% 7%;
+  --primary: 149 29% 29%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 10 15% 93%;
-  --secondary-foreground: 300 11% 9%;
-  --muted-foreground: 288 6% 44%;
-  --accent: 168 77% 24%;
+  --secondary: 145 18% 94%;
+  --secondary-foreground: 156 18% 7%;
+  --muted-foreground: 150 8% 30%;
+  --accent: 149 29% 29%;
   --accent-foreground: 0 0% 100%;
-  --input: 0 14% 87%;
-  --ring: 168 77% 24%;
+  --input: 145 15% 90%;
+  --ring: 149 29% 29%;
 
-  --vera-cc-bg: #EEE9E8;
+  --vera-cc-bg: #ECF1EE;
   --vera-cc-paper: #FFFFFF;
-  --vera-cc-paper-edge: #D5CCCD;
-  --vera-cc-line: rgba(50, 34, 44, 0.11);
-  --vera-cc-text: #1A1519;
-  --vera-cc-muted: #4B4149;
-  --vera-cc-faint: #6E626A;
-  --vera-cc-accent: #0E6E5C;
-  --vera-cc-accent-dim: #E3F0EC;
-  --vera-cc-accent-border: #B4D7CE;
-  --vera-cc-second: #6B3A7C;
-  --vera-cc-second-dim: #F0E8F3;
-  --vera-cc-second-border: #D6C1DE;
-  --vera-cc-rule: rgba(107, 58, 124, 0.34);
-  --vera-cc-dogear: #EEE9E8;
+  --vera-cc-paper-edge: #D3DDD7;
+  --vera-cc-line: rgba(16, 22, 19, 0.11);
+  --vera-cc-text: #101613;
+  --vera-cc-muted: #414B45;
+  --vera-cc-faint: #49534C;
+  --vera-cc-accent: #35604A;
+  --vera-cc-accent-dim: #E6F0EA;
+  --vera-cc-accent-border: #AFC9BA;
+  --vera-cc-second: #4A5F52;
+  --vera-cc-second-dim: #E9EFEB;
+  --vera-cc-second-border: #C3D0C8;
+  --vera-cc-rule: rgba(74, 95, 82, 0.32);
+  --vera-cc-dogear: #ECF1EE;
 }
 
 /* ---------- Geometry, elevation and type, per skin ---------------------
@@ -1491,24 +1613,53 @@ html[data-skin="vessel"] .v7-light {
    the original stylesheet is authored at `/ 0.00` alpha — ten tokens, all
    fully transparent — which is why nothing in the product currently reads as
    a physical object. */
-html[data-skin="alloy"] {
-  --radius: 0.625rem;          /* 10px → sm 6 · md 8 · lg 10 · xl 14 */
-  --vera-r-panel: 20px;
-  --vera-r-card: 14px;
-  --vera-r-inset: 8px;
-  --vera-card-pad: 20px;
-  --vera-block-pad: 14px;
+/* Geometry and type are shared by all three identities — they are what makes
+   the product feel like one product regardless of palette. Only Midnight
+   diverges, and only on radius, because "tighter corners" is the whole of its
+   stated character.
 
-  --vera-font-display: 'Archivo', 'Segoe UI', system-ui, sans-serif;
-  --app-font-sans: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
-  --v7-font-round: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
-  --v7-font-mono: 'Azeret Mono', 'IBM Plex Mono', ui-monospace, monospace;
-  --app-font-mono: 'Azeret Mono', 'IBM Plex Mono', ui-monospace, monospace;
-  --vera-display-weight: 600;
-  --vera-display-tracking: -0.022em;
+   TYPE. The previous skins pulled six Google faces (Archivo, Instrument Sans,
+   Instrument Serif, Onest, Azeret Mono, Spline Sans Mono) on top of the base
+   sheet's M PLUS Rounded 1c. That rounded face in particular is what read as
+   generic — a soft geometric sans is the default "friendly app" choice and
+   carries no opinion at all.
+
+   These point instead at the platform's OWN variable families, at their real
+   optical sizes: Segoe UI Variable Display / Text / Small on Windows, SF Pro
+   Display / Text on macOS. Two things follow. Headings render on a face cut
+   for large sizes and body copy on one cut for small, which is a distinction
+   no single webfont can make. And the intermediate weights used below (450,
+   550, 650) actually resolve, where a static family would snap each of them to
+   400 or 700 and flatten the hierarchy back out — which is the specific reason
+   the old set looked uniform no matter how the sizes were tuned. */
+html[data-skin] {
+  --radius: 0.5rem;            /* 8px → sm 4 · md 6 · lg 8 · xl 12 */
+  --vera-r-panel: 12px;
+  --vera-r-card: 10px;
+  --vera-r-inset: 6px;
+  --vera-card-pad: 18px;
+  --vera-block-pad: 12px;
+
+  --vera-font-display: "Segoe UI Variable Display", "SF Pro Display", -apple-system,
+                       BlinkMacSystemFont, system-ui, sans-serif;
+  --app-font-sans: "Segoe UI Variable Text", "SF Pro Text", -apple-system,
+                   BlinkMacSystemFont, system-ui, sans-serif;
+  --v7-font-round: "Segoe UI Variable Text", "SF Pro Text", -apple-system,
+                   BlinkMacSystemFont, system-ui, sans-serif;
+  --v7-font-small: "Segoe UI Variable Small", "SF Pro Text", -apple-system,
+                   BlinkMacSystemFont, system-ui, sans-serif;
+  --v7-font-mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono",
+                  "JetBrains Mono", Menlo, Consolas, monospace;
+  --app-font-mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono",
+                   "JetBrains Mono", Menlo, Consolas, monospace;
+  --vera-display-weight: 650;
+  --vera-display-tracking: -0.028em;
+
+  --vera-hero-size: 34px;
+  --vera-hero-leading: 1.16;
 
   --vera-e1: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.055);
   --vera-e2: 0 12px 30px -10px rgba(0, 0, 0, 0.72), 0 2px 4px rgba(0, 0, 0, 0.4);
 
   --shadow-2xs: 0 1px 1px rgba(0, 0, 0, 0.30);
@@ -1521,106 +1672,170 @@ html[data-skin="alloy"] {
   --shadow-2xl: 0 32px 68px -26px rgba(0, 0, 0, 0.85);
 }
 
-html[data-skin="alloy"] .v7-light {
-  --vera-e1: 0 1px 2px rgba(74, 60, 36, 0.06), 0 1px 0 rgba(74, 60, 36, 0.03);
+/* Midnight's one divergence. Tighter corners across the whole ladder, and a
+   flatter shadow set — it is the identity that is supposed to look machined
+   rather than lit. */
+html[data-skin="midnight"] {
+  --radius: 0.375rem;          /* 6px → sm 2 · md 4 · lg 6 · xl 10 */
+  --vera-r-panel: 8px;
+  --vera-r-card: 8px;
+  --vera-r-inset: 5px;
+
+  --vera-e1: 0 1px 2px rgba(0, 0, 0, 0.55);
+  --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --vera-e2: 0 10px 26px -12px rgba(0, 0, 0, 0.85);
+}
+
+/* On paper, elevation cannot come from the face stepping up the ramp — a
+   white card has nowhere lighter to go — so it comes from shadow instead.
+   Neutral-cool rather than black, so it doesn't grey the ground on contact. */
+html[data-skin] .v7-light {
+  --vera-e1: 0 1px 2px rgba(20, 26, 40, 0.06), 0 1px 0 rgba(20, 26, 40, 0.03);
   --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  --vera-e2: 0 10px 26px -12px rgba(74, 60, 36, 0.24), 0 2px 4px -1px rgba(74, 60, 36, 0.09);
+  --vera-e2: 0 10px 26px -12px rgba(20, 26, 40, 0.20), 0 2px 4px -1px rgba(20, 26, 40, 0.08);
 
-  --shadow-2xs: 0 1px 1px rgba(74, 60, 36, 0.05);
-  --shadow-xs: 0 1px 2px rgba(74, 60, 36, 0.07);
-  --shadow-sm: 0 1px 2px rgba(74, 60, 36, 0.08), 0 1px 1px rgba(74, 60, 36, 0.05);
-  --shadow: 0 2px 4px -1px rgba(74, 60, 36, 0.10), 0 1px 2px rgba(74, 60, 36, 0.06);
-  --shadow-md: 0 6px 14px -6px rgba(74, 60, 36, 0.16), 0 2px 4px -1px rgba(74, 60, 36, 0.08);
-  --shadow-lg: 0 12px 28px -12px rgba(74, 60, 36, 0.22), 0 2px 4px rgba(74, 60, 36, 0.08);
-  --shadow-xl: 0 22px 46px -20px rgba(74, 60, 36, 0.26), 0 4px 8px -2px rgba(74, 60, 36, 0.10);
-  --shadow-2xl: 0 32px 64px -26px rgba(74, 60, 36, 0.30);
+  --shadow-2xs: 0 1px 1px rgba(20, 26, 40, 0.05);
+  --shadow-xs: 0 1px 2px rgba(20, 26, 40, 0.07);
+  --shadow-sm: 0 1px 2px rgba(20, 26, 40, 0.08), 0 1px 1px rgba(20, 26, 40, 0.05);
+  --shadow: 0 2px 4px -1px rgba(20, 26, 40, 0.10), 0 1px 2px rgba(20, 26, 40, 0.06);
+  --shadow-md: 0 6px 14px -6px rgba(20, 26, 40, 0.15), 0 2px 4px -1px rgba(20, 26, 40, 0.08);
+  --shadow-lg: 0 12px 28px -12px rgba(20, 26, 40, 0.20), 0 2px 4px rgba(20, 26, 40, 0.08);
+  --shadow-xl: 0 22px 46px -20px rgba(20, 26, 40, 0.24), 0 4px 8px -2px rgba(20, 26, 40, 0.10);
+  --shadow-2xl: 0 32px 64px -26px rgba(20, 26, 40, 0.28);
 }
 
-html[data-skin="vessel"] {
-  --radius: 0.875rem;          /* 14px → sm 10 · md 12 · lg 14 · xl 18 */
-  --vera-r-panel: 28px;
-  --vera-r-card: 22px;
-  --vera-r-inset: 12px;
-  --vera-card-pad: 24px;
-  --vera-block-pad: 16px;
+/* ---------- Ground ------------------------------------------------------
+   The app shell painted a single flat --v7-bg, which is why every screenshot
+   of it reads as "a dark rectangle with widgets on it" no matter how the
+   components are styled. Two fixed layers fix that without any motion:
 
-  --vera-font-display: 'Instrument Serif', Constantia, Georgia, serif;
-  --app-font-sans: 'Onest', 'Segoe UI', system-ui, sans-serif;
-  --v7-font-round: 'Onest', 'Segoe UI', system-ui, sans-serif;
-  --v7-font-mono: 'Spline Sans Mono', 'IBM Plex Mono', ui-monospace, monospace;
-  --app-font-mono: 'Spline Sans Mono', 'IBM Plex Mono', ui-monospace, monospace;
-  /* Instrument Serif ships in one weight. Asking for 800 (which the existing
-     markup does via font-extrabold) would make the browser synthesise a fake
-     bold — smeared stems, uneven joins. Headings are pinned to 400 below and
-     take their emphasis from size and tracking instead. */
-  --vera-display-weight: 400;
-  --vera-display-tracking: -0.028em;
+     ::before  a pair of very wide, very low-alpha radial washes in the
+               identity's own hues, so the ground has a direction and a light
+               source instead of being uniform.
+     ::after   film grain at 2.8% (4% on paper). This is the layer that
+               actually does the work — large flat gradients on a dark screen
+               band into visible steps, and grain is what breaks the banding
+               up. It is also the single cheapest thing that stops a dark UI
+               reading as plastic.
 
-  --vera-e1: 0 3px 10px -4px rgba(0, 0, 0, 0.6);
-  --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.055);
-  --vera-e2: 0 24px 56px -22px rgba(0, 0, 0, 0.82), 0 4px 10px -4px rgba(0, 0, 0, 0.5);
-
-  --shadow-2xs: 0 1px 2px rgba(0, 0, 0, 0.32);
-  --shadow-xs: 0 2px 4px -1px rgba(0, 0, 0, 0.40);
-  --shadow-sm: 0 3px 8px -3px rgba(0, 0, 0, 0.48);
-  --shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.52);
-  --shadow-md: 0 10px 24px -10px rgba(0, 0, 0, 0.62);
-  --shadow-lg: 0 24px 56px -22px rgba(0, 0, 0, 0.80), 0 4px 10px -4px rgba(0, 0, 0, 0.50);
-  --shadow-xl: 0 36px 78px -30px rgba(0, 0, 0, 0.88);
-  --shadow-2xl: 0 48px 96px -38px rgba(0, 0, 0, 0.92);
+   Both are `fixed`, so they do not scroll with the thread, and both sit
+   behind everything: children of the shell are lifted to z-index 1. Opaque
+   surfaces (the sidebar, cards) cover the wash by design — it is meant to be
+   seen in the gaps between them, not through them. */
+html[data-skin] .vera-ground {
+  position: relative;
+  isolation: isolate;
 }
 
-html[data-skin="vessel"] .v7-light {
-  /* Shadows carry the ground's own plum hue rather than black. A black
-     shadow on a warm page greys it on contact, which is the fastest way a
-     warm palette dies once it reaches code. */
-  --vera-e1: 0 2px 8px -4px rgba(50, 34, 44, 0.15), 0 1px 2px rgba(50, 34, 44, 0.05);
-  --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.92);
-  --vera-e2: 0 20px 48px -20px rgba(50, 34, 44, 0.26), 0 4px 10px -4px rgba(50, 34, 44, 0.10);
+html[data-skin] .vera-ground::before,
+html[data-skin] .vera-ground::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
 
-  --shadow-2xs: 0 1px 2px rgba(50, 34, 44, 0.06);
-  --shadow-xs: 0 2px 4px -1px rgba(50, 34, 44, 0.08);
-  --shadow-sm: 0 3px 8px -3px rgba(50, 34, 44, 0.11);
-  --shadow: 0 4px 12px -4px rgba(50, 34, 44, 0.13);
-  --shadow-md: 0 10px 24px -10px rgba(50, 34, 44, 0.18);
-  --shadow-lg: 0 20px 48px -20px rgba(50, 34, 44, 0.26), 0 4px 10px -4px rgba(50, 34, 44, 0.10);
-  --shadow-xl: 0 32px 72px -28px rgba(50, 34, 44, 0.30);
-  --shadow-2xl: 0 44px 92px -36px rgba(50, 34, 44, 0.34);
+html[data-skin] .vera-ground::before {
+  background:
+    radial-gradient(94% 62% at 14% -14%, var(--vera-wash-1, transparent), transparent 62%),
+    radial-gradient(72% 50% at 97% 2%, var(--vera-wash-2, transparent), transparent 64%);
+}
+
+html[data-skin] .vera-ground::after {
+  opacity: var(--vera-grain-opacity, 0.028);
+  mix-blend-mode: var(--vera-grain-blend, overlay);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+html[data-skin] .vera-ground > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Reduced-motion users still get the ground — it does not move. But a viewer
+   who has asked for less visual noise gets the grain dialled back. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-skin] .vera-ground::after {
+    opacity: calc(var(--vera-grain-opacity, 0.028) * 0.5);
+  }
+}
+
+/* ---------- The tracing state -------------------------------------------
+   Paired with VeraTracing in Venus.tsx. A line spins while its step is in
+   flight and resolves to a check when it lands, so the wait shows the chain
+   being walked rather than just asserting that something is happening. */
+html[data-skin] .vera-trace-line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--v7-font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--v7-text-mute);
+  transition: opacity 260ms ease, color 260ms ease;
+}
+html[data-skin] .vera-trace-line.is-done {
+  color: var(--v7-text-dim);
+}
+
+html[data-skin] .vera-trace-tick {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+/* In flight: a hairline ring with one lit arc. */
+html[data-skin] .vera-trace-tick::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 50%;
+  border: 1.5px solid var(--v7-border-strong);
+  border-top-color: var(--v7-cyan);
+  animation: vera-trace-spin 900ms linear infinite;
+}
+/* Landed: the ring is dropped and a check is drawn in its place. */
+html[data-skin] .vera-trace-line.is-done .vera-trace-tick::before {
+  animation: none;
+  border-color: transparent;
+}
+html[data-skin] .vera-trace-line.is-done .vera-trace-tick::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 4px;
+  width: 4px;
+  height: 7px;
+  border: 1.7px solid var(--mint);
+  border-top: 0;
+  border-left: 0;
+  transform: rotate(42deg);
+}
+
+@keyframes vera-trace-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* A spinner is motion for its own sake to a viewer who asked for less of it;
+   the step list still reads correctly as a static checklist. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-skin] .vera-trace-tick::before {
+    animation: none;
+  }
 }
 
 /* ---------- Shared skin behaviour -------------------------------------- */
 
 /* Turns off the gradient fill on the hero's emphasised word. The paired
-   --vera-emph-fg lives in each colour block above, per skin and per theme. */
+   --vera-emph-fg lives in each colour block above, per identity and theme. */
 html[data-skin] {
   --vera-emph-bg: none;
   /* Controls whose geometry is set inline in Venus.tsx read these, with the
-     original values as fallbacks, so Classic is untouched. */
-  --vera-key-r: 999px;
-}
-
-/* Optical sizing for the hero headline, measured rather than guessed.
-   At an identical 34px the two faces are already the same height — cap 24 /
-   x-height 18 for Archivo at 600, cap 25 / x-height 18 for Instrument Serif
-   at 400. So the reason Vessel's headline reads smaller is not size, it is
-   WEIGHT: 400 against 600, with high stroke contrast putting far less ink on
-   the page for the same footprint.
-
-   The compensation is therefore small and aimed at mass, not height. 38px
-   takes Instrument Serif's cap to 28 against Archivo's 24 — about 17% more
-   height to offset two weight steps and hairline strokes. An earlier pass
-   set 43px, which was measured against a fallback serif rather than the real
-   face and over-corrected to a 29% difference; that read as a mismatch in
-   the other direction. Instrument Serif is also comparatively condensed, so
-   line width is not a usable target here — at any size that matches on
-   width, it would tower over Alloy in height. */
-html[data-skin="alloy"] {
-  --vera-hero-size: 34px;
-  --vera-hero-leading: 1.16;
-}
-html[data-skin="vessel"] {
-  --vera-hero-size: 38px;
-  --vera-hero-leading: 1.14;
+     original values as fallbacks. Squared off to match the new radius ladder —
+     a 999px pill next to an 8px card is the single loudest "template" tell. */
+  --vera-key-r: 8px;
 }
 
 /* The card primitives already centralise geometry for all eleven response
@@ -1632,6 +1847,36 @@ html[data-skin] .vera-card {
   border-radius: var(--vera-r-card);
   padding: var(--vera-card-pad);
   box-shadow: var(--vera-e1), var(--vera-e1-bevel);
+}
+
+/* A response card is a masthead plus an argument, not one uniform padded box.
+   `.vera-card-split` moves the padding off the card and onto the two regions
+   so the head can carry its own tinted band and a dividing rule — which is
+   what makes a stack of eight cards scannable instead of a wall.
+
+   The head keeps its full hit area for the collapse toggle (the <button>
+   wrapping it is width:100%), so pushing padding inward costs nothing in
+   click target. */
+html[data-skin] .vera-card-split {
+  padding: 0;
+}
+
+html[data-skin] .vera-card-head {
+  padding: calc(var(--vera-card-pad) * 0.62) var(--vera-card-pad);
+  background: var(--vera-inset-bg);
+  border-bottom: 1px solid var(--vera-card-border);
+}
+
+html[data-skin] .vera-card-body {
+  padding: var(--vera-card-pad);
+}
+
+/* Collapsed cards render the preview line through .vera-card-body too, and a
+   full card pad under one clamped line leaves the card looking half-empty. */
+html[data-skin] p.vera-card-body {
+  padding-top: calc(var(--vera-card-pad) * 0.6);
+  padding-bottom: calc(var(--vera-card-pad) * 0.7);
+  margin: 0;
 }
 
 html[data-skin] .vera-block {
@@ -1665,18 +1910,6 @@ html[data-skin] .vera-display {
    reason it was chosen over another grotesque. Without this it renders at
    the default width and loses the engineered, signage-like proportion that
    distinguishes Alloy's headings from any default sans scaled up. */
-html[data-skin="alloy"] h1,
-html[data-skin="alloy"] h2,
-html[data-skin="alloy"] h3,
-html[data-skin="alloy"] .vera-display {
-  font-variation-settings: 'wdth' 112;
-}
-
-/* Micro-labels keep one definition but pick up the skin's mono face. */
-html[data-skin] .vera-label {
-  font-family: var(--v7-font-mono);
-  letter-spacing: 0.09em;
-}
 
 /* The hero mark's breathing halo animates between two now-transparent glow
    tokens, so it is already invisible under a skin. Stopping the animation
@@ -1754,68 +1987,34 @@ html[data-skin] .venus-hero-mark {
 }
 
 /* Alloy: a key body with a hard bottom edge that collapses under the finger. */
-html[data-skin="alloy"] .vera-key-1 {
+html[data-skin] .vera-key-1 {
   box-shadow: 0 2px 0 0 color-mix(in srgb, var(--v7-cyan) 62%, #000),
               inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
-html[data-skin="alloy"] .vera-key-1:hover:not(:disabled) {
+html[data-skin] .vera-key-1:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 3px 0 0 color-mix(in srgb, var(--v7-cyan) 62%, #000),
               inset 0 1px 0 rgba(255, 255, 255, 0.34);
 }
-html[data-skin="alloy"] .vera-key-1:active:not(:disabled) {
+html[data-skin] .vera-key-1:active:not(:disabled) {
   transform: translateY(2px);
   box-shadow: 0 0 0 0 transparent, inset 0 2px 4px rgba(0, 0, 0, 0.3);
 }
-html[data-skin="alloy"] .vera-key-2 {
+html[data-skin] .vera-key-2 {
   box-shadow: 0 2px 0 0 var(--v7-border-strong), var(--vera-e1-bevel);
 }
-html[data-skin="alloy"] .vera-key-2:hover:not(:disabled) {
+html[data-skin] .vera-key-2:hover:not(:disabled) {
   transform: translateY(-1px);
   background: var(--v7-bg-raised-2);
   box-shadow: 0 3px 0 0 var(--v7-border-strong), var(--vera-e1-bevel);
 }
-html[data-skin="alloy"] .vera-key-2:active:not(:disabled) {
+html[data-skin] .vera-key-2:active:not(:disabled) {
   transform: translateY(2px);
   box-shadow: 0 0 0 0 transparent, inset 0 2px 4px rgba(0, 0, 0, 0.16);
 }
 
 /* Vessel: a sprung bevel. Asymmetric timing — slow release, fast press — is
    what reads as sprung rather than merely animated. */
-html[data-skin="vessel"] .vera-key {
-  transition-duration: 210ms;
-  transition-timing-function: cubic-bezier(0.32, 0.72, 0.28, 1);
-  padding: 10px 20px;
-}
-html[data-skin="vessel"] .vera-key:active:not(:disabled) {
-  transition-duration: 85ms;
-}
-html[data-skin="vessel"] .vera-key-1 {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3),
-              inset 0 -1px 0 rgba(0, 0, 0, 0.16),
-              0 6px 18px -8px color-mix(in srgb, var(--v7-cyan) 60%, transparent);
-}
-html[data-skin="vessel"] .vera-key-1:hover:not(:disabled) {
-  transform: translateY(-1.5px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3),
-              inset 0 -1px 0 rgba(0, 0, 0, 0.16),
-              0 12px 26px -10px color-mix(in srgb, var(--v7-cyan) 66%, transparent);
-}
-html[data-skin="vessel"] .vera-key-1:active:not(:disabled) {
-  transform: scale(0.972);
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.26);
-}
-html[data-skin="vessel"] .vera-key-2 {
-  box-shadow: var(--vera-e1-bevel), var(--vera-e1);
-}
-html[data-skin="vessel"] .vera-key-2:hover:not(:disabled) {
-  transform: translateY(-1.5px);
-  box-shadow: var(--vera-e1-bevel), var(--vera-e2);
-}
-html[data-skin="vessel"] .vera-key-2:active:not(:disabled) {
-  transform: scale(0.972);
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.14);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .vera-key {
@@ -1880,8 +2079,7 @@ html[data-skin] .vera-socket {
   background: var(--v7-bg-raised-2);
   color: var(--v7-text-dim);
 }
-html[data-skin="alloy"] .vera-socket { border-radius: var(--vera-r-inset); }
-html[data-skin="vessel"] .vera-socket { border-radius: 50%; }
+html[data-skin] .vera-socket { border-radius: var(--vera-r-inset); }
 html[data-skin] .vera-socket-live { color: var(--v7-cyan); border-color: var(--v7-cyan-strong); background: var(--v7-cyan-soft); }
 html[data-skin] .vera-socket-bad { color: var(--red); border-color: var(--red); }
 
@@ -1898,8 +2096,7 @@ html[data-skin] .vera-socket-bad { color: var(--red); border-color: var(--red); 
    keeps that weight constant at every size, which is what makes a 16px and a
    26px icon read as the same hand — previously a scaled-down icon thickened
    and a scaled-up one thinned. */
-html[data-skin="alloy"] { --vera-icon-stroke: 1.75; }
-html[data-skin="vessel"] { --vera-icon-stroke: 1.55; }
+html[data-skin] { --vera-icon-stroke: 1.75; }
 
 html[data-skin] .lucide {
   stroke-width: var(--vera-icon-stroke);
@@ -1963,32 +2160,12 @@ html[data-skin] .vera-t-data {
 /* Vessel: suggestions are ruled editorial lines, not boxed cards. An entry
    screen with card-shaped things on it already looks like a dashboard, which
    is the one thing this surface must not do. */
-html[data-skin="vessel"] .vera-suggest {
-  border: 0;
-  border-top: 1px solid var(--v7-border);
-  border-radius: 0;
-  background: transparent;
-  padding: 15px 10px;
-}
-html[data-skin="vessel"] .vera-suggest:hover {
-  background: var(--v7-bg-raised-2);
-  border-color: var(--v7-border-strong);
-  transform: none;
-  box-shadow: none;
-  padding-left: 18px;
-}
-html[data-skin="vessel"] .vera-suggest .vera-socket {
-  border: 0;
-  background: transparent;
-  width: 22px;
-  height: 22px;
-}
 
 /* Alloy: one 1px centre spine behind the hero, replacing the gradient blob.
    It marks the composition's axis and stops where the composer takes over —
    structure doing the job decoration was doing. */
-html[data-skin="alloy"] .vera-hero-axis { position: relative; }
-html[data-skin="alloy"] .vera-hero-axis::before {
+html[data-skin] .vera-hero-axis { position: relative; }
+html[data-skin] .vera-hero-axis::before {
   content: '';
   position: absolute;
   top: 0;
@@ -2017,9 +2194,6 @@ html[data-skin="alloy"] .vera-hero-axis::before {
      scrolled to be seen whole isn't a week strip. */
   .vera-week { padding: 12px 12px 11px; }
   .vera-week-plot { gap: 4px; }
-  html[data-skin="vessel"] .vera-week-plot { gap: 6px; }
-  .vera-week-well,
-  html[data-skin="vessel"] .vera-week-well { height: 54px; }
 }
 
 /* ---------- cmnd centre bento -----------------------------------------
@@ -2217,27 +2391,17 @@ html[data-skin] .vera-bar-val {
 
 /* Alloy: machined. Square wells cut with a hairline, tight gaps, today
    marked by a hard rule under the column. */
-html[data-skin="alloy"] .vera-week-plot { gap: 5px; }
-html[data-skin="alloy"] .vera-week-well {
+html[data-skin] .vera-week-plot { gap: 5px; }
+html[data-skin] .vera-week-well {
   border-radius: 2px;
   box-shadow: inset 0 0 0 1px var(--v7-border);
 }
-html[data-skin="alloy"] .vera-week-col.is-today .vera-week-well {
+html[data-skin] .vera-week-col.is-today .vera-week-well {
   box-shadow: inset 0 0 0 1px var(--v7-cyan-strong), inset 0 -2px 0 0 var(--v7-cyan);
 }
 
 /* Vessel: tactile. Narrow capsules standing in a rounded bowl, wider gaps,
    today marked by the bowl itself warming rather than by a cut rule. */
-html[data-skin="vessel"] .vera-week-plot { gap: 9px; }
-html[data-skin="vessel"] .vera-week-well {
-  width: 13px;
-  margin: 0 auto;
-  height: 66px;
-  border-radius: 999px;
-}
-html[data-skin="vessel"] .vera-week-stack { border-radius: 999px; overflow: hidden; }
-html[data-skin="vessel"] .vera-week-col.is-today .vera-week-well { background: var(--v7-cyan-soft); }
-html[data-skin="vessel"] .vera-week-swatch { border-radius: 999px; }
 
 /* The streak, as the tile's headline rather than a badge. Alloy sets the
    count in the measured mono face; Vessel takes its emphasis from scale in
@@ -2258,12 +2422,6 @@ html[data-skin] .vera-streak-n {
   font-variant-numeric: tabular-nums lining-nums;
   color: var(--v7-cyan);
   flex-shrink: 0;
-}
-html[data-skin="vessel"] .vera-streak-n {
-  font-family: var(--vera-font-display);
-  font-weight: var(--vera-display-weight);
-  font-size: 40px;
-  letter-spacing: var(--vera-display-tracking);
 }
 
 /* ---------- Sidebar rows ----------------------------------------------
@@ -2292,14 +2450,10 @@ html[data-skin] .vera-navrow-active {
   background: var(--v7-cyan-soft);
   color: var(--v7-cyan);
 }
-html[data-skin="alloy"] .vera-navrow-active {
+html[data-skin] .vera-navrow-active {
   box-shadow: inset 2px 0 0 0 var(--v7-cyan);
   border-radius: 0 var(--vera-r-inset) var(--vera-r-inset) 0;
 }
-html[data-skin="vessel"] .vera-navrow-active {
-  border-radius: 999px;
-}
-html[data-skin="vessel"] .vera-navrow:hover { border-radius: 999px; }
 
 /* The one primary CTA in the sidebar. It was a soft tint with a glow on
    hover — the same shape as every quiet row above it, just tinted. As the

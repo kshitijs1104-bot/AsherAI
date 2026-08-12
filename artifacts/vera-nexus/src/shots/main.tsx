@@ -11,7 +11,7 @@
 //
 // URL parameters
 //   ?shot=<name>     which framing (see SHOTS below) — default `app`
-//   ?skin=           alloy | vessel | classic          — default alloy
+//   ?skin=           deep | midnight | nordic            — default deep
 //   ?theme=          dark | light                      — default dark
 //   ?state=          pending | resolved                — default pending
 //   ?layer=          sidebar | main | rail             — isolate one depth
@@ -41,7 +41,7 @@ import {
 const params = new URLSearchParams(window.location.search);
 const param = (key: string, fallback: string) => params.get(key) ?? fallback;
 
-const skin = param('skin', 'alloy') as VeraSkin;
+const skin = param('skin', 'deep') as VeraSkin;
 const theme = param('theme', 'dark') === 'light' ? 'light' : 'dark';
 const state = param('state', 'pending');
 const layer = params.get('layer');
@@ -72,10 +72,13 @@ try {
 
 // setSkin, not applySkin: applySkin only stamps the attribute on <html>, which
 // styles the page but leaves veraSkin's module state on its stored default —
-// so every component asking useVeraSkin() would still render its classic
-// branch under an alloy palette. This is the one call that moves both.
+// so every component asking useVeraSkin() would still render against its
+// branch under a different palette. This is the one call that moves both.
 setSkin(skin);
-const skinned = skin !== 'classic';
+// Every identity is a real design now (classic, which was the absence of
+// one, is gone), so this is constant true. Kept as a named flag because many
+// style branches read it; collapsing those is a separate change.
+const skinned = true;
 
 // Seeding the cache rather than stubbing the hooks: the components keep using
 // the real useQueue/useDailyBrief/useConnectors, so nothing about the render

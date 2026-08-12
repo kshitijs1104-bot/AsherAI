@@ -1,5 +1,3 @@
-import { useId } from 'react';
-
 /* ---------------------------------------------------------------------------
    The Vera mark — one definition, every surface.
 
@@ -12,30 +10,30 @@ import { useId } from 'react';
 
    The V is the one that survives, for the plain reason that it is already
    published: it is in the landing page and baked into a rendered film that
-   cannot be re-cut cheaply. Picking the compass would have meant reshooting
-   the ad to match an internal screen, which is the tail wagging the dog.
+   cannot be re-cut cheaply.
 
-   COLOUR. The two terminals keep their literal brand hues in both themes —
-   they are the mark's identity, and a logo that changes colour with the
-   theme is not one mark but two. Only the ring is themed, because at 22%
-   white it is invisible on a light page; it reads as the same weight of
-   "quiet enclosing circle" against either background.
+   COLOUR — SECOND PASS. The mark used to be drawn in a literal teal-to-violet
+   gradient with two differently coloured terminal dots, on the reasoning that
+   fixed brand hues make it one mark rather than two. In practice that read as
+   two clashing colours stuck to a letterform, and it belonged to neither the
+   palette around it nor any of the three identities.
+
+   It is now monochrome and takes the active accent (`--v7-cyan`, which is the
+   app's "this is interactive" slot and is redefined by every identity). One
+   mark, one colour, and it is always in the same family as the surface it sits
+   on. The single terminal dot is what keeps it from reading as a bare glyph —
+   it marks where the stroke resolves, which is the one detail the original had
+   worth keeping.
+
+   `currentColor` is the fallback so a caller can still force a colour by
+   setting `color` on the element (the landing page's footer does this).
 --------------------------------------------------------------------------- */
-
-const TEAL = '#2fdcc0';
-const VIOLET = '#8b7bff';
 
 export function VeraMark({ size = 20, className, style }: {
   size?: number;
   className?: string;
   style?: React.CSSProperties;
 }) {
-  // Two marks on one page (nav and footer, hero and sidebar) would otherwise
-  // both define `#lp-mark` and the second would silently win for both — the
-  // classic duplicated-SVG-gradient-id bug, which shows up as one mark
-  // rendering with the other's fill.
-  const gradientId = useId();
-
   return (
     <svg
       width={size}
@@ -46,22 +44,24 @@ export function VeraMark({ size = 20, className, style }: {
       style={style}
       aria-hidden="true"
     >
-      <circle cx="12" cy="12" r="10" stroke="var(--vera-mark-ring, rgba(255,255,255,0.22))" />
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="var(--vera-mark-ring, currentColor)"
+        strokeOpacity="0.28"
+      />
       <path
         d="M6.5 8.5 L12 17 L17.5 8.5"
-        stroke={`url(#${gradientId})`}
-        strokeWidth="1.7"
+        stroke="var(--vera-mark-ink, var(--v7-cyan, currentColor))"
+        strokeWidth="1.85"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx="6.5" cy="8.5" r="1.9" fill={TEAL} />
-      <circle cx="17.5" cy="8.5" r="1.9" fill={VIOLET} />
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0%" stopColor={TEAL} />
-          <stop offset="100%" stopColor={VIOLET} />
-        </linearGradient>
-      </defs>
+      {/* One terminal, not two. It marks where the stroke resolves and gives
+          the mark an asymmetry to be recognised by; a dot on each arm just
+          read as decoration. */}
+      <circle cx="17.5" cy="8.5" r="1.7" fill="var(--vera-mark-ink, var(--v7-cyan, currentColor))" />
     </svg>
   );
 }

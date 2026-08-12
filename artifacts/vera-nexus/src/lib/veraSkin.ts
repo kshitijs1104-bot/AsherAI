@@ -1,54 +1,54 @@
 import { useCallback, useEffect, useState } from 'react';
 
-// Which visual system Vera renders in. Two designed skins plus the untouched
-// original, so a founder who doesn't like either can put the product back
-// exactly as it was — and so can we, by changing DEFAULT_SKIN below.
+// Which visual identity Vera renders in. Three of them, and every one is a
+// designed system rather than a colourway — each ships its own light and dark
+// reading, not a dimmed copy of the other.
 //
-//   classic — the pre-redesign look. Every rule that produces it still lives
-//             in index.css untouched; the skins are additive overrides layered
-//             on top, never replacements. Selecting this applies no overrides
-//             at all, so it is the original by construction rather than by
-//             a reimplementation that could drift.
-//   alloy   — engineered instrument. Hierarchy from depth and hairline
-//             structure; graphite/stone grounds, azure accent.
-//   vessel  — tactile study. Hierarchy from scale; espresso/limewash grounds,
-//             verdigris accent with aubergine reserved for Vera's unprompted
-//             follow-ups.
-export type VeraSkin = 'classic' | 'alloy' | 'vessel';
+//   deep     — Deep Tech. Indigo and violet on a slate near-black, or on cool
+//              paper. The default.
+//   midnight — Midnight Minimalist. Matte graphite, thin rules, steel blue.
+//              Tighter radii than the other two; the most restrained.
+//   nordic   — Nordic Green. A slate-stone canvas with muted pine.
+//
+// This replaces the previous alloy/vessel/classic set. `classic` in particular
+// is gone on purpose: it was defined as the ABSENCE of a data-skin attribute,
+// which meant the untouched pre-redesign look was reachable and, being nobody's
+// deliberate design, was what most sessions actually saw. There is no longer a
+// state in which the product renders unstyled.
+export type VeraSkin = 'deep' | 'midnight' | 'nordic';
 
-export const VERA_SKINS: VeraSkin[] = ['alloy', 'vessel', 'classic'];
+export const VERA_SKINS: VeraSkin[] = ['deep', 'midnight', 'nordic'];
 
 // What a founder is shown when choosing. Deliberately describes how each one
-// looks and behaves — nothing about who it's for. Two people looking at the
-// same screen should be choosing between two designs, not being sorted.
+// looks — nothing about who it's for. Two people looking at the same screen
+// should be choosing between three designs, not being sorted.
 export const SKIN_META: Record<VeraSkin, { name: string; line: string; detail: string }> = {
-  alloy: {
-    name: 'Alloy',
-    line: 'Engineered and dense',
-    detail: 'Precise hairlines, tight corners and keys that travel under the finger. What needs you is the panel sitting highest off the page.',
+  deep: {
+    name: 'Deep Tech',
+    line: 'Indigo on near-black',
+    detail: 'A slate ground with indigo and violet light behind it. The most atmospheric of the three, and the one that looks most like the product thinking.',
   },
-  vessel: {
-    name: 'Vessel',
-    line: 'Warm and unhurried',
-    detail: 'Generous curves, deep soft shadows and an editorial serif. What needs you is simply the largest thing on the page.',
+  midnight: {
+    name: 'Midnight Minimalist',
+    line: 'Matte graphite, steel blue',
+    detail: 'Flat black, hairline rules and tight corners. Nothing glows and nothing is rounded off — the closest thing here to a precision instrument.',
   },
-  classic: {
-    name: 'Classic',
-    line: 'The original Vera',
-    detail: 'Exactly how Vera looked before the redesign. Nothing is overridden.',
+  nordic: {
+    name: 'Nordic Green',
+    line: 'Stone and muted pine',
+    detail: 'A low-fatigue slate-stone canvas with pine accents. The quietest palette, made for long sessions rather than first impressions.',
   },
 };
 
 const SKIN_KEY = 've_skin';
 
-// Applied when nobody has chosen yet. Kept at 'classic' on purpose: until a
-// founder picks, the product looks precisely as it did, so shipping the skins
-// cannot change anything for anyone who hasn't opted in. Flip this to 'alloy'
-// or 'vessel' to change the out-of-the-box default once one has been picked.
-const DEFAULT_SKIN: VeraSkin = 'classic';
+// Applied before anyone has chosen. Unlike the previous default this is a real
+// designed identity, so a first-run session sees the product as intended
+// rather than as its own fallback.
+const DEFAULT_SKIN: VeraSkin = 'deep';
 
 function isSkin(value: unknown): value is VeraSkin {
-  return value === 'classic' || value === 'alloy' || value === 'vessel';
+  return value === 'deep' || value === 'midnight' || value === 'nordic';
 }
 
 /** The stored choice, or null when the founder has never been asked. */
@@ -80,16 +80,13 @@ export function hasChosenSkin(): boolean {
  * `html[data-skin="…"]`, so this one attribute is the whole switch — no
  * component re-render is needed for the visual change itself, only for the
  * controls that display the current choice.
+ *
+ * Unlike the previous version there is no branch that REMOVES the attribute:
+ * all three identities are real, so the attribute is always present and the
+ * bare `:root` tokens now only ever act as a fallback that nothing reaches.
  */
 export function applySkin(skin: VeraSkin) {
-  const root = document.documentElement;
-  if (skin === 'classic') {
-    // No attribute at all rather than data-skin="classic", so classic is the
-    // absence of overrides and cannot accidentally pick any up.
-    root.removeAttribute('data-skin');
-  } else {
-    root.setAttribute('data-skin', skin);
-  }
+  document.documentElement.setAttribute('data-skin', skin);
 }
 
 // One module-level source of truth with explicit subscribers. Without this,

@@ -175,7 +175,10 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
   onOpenChat?: (serverChatId: number) => void;
 }) {
   const { skin } = useVeraSkin();
-  const skinned = skin !== 'classic';
+  // Every identity is a real design now (classic, which was the absence of
+  // one, is gone), so this is constant true. Kept as a named flag because many
+  // style branches read it; collapsing those is a separate change.
+  const skinned = true;
   const action = useQueueAction();
   const [, navigate] = useLocation();
   const [editing, setEditing] = useState(false);
@@ -488,7 +491,10 @@ function freeTimeLabel(minutes: number): string {
 
 function StreakBand({ palette, stats, streak }: { palette: Palette; stats: DailyBriefStats; streak: number }) {
   const { skin } = useVeraSkin();
-  const skinned = skin !== 'classic';
+  // Every identity is a real design now (classic, which was the absence of
+  // one, is gone), so this is constant true. Kept as a named flag because many
+  // style branches read it; collapsing those is a separate change.
+  const skinned = true;
   const { headline, sub } = streakLine(streak);
   const counters = [
     stats.decisionsCaptured > 0 && [String(stats.decisionsCaptured), stats.decisionsCaptured === 1 ? 'decision captured' : 'decisions captured'],
@@ -772,7 +778,10 @@ const QUICK_ACTIONS: { type: InstantActionType; label: string; hint: string; pla
 
 function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId: number) => void }) {
   const { skin } = useVeraSkin();
-  const skinned = skin !== 'classic';
+  // Every identity is a real design now (classic, which was the absence of
+  // one, is gone), so this is constant true. Kept as a named flag because many
+  // style branches read it; collapsing those is a separate change.
+  const skinned = true;
   const [active, setActive] = useState<InstantActionType | null>(null);
   const [hovered, setHovered] = useState<InstantActionType | null>(null);
   const [input, setInput] = useState('');
@@ -1009,7 +1018,10 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
   onOpenChatById?: (serverChatId: number) => void;
 }) {
   const { skin } = useVeraSkin();
-  const skinned = skin !== 'classic';
+  // Every identity is a real design now (classic, which was the absence of
+  // one, is gone), so this is constant true. Kept as a named flag because many
+  // style branches read it; collapsing those is a separate change.
+  const skinned = true;
   const palette = theme === 'light' ? LIGHT : DARK;
   const isLight = theme === 'light';
   const { data, isLoading } = useQueue();

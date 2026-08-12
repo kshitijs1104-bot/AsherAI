@@ -76,28 +76,39 @@ export function SkinChoiceList() {
   );
 }
 
-// Swatches for the two preview tiles. These are literal values rather than
-// reads of the live custom properties on purpose: a tile has to show what a
-// skin looks like while a *different* skin is active, and a var() would
-// resolve to whichever one is currently applied. They mirror the token blocks
-// in index.css — if those move, these move with them.
+const DISPLAY_STACK = '"Segoe UI Variable Display", "SF Pro Display", -apple-system, system-ui, sans-serif';
+const BODY_STACK = '"Segoe UI Variable Text", "SF Pro Text", -apple-system, system-ui, sans-serif';
+
+// Swatches for the preview tiles. These are literal values rather than reads
+// of the live custom properties on purpose: a tile has to show what an
+// identity looks like while a *different* one is active, and a var() would
+// resolve to whichever is currently applied. They mirror the token blocks in
+// index.css — if those move, these move with them.
 const PREVIEW: Record<
-  Exclude<VeraSkin, 'classic'>,
+  VeraSkin,
   Record<'dark' | 'light', { ground: string; card: string; edge: string; text: string; dim: string; accent: string; accentInk: string }>
 > = {
-  alloy: {
-    dark: { ground: '#0B0C0C', card: '#1B1E1E', edge: 'rgba(240,245,243,0.10)', text: '#F0F3F2', dim: '#838C8A', accent: '#5AA9E6', accentInk: '#0E1B26' },
-    light: { ground: '#FAF8F5', card: '#FFFFFF', edge: '#E4DED4', text: '#16181A', dim: '#6C716F', accent: '#155E8A', accentInk: '#FFFFFF' },
+  deep: {
+    dark: { ground: '#06070D', card: '#0E1017', edge: 'rgba(230,235,245,0.10)', text: '#EDEFF5', dim: '#99A2B4', accent: '#7C88F0', accentInk: '#0B0E1C' },
+    light: { ground: '#F7F8FB', card: '#FFFFFF', edge: '#E1E5EE', text: '#10131C', dim: '#4B5265', accent: '#4149BE', accentInk: '#FFFFFF' },
   },
-  vessel: {
-    dark: { ground: '#0C0A0D', card: '#1C1820', edge: 'rgba(245,240,243,0.10)', text: '#F5F0F3', dim: '#8E8290', accent: '#4FC0A5', accentInk: '#06231C' },
-    light: { ground: '#F7F3F2', card: '#FFFFFF', edge: '#E2DADA', text: '#1A1519', dim: '#6E626A', accent: '#0E6E5C', accentInk: '#FFFFFF' },
+  midnight: {
+    dark: { ground: '#08090A', card: '#121314', edge: 'rgba(255,255,255,0.095)', text: '#F4F4F5', dim: '#A0A2A8', accent: '#7FB6C8', accentInk: '#06171C' },
+    light: { ground: '#FAFAFA', card: '#FFFFFF', edge: '#E4E4E5', text: '#0C0D0E', dim: '#4F5258', accent: '#27606F', accentInk: '#FFFFFF' },
+  },
+  nordic: {
+    dark: { ground: '#101614', card: '#18201D', edge: 'rgba(224,238,230,0.10)', text: '#E9EFEB', dim: '#9AA89F', accent: '#82B295', accentInk: '#08120E' },
+    light: { ground: '#F6F8F6', card: '#FFFFFF', edge: '#E0E7E2', text: '#101613', dim: '#49534C', accent: '#35604A', accentInk: '#FFFFFF' },
   },
 };
 
-const PREVIEW_FONT: Record<Exclude<VeraSkin, 'classic'>, { display: string; body: string; radius: number; cardRadius: number }> = {
-  alloy: { display: "'Archivo', system-ui, sans-serif", body: "'Instrument Sans', system-ui, sans-serif", radius: 10, cardRadius: 14 },
-  vessel: { display: "'Instrument Serif', Constantia, Georgia, serif", body: "'Onest', system-ui, sans-serif", radius: 14, cardRadius: 22 },
+// All three identities share one type system, so the preview only varies the
+// radius — the one geometric thing that actually differs between them
+// (Midnight runs tighter corners than the other two).
+const PREVIEW_FONT: Record<VeraSkin, { display: string; body: string; radius: number; cardRadius: number }> = {
+  deep: { display: DISPLAY_STACK, body: BODY_STACK, radius: 8, cardRadius: 10 },
+  midnight: { display: DISPLAY_STACK, body: BODY_STACK, radius: 6, cardRadius: 8 },
+  nordic: { display: DISPLAY_STACK, body: BODY_STACK, radius: 8, cardRadius: 10 },
 };
 
 function SkinTile({
@@ -106,7 +117,7 @@ function SkinTile({
   selected,
   onSelect,
 }: {
-  skin: Exclude<VeraSkin, 'classic'>;
+  skin: VeraSkin;
   theme: 'dark' | 'light';
   selected: boolean;
   onSelect: () => void;
@@ -145,7 +156,7 @@ function SkinTile({
           border: `1px solid ${c.edge}`,
         }}
       >
-        <div style={{ fontFamily: f.display, fontSize: '17px', fontWeight: skin === 'vessel' ? 400 : 600, color: c.text, letterSpacing: skin === 'vessel' ? '-0.02em' : '-0.015em', lineHeight: 1.2 }}>
+        <div style={{ fontFamily: f.display, fontSize: '17px', fontWeight: 650, color: c.text, letterSpacing: '-0.028em', lineHeight: 1.2 }}>
           Four things need you
         </div>
         <div
@@ -277,58 +288,53 @@ export function SkinPicker() {
             Choose how Vera looks
           </h2>
           <p style={{ fontSize: '14px', color: 'var(--v7-text-dim)', margin: 0, lineHeight: 1.55, maxWidth: '52ch' }}>
-            Two designs, the same Vera underneath. Pick whichever you'd rather look at
-            all day — you can switch, or go back to the original, any time in Settings.
+            Three designs, the same Vera underneath. Pick whichever you'd rather look
+            at all day — you can switch any time in Settings.
           </p>
         </div>
 
+        {/* Three tiles rather than two, and no "keep the original" escape hatch:
+            every option here is a designed identity, so there is nothing to
+            fall back to. minmax drops to 220px because three across needs more
+            room than two did before it wraps. */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
             gap: '14px',
           }}
         >
-          <SkinTile
-            skin="alloy"
-            theme={theme}
-            selected={touched && skin === 'alloy'}
-            onSelect={() => {
-              setTouched(true);
-              setSkin('alloy');
-            }}
-          />
-          <SkinTile
-            skin="vessel"
-            theme={theme}
-            selected={touched && skin === 'vessel'}
-            onSelect={() => {
-              setTouched(true);
-              setSkin('vessel');
-            }}
-          />
+          {VERA_SKINS.map((option) => (
+            <SkinTile
+              key={option}
+              skin={option}
+              theme={theme}
+              selected={touched && skin === option}
+              onSelect={() => {
+                setTouched(true);
+                setSkin(option);
+              }}
+            />
+          ))}
         </div>
 
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             gap: '14px',
             flexWrap: 'wrap',
             paddingTop: '4px',
             borderTop: '1px solid var(--v7-border)',
           }}
         >
-          <button type="button" className="vera-key vera-key-3" onClick={() => confirm('classic')}>
-            Keep the original look
-          </button>
           <button
             type="button"
             className="vera-key vera-key-1"
             disabled={!touched}
             onClick={() => confirm(skin)}
-            title={touched ? undefined : 'Pick one of the two above first'}
+            title={touched ? undefined : 'Pick one of the three above first'}
           >
             {touched ? `Use ${SKIN_META[skin].name}` : 'Pick one to continue'}
           </button>
