@@ -14,6 +14,21 @@ import { DOSSIER_FIELDS, WRAP_PERIODS, WRAP_STATS, WRAP_TILES, type WrapStat } f
 
 type Tab = 'file' | 'wrap';
 
+// `Segmented` is generic, and JSX's `<Segmented<Tab> />` explicit-type-argument
+// syntax parses fine for tsc but is invalid to the Babel parser Vite's react
+// plugin uses to transform .tsx (it breaks the dev/build server). Plain
+// contextual inference doesn't reliably resolve T from a JSX call site either
+// (T came back as `string`, not `Tab`, when tried). A thin non-generic
+// wrapper sidesteps both: `Segmented<Tab>(props)` below is an ordinary
+// generic function *call*, not a JSX tag, so it's unambiguous to Babel.
+function DossierTabSegmented(props: {
+  value: Tab;
+  onChange: (next: Tab) => void;
+  options: { value: Tab; label: string }[];
+}) {
+  return Segmented<Tab>(props);
+}
+
 function periodLabel(period: string): string {
   const [year, month] = period.split('-');
   const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -255,7 +270,7 @@ export function DossierStorage() {
             title="The file Vera reasons from"
             blurb="Everything Vera knows about your company, and everything it does not. Every answer you get is built on what is written here."
             actions={
-              <Segmented<Tab>
+              <DossierTabSegmented
                 value={tab}
                 onChange={setTab}
                 options={[
