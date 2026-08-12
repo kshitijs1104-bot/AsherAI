@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Vera — screenshot harness</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Identical to index.html. The harness has to load the same faces or
+         the screenshots would be of a typography the product never ships. -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=M+PLUS+Rounded+1c:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..700&family=Instrument+Sans:wght@400..700&family=Azeret+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&family=Onest:wght@400..700&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+      html, body { margin: 0; padding: 0; }
+      /* Scrollbars would otherwise be photographed into every frame. */
+      ::-webkit-scrollbar { width: 0; height: 0; }
+    </style>
+  </head>
+  <body>
+    <!-- Dev-only. `vite build` has index.html as its single input, so this
+         page and everything it pulls in stay out of the shipped bundle. -->
+    <div id="root"></div>
+    <script type="module" src="/src/shots/main.tsx"></script>
+  </body>
+</html>

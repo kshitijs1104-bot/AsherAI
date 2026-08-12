@@ -1,0 +1,57 @@
+/* Screenshot-harness-only overrides. Loaded by src/shots/main.tsx, which the
+   product bundle never imports. Nothing here may be relied on by the app. */
+
+/* `shell` mode photographs the product as a founder sees it: one viewport,
+   sidebar pinned, the board scrolling inside its own context — exactly how
+   Venus.tsx mounts it. */
+.shots-mode-shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* `board` mode unpicks the internal scroller so the whole board lays out at
+   its natural height and a full-page capture gets all of it in one image.
+   This is what the slow pan-down beat is cut from — a real tall screenshot,
+   not a short one repeated. */
+.shots-mode-board,
+.shots-mode-board .shots-board {
+  height: auto;
+  overflow: visible;
+}
+.shots-mode-board .shots-board > div {
+  overflow: visible !important;
+  min-height: 0 !important;
+  flex: none !important;
+}
+
+/* ---- Depth isolation --------------------------------------------------
+   Each layer is captured from the SAME page at the same size, with the other
+   layers made invisible rather than removed — so every element keeps its real
+   position and the three PNGs register pixel-for-pixel when Remotion stacks
+   them at different Z. Compositing them back together must reproduce the
+   single-image screenshot exactly; if it doesn't, one of these selectors has
+   gone stale against the app's markup. */
+.shots-layer-sidebar .shots-board { visibility: hidden; }
+
+.shots-layer-main .shots-sidebar,
+.shots-layer-main .vera-bento-rail { visibility: hidden; }
+
+.shots-layer-rail .shots-sidebar,
+.shots-layer-rail .vera-bento-main { visibility: hidden; }
+
+/* The board's "Back to chat" link sits above the bento, so it belongs to
+   neither column and would otherwise be photographed into both the main and
+   rail layers — and appear twice, at two depths, once they are stacked.
+   It travels with the main column. */
+.shots-layer-rail .shots-board > div > div > button { visibility: hidden; }
+
+/* Layer captures are taken over an alpha channel so the ad can put real
+   space between them. The page background and the board's own inline
+   `background: var(--vera-cc-bg)` both have to go — the tiles keep theirs,
+   which is what gives the layers their edges. */
+html.shots-transparent-page,
+html.shots-transparent-page body,
+.shots-transparent,
+.shots-transparent .shots-board > div {
+  background: transparent !important;
+}
