@@ -2029,19 +2029,22 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       parsed.confidenceScore = confidenceResult.score;
       parsed.confidenceFactors = confidenceResult.factors;
       parsed.evidenceRefs = confidenceResult.evidenceRefs;
+      parsed.groundedIn = confidenceResult.groundedIn;
       if (confidenceResult.contradictions.length > 0) {
         parsed.contradictions = confidenceResult.contradictions;
       }
       const contradictionNote = confidenceResult.contradictions.length > 0
         ? " Precedents disagree on outcome for this pattern — treat as a split signal, not consensus."
         : "";
-      parsed.confidenceNote = (retrieval.tier === "none"
-        ? (webResult && !webResult.empty
-            ? "Grounded in a live web search plus general reasoning — no direct match in the curated dataset for this specific question."
-            : "Grounded in general strategic reasoning — no direct match in the curated dataset for this specific question.")
-        : retrieval.tier === "moderate"
-          ? "Grounded in a small or adjacent set of precedents — a slightly thinner evidence base than a direct match."
-          : "Grounded in verified precedent coverage.") + contradictionNote;
+      parsed.confidenceNote = confidenceResult.groundedIn === "own_history"
+        ? "Grounded in your own resolved decisions in this area — no dataset precedent needed for this one." + contradictionNote
+        : (retrieval.tier === "none"
+            ? (webResult && !webResult.empty
+                ? "Grounded in a live web search plus general reasoning — no direct match in the curated dataset for this specific question."
+                : "Grounded in general strategic reasoning — no direct match in the curated dataset for this specific question.")
+            : retrieval.tier === "moderate"
+              ? "Grounded in a small or adjacent set of precedents — a slightly thinner evidence base than a direct match."
+              : "Grounded in verified precedent coverage.") + contradictionNote;
       applyTierLabel(parsed, retrieval);
 
       // Shadow mode for fact-level contradiction detection (e.g. "churn is
@@ -2372,6 +2375,7 @@ router.post("/ai/idea-review", requireAuth, async (req, res) => {
       parsed.confidenceScore = confidenceResult.score;
       parsed.confidenceFactors = confidenceResult.factors;
       parsed.evidenceRefs = confidenceResult.evidenceRefs;
+      parsed.groundedIn = confidenceResult.groundedIn;
       if (confidenceResult.contradictions.length > 0) {
         parsed.contradictions = confidenceResult.contradictions;
       }

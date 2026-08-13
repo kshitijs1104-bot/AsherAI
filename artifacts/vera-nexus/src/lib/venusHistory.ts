@@ -59,11 +59,23 @@ export interface ChatMessage {
   cards?: any[];
   confidence?: 'verified' | 'exploratory';
   confidenceNote?: string;
+  // What actually earned "verified", when confidence is 'verified' — the
+  // curated precedent dataset, or this founder's own resolved-decision
+  // track record (see lib/confidence.ts on the server). Lets the badge say
+  // which one honestly instead of always crediting the dataset.
+  groundedIn?: 'precedent' | 'own_history' | null;
   contextQuery?: string;
   evidenceRefs?: EvidenceRefEntry[];
   contradictions?: ContradictionEntry[];
   arithmeticIssues?: ArithmeticIssueEntry[];
   lengthConstraintNote?: string;
+  // Set on a user message sent with a file attached. `content` still carries
+  // the "[Attached file: x]" marker (see Venus.tsx's handleSend and
+  // attachmentContext.ts on the server) because that text is what tells the
+  // model a file exists — this is purely for the UI to render the file as a
+  // proper chip instead of that marker text, and to know what to fetch when
+  // the founder clicks it to preview.
+  attachment?: { id: number; fileName: string; mimeType: string };
 }
 
 export interface ChatSession {

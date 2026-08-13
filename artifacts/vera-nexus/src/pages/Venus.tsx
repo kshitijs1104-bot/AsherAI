@@ -19,6 +19,7 @@ import { NotificationBell } from './NotificationBell';
 import { CommandCenterSection } from './CommandCenter';
 import { AttachMenu } from './AttachMenu';
 import { VeraSettingsModal } from './VeraSettingsModal';
+import { AttachmentPreviewModal, type PreviewableAttachment } from './AttachmentPreviewModal';
 import { useVenusTheme } from '../lib/venusTheme';
 import { useVeraSkin } from '../lib/veraSkin';
 import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
@@ -300,6 +301,65 @@ function AttachmentChip({ fileName, previewUrl, uploading, error, onRemove }: { 
   );
 }
 
+// The same marker handleSend appends to a sent message's text (see
+// attachmentContext.ts on the server, which reads it off the RAW text —
+// `content` is deliberately left carrying it so nothing about that pipeline
+// changes). This is purely a display-layer strip: the chat bubble shows the
+// founder's words, and the file itself renders as its own chip below instead
+// of as bracket text sitting inside their sentence.
+const ATTACHMENT_MARKER_RE = /\n*\[Attached file:\s*([^\]]+)\]\s*$/;
+
+function splitAttachmentMarker(content: string | undefined): { text: string; legacyFileName: string | null } {
+  const raw = content ?? '';
+  const match = raw.match(ATTACHMENT_MARKER_RE);
+  if (!match) return { text: raw, legacyFileName: null };
+  return { text: raw.slice(0, match.index).trim(), legacyFileName: match[1].trim() };
+}
+
+// The chip for a file that's already part of the conversation, shown above
+// the bubble it was sent with. Clickable (opens the centered preview) when
+// there's a real attachment id to fetch — a message from before this field
+// existed only has the filename recovered from the marker text, so it
+// renders the same chip with no click handler rather than pretending it can
+// still be opened.
+function SentAttachmentChip({
+  attachment,
+  onOpen,
+}: {
+  attachment: { id?: number; fileName: string; mimeType?: string };
+  onOpen?: () => void;
+}) {
+  const isImage = attachment.mimeType?.startsWith('image/') && attachment.id != null;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={!onOpen}
+      className="inline-flex items-center gap-2 rounded-xl text-[12px] font-medium max-w-full disabled:cursor-default"
+      style={{
+        background: 'var(--v7-bg-raised-2, var(--surface2))',
+        border: '1px solid var(--v7-border, var(--border2))',
+        color: 'var(--v7-text-dim, var(--dim))',
+        padding: isImage ? '4px 12px 4px 4px' : '7px 12px',
+        cursor: onOpen ? 'pointer' : 'default',
+      }}
+      title={onOpen ? `View ${attachment.fileName}` : attachment.fileName}
+    >
+      {isImage ? (
+        <img
+          src={`/api/attachments/${attachment.id}`}
+          alt=""
+          className="w-8 h-8 rounded-lg object-cover shrink-0"
+          style={{ border: '1px solid var(--v7-border, var(--border2))' }}
+        />
+      ) : (
+        <Paperclip className="w-3.5 h-3.5 shrink-0" />
+      )}
+      <span className="truncate max-w-[220px]">{attachment.fileName}</span>
+    </button>
+  );
+}
+
 export function VenusPage() {
   const [, navigate] = useLocation();
   const { theme, toggle: toggleTheme } = useVenusTheme();
@@ -349,6 +409,9 @@ export function VenusPage() {
   );
   const [saved, setSaved] = useState(getSavedAnalyses);
   const [showSettings, setShowSettings] = useState(false);
+  // The file open in the centered preview modal, or null when it's closed.
+  // Set by clicking a sent attachment's chip in the message history.
+  const [previewAttachment, setPreviewAttachment] = useState<PreviewableAttachment | null>(null);
   const [showGoalPanel, setShowGoalPanel] = useState(() => loadPanelPref(SHOW_GOAL_PANEL_KEY));
   const [showRoadmap, setShowRoadmap] = useState(() => loadPanelPref(SHOW_ROADMAP_KEY));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadPanelPref(SIDEBAR_COLLAPSED_KEY, false));
@@ -565,10 +628,17 @@ export function VenusPage() {
     // simplest honest way to give Venus's existing text-only pipeline any
     // awareness of it at all, short of a deeper multimodal-input rework.
     const text = pendingAttachment ? `${baseText}\n\n[Attached file: ${pendingAttachment.fileName}]`.trim() : baseText;
+    // Held before clearAttachment() wipes pendingAttachment, so the message
+    // in history keeps a structured record of what was attached — see the
+    // `attachment` field's doc comment on ChatMessage for why this exists
+    // alongside (not instead of) the marker baked into `text` above.
+    const sentAttachment = pendingAttachment
+      ? { id: pendingAttachment.id, fileName: pendingAttachment.fileName, mimeType: pendingAttachment.mimeType }
+      : undefined;
     setInput('');
     clearAttachment();
 
-    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
+    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: text, attachment: sentAttachment }];
     const updatedTitle = messages.length === 0 ? titleFromMessage(text) : currentSession.title;
     const updated: ChatSession = { ...currentSession, messages: newMessages, title: updatedTitle };
     setCurrentSession(updated);
@@ -597,6 +667,7 @@ export function VenusPage() {
             cards: res.cards,
             confidence: res.confidence,
             confidenceNote: res.confidenceNote,
+            groundedIn: res.groundedIn,
             evidenceRefs: res.evidenceRefs,
             contradictions: res.contradictions,
             // Both were already on the wire and both were being thrown away
@@ -1263,11 +1334,25 @@ export function VenusPage() {
               const priorUserQuery = messages.slice(0, i).reverse().find(m => m.role === 'user')?.content ?? '';
               return (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {msg.role === 'user' ? (
-                    <div className="max-w-[70%] bg-[var(--v7-tint)] border border-[var(--v7-tint-border)] text-[var(--text)] rounded-2xl rounded-tr-none px-5 py-3.5 text-sm leading-relaxed">
-                      {msg.content}
-                    </div>
-                  ) : (
+                  {msg.role === 'user' ? (() => {
+                    const { text: displayText, legacyFileName } = splitAttachmentMarker(msg.content);
+                    const chip = msg.attachment ?? (legacyFileName ? { fileName: legacyFileName } : null);
+                    return (
+                      <div className="max-w-[70%] flex flex-col items-end gap-1.5">
+                        {chip && (
+                          <SentAttachmentChip
+                            attachment={chip}
+                            onOpen={msg.attachment ? () => setPreviewAttachment(msg.attachment!) : undefined}
+                          />
+                        )}
+                        {displayText && (
+                          <div className="bg-[var(--v7-tint)] border border-[var(--v7-tint-border)] text-[var(--text)] rounded-2xl rounded-tr-none px-5 py-3.5 text-sm leading-relaxed">
+                            {displayText}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })() : (
                     <div className="max-w-[90%] space-y-3 group">
                       <div className="flex items-center justify-between gap-3 mb-1">
                         <div className="flex items-center gap-2">
@@ -1351,6 +1436,7 @@ export function VenusPage() {
                             note={msg.confidenceNote}
                             evidenceRefs={msg.evidenceRefs}
                             contradictions={msg.contradictions}
+                            groundedIn={msg.groundedIn}
                           />
                         </>
                       )}
@@ -1363,7 +1449,9 @@ export function VenusPage() {
               );
             })}
 
-            {analyzeMutation.isPending && <VeraTracing />}
+            {analyzeMutation.isPending && (
+              <VeraTracing seed={`${messages.length}:${messages[messages.length - 1]?.content ?? ''}`} />
+            )}
             <div ref={endRef} />
           </div>
         )}
@@ -1415,6 +1503,7 @@ export function VenusPage() {
         </>
         )}
       </div>
+      <AttachmentPreviewModal attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
     </div>
   );
 }
@@ -1457,22 +1546,133 @@ function VeraAvatar({ pulse = false }: { pulse?: boolean }) {
 // the real request finishes whenever it finishes — nothing here pretends to
 // know how long is left. If the response outlasts the script the final line
 // simply stays spinning, which is honest.
-const TRACING_STEPS = [
-  'Reading your Dossier and connected sources',
-  'Separating what changed from what moved with it',
-  'Testing the chain against your goals',
-  'Writing it up',
+// Several honest phrasings of the same four beats, rather than one fixed
+// script. The old version showed the identical four lines for every single
+// question, which stopped reading as "here's what Vera is actually doing"
+// and started reading as a canned loading animation the moment a founder
+// asked more than one thing in a session. None of these claim anything more
+// specific than the fixed set did — same four beats (read context, cross-
+// check it, reason through it, write the answer) in different honest words —
+// so picking one is still never a claim about work that wasn't done.
+const TRACING_STEP_SETS: string[][] = [
+  [
+    'Reading your Dossier and connected sources',
+    'Separating what changed from what moved with it',
+    'Testing the chain against your goals',
+    'Writing it up',
+  ],
+  [
+    'Pulling in what Vera already knows about your business',
+    'Checking it against similar situations on record',
+    'Weighing what actually applies here',
+    'Putting the answer together',
+  ],
+  [
+    'Reading the question against your company file',
+    'Looking for precedent that actually matches',
+    'Working through what follows from it',
+    'Drafting the response',
+  ],
+  [
+    'Cross-referencing your goals and recent decisions',
+    'Checking for anything that contradicts the pattern',
+    'Reasoning through the tradeoffs',
+    'Writing it up',
+  ],
+  [
+    'Reading your Dossier and this thread so far',
+    'Ruling out precedent that doesn’t really apply',
+    'Building the chain from evidence to answer',
+    'Finishing the response',
+  ],
+  [
+    'Reading what you just asked in context',
+    'Lining it up against what’s actually on record',
+    'Working through the reasoning chain',
+    'Getting the answer down',
+  ],
 ];
 
-function VeraTracing() {
+// Keyword-led sets for the handful of topics common enough to name
+// specifically without overreaching — the first two lines name the actual
+// area of the question, the last two stay the same honest close every set
+// uses. Falls through to the generic pool for everything else rather than
+// stretching a keyword match to fit.
+const TRACING_STEP_TOPICS: { pattern: RegExp; steps: string[] }[] = [
+  {
+    pattern: /\b(price|pricing|charge|discount)\b/i,
+    steps: [
+      'Reading your pricing against the rest of the file',
+      'Checking it against comparable pricing moves on record',
+      'Testing the chain against your goals',
+      'Writing it up',
+    ],
+  },
+  {
+    pattern: /\b(raise|raising|fundrais|investor|vc|term sheet|valuation)\b/i,
+    steps: [
+      'Reading your Dossier’s stage and runway',
+      'Checking it against similar raises on record',
+      'Weighing what actually applies here',
+      'Writing it up',
+    ],
+  },
+  {
+    pattern: /\b(hire|hiring|headcount|team|employee|contractor)\b/i,
+    steps: [
+      'Reading your team shape and burn against the file',
+      'Checking it against similar hiring calls on record',
+      'Testing the chain against your goals',
+      'Putting the answer together',
+    ],
+  },
+  {
+    pattern: /\b(competitor|competition|competitive)\b/i,
+    steps: [
+      'Reading who you’re up against from your Dossier',
+      'Checking it against how similar matchups played out',
+      'Working through what follows from it',
+      'Writing it up',
+    ],
+  },
+  {
+    pattern: /\b(goal|roadmap|plan|priorit)/i,
+    steps: [
+      'Reading your goals and recent decisions',
+      'Checking the plan against precedent',
+      'Testing the chain against where you’re headed',
+      'Writing it up',
+    ],
+  },
+];
+
+// A message's own text picks the variant, so the same question always shows
+// the same steps (nothing flickers between renders) and different questions
+// very likely show different ones — deterministic, not random, which avoids
+// the same set reappearing back-to-back by pure chance the way Math.random()
+// would. Message count is folded in too so two short, similar messages in a
+// row ("yes", "ok") still don't necessarily land on the same set.
+function pickTracingSteps(seed: string): string[] {
+  const topical = TRACING_STEP_TOPICS.find((t) => t.pattern.test(seed));
+  if (topical) return topical.steps;
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  return TRACING_STEP_SETS[Math.abs(hash) % TRACING_STEP_SETS.length];
+}
+
+function VeraTracing({ seed }: { seed: string }) {
+  const [steps] = useState(() => pickTracingSteps(seed));
   const [done, setDone] = useState(0);
 
   useEffect(() => {
     // Cleared on unmount, which happens the moment the response lands.
-    const timers = TRACING_STEPS.slice(0, -1).map((_, i) =>
+    const timers = steps.slice(0, -1).map((_, i) =>
       setTimeout(() => setDone(i + 1), 700 + i * 900),
     );
     return () => timers.forEach(clearTimeout);
+    // `steps` is intentionally excluded — it's fixed for this component's
+    // lifetime (see the useState initializer above) and re-running this
+    // effect would restart the stagger from the top.
   }, []);
 
   return (
@@ -1480,7 +1680,7 @@ function VeraTracing() {
       <div className="flex items-start gap-3">
         <VeraAvatar pulse />
         <div className="flex flex-col gap-[7px] pt-0.5">
-          {TRACING_STEPS.map((step, i) => {
+          {steps.map((step, i) => {
             const complete = i < done;
             const active = i === done;
             // Steps that haven't started yet are held at low opacity rather
@@ -1830,7 +2030,11 @@ function CompetitorList({ competitors }: { competitors: unknown }) {
 // labelled VERIFIED. For a product whose whole claim is causal honesty, that
 // is the most expensive defect in it: it manufactures confidence the engine
 // itself did not have.
-function confidenceState(confidence?: 'verified' | 'exploratory', contradictions?: ContradictionEntry[]) {
+function confidenceState(
+  confidence?: 'verified' | 'exploratory',
+  contradictions?: ContradictionEntry[],
+  groundedIn?: 'precedent' | 'own_history' | null,
+) {
   if (!confidence) return null;
   if (contradictions && contradictions.length > 0) {
     return { label: 'Split precedent', color: 'var(--amber)', tone: 'warn' as const };
@@ -1844,6 +2048,16 @@ function confidenceState(confidence?: 'verified' | 'exploratory', contradictions
     // "3 precedents" chip and named companies). The actual grounding basis
     // is already stated honestly in the `note` text below this badge.
     return { label: 'Exploratory', color: 'var(--amber)', tone: 'warn' as const };
+  }
+  // A thin/zero-coverage sector in the curated dataset used to mean
+  // "exploratory" forever, no matter how long a founder had been using
+  // Vera — confidence.ts now lets a real cluster of THEIR OWN resolved
+  // decisions earn "verified" independently (see ownHistoryQualifiesAsVerified
+  // there), which is why this can no longer always say "Precedent-backed":
+  // that claim would be false on the sessions where the dataset contributed
+  // nothing and the founder's own track record carried it entirely.
+  if (groundedIn === 'own_history') {
+    return { label: 'Backed by your own track record', color: 'var(--mint)', tone: 'ok' as const };
   }
   // WAS 'Verified precedent'. Nothing in the dataset is verified: every one
   // of the 79 rows in data/precedents.json carries verification_status
@@ -1911,14 +2125,16 @@ function EvidenceStrip({
   note,
   evidenceRefs,
   contradictions,
+  groundedIn,
 }: {
   confidence?: 'verified' | 'exploratory';
   note?: string;
   evidenceRefs?: EvidenceRefEntry[];
   contradictions?: ContradictionEntry[];
+  groundedIn?: 'precedent' | 'own_history' | null;
 }) {
   const [open, setOpen] = useState(false);
-  const state = confidenceState(confidence, contradictions);
+  const state = confidenceState(confidence, contradictions, groundedIn);
   const precedents = (evidenceRefs ?? []).filter((r) => r.type === 'precedent');
   const ownDecisions = (evidenceRefs ?? []).filter((r) => r.type === 'own_decision');
   const conflict = contradictions?.[0]?.description;

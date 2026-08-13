@@ -372,6 +372,14 @@ export const VenusResponseConfidence = {
   exploratory: 'exploratory',
 } as const;
 
+export type VenusResponseGroundedIn = typeof VenusResponseGroundedIn[keyof typeof VenusResponseGroundedIn] | null;
+
+
+export const VenusResponseGroundedIn = {
+  precedent: 'precedent',
+  own_history: 'own_history',
+} as const;
+
 export type EvidenceRefType = typeof EvidenceRefType[keyof typeof EvidenceRefType];
 
 
@@ -399,6 +407,7 @@ export interface VenusResponse {
   confidenceNote?: string;
   confidenceTier?: string;
   confidenceScore?: number;
+  groundedIn?: VenusResponseGroundedIn;
   evidenceRefs?: EvidenceRef[];
   contradictions?: ContradictionSignal[];
 }

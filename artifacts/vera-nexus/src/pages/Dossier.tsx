@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Fingerprint, Upload, Sparkles, Check, TrendingUp, TrendingDown, Minus,
   CalendarDays, Loader2, AlertCircle,
@@ -10,7 +11,7 @@ import {
 } from '../lib/venusApi';
 import { VenusThemeToggle } from './VenusThemeToggle';
 import { useVenusTheme } from '../lib/venusTheme';
-import { Reveal, RevealGroup, RevealItem, Spotlight } from '../lib/motion';
+import { Reveal, RevealGroup, RevealItem, Spotlight, EASE } from '../lib/motion';
 
 // ---- The Dossier page ----
 //
@@ -168,6 +169,32 @@ function Intake({ onDone }: { onDone: () => void }) {
  * The gap questions — the part that makes this feel like a consultant
  * ---------------------------------------------------------------------- */
 
+// Shown for a beat once the last outstanding question is answered, in place
+// of the form — a founder who just finished six questions in a row shouldn't
+// have the panel just vanish out from under the cursor, but it also has no
+// reason to keep sitting there once there's nothing left to ask. This is the
+// bridge between "still filling it in" and "gone, because the file above
+// already reflects it."
+function GapQuestionsComplete() {
+  return (
+    <div className="flex flex-col items-center text-center py-5">
+      <motion.div
+        initial={{ scale: 0.6, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.4, ease: EASE }}
+        className="w-11 h-11 rounded-full flex items-center justify-center mb-3"
+        style={{ background: 'var(--v7-cyan-soft, rgba(44,232,214,0.14))' }}
+      >
+        <Check className="w-5 h-5" style={{ color: 'var(--v7-cyan)' }} />
+      </motion.div>
+      <p className="text-[13.5px] font-semibold">That's everything Vera asked</p>
+      <p className="text-[12px] mt-1" style={{ color: 'var(--v7-text-mute)' }}>
+        Folding your answers into the file…
+      </p>
+    </div>
+  );
+}
+
 function GapQuestions({ dossier }: { dossier: Dossier }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
@@ -177,10 +204,38 @@ function GapQuestions({ dossier }: { dossier: Dossier }) {
     () => dossier.questions.filter((q) => !(dossier.answers[q.id] ?? '').trim()),
     [dossier.questions, dossier.answers],
   );
+  const answeredCount = dossier.questions.length - outstanding.length;
+
+  // 'active' while there's still something to ask. The moment the LAST one
+  // gets answered in this sitting, this flips to 'completing' for a beat
+  // (see GapQuestionsComplete above) and then 'done', at which point the
+  // panel unmounts — a finished intake has no reason to keep occupying the
+  // screen once the file itself already shows what changed.
+  //
+  // A file that was ALREADY fully answered when this page loaded (a return
+  // visit, not a live completion) starts straight at 'done' via this lazy
+  // initializer — there's nothing to celebrate about a form that was
+  // finished last week, and the panel should simply not be here.
+  const [phase, setPhase] = useState<'active' | 'completing' | 'done'>(() =>
+    dossier.questions.length > 0 && outstanding.length === 0 ? 'done' : 'active',
+  );
+  // Tracks whether there was still something outstanding as of the last
+  // render, so the effect below can tell "just finished" (was >0, now 0)
+  // apart from "loaded already finished" (handled by the initializer above,
+  // never true->0 in an effect because it never starts true).
+  const hadOutstanding = useRef(outstanding.length > 0);
+  useEffect(() => {
+    if (hadOutstanding.current && outstanding.length === 0 && phase === 'active') {
+      setPhase('completing');
+      const t = setTimeout(() => setPhase('done'), 1500);
+      hadOutstanding.current = false;
+      return () => clearTimeout(t);
+    }
+    hadOutstanding.current = outstanding.length > 0;
+    return undefined;
+  }, [outstanding.length, phase]);
 
   if (dossier.questions.length === 0) return null;
-
-  const answeredCount = dossier.questions.length - outstanding.length;
 
   const saveOne = (q: DossierQuestion) => {
     const value = (drafts[q.id] ?? '').trim();
@@ -206,92 +261,110 @@ function GapQuestions({ dossier }: { dossier: Dossier }) {
   };
 
   return (
-    <Panel className="p-6 mt-4">
-      <div className="flex items-baseline justify-between mb-1.5 gap-3">
-        <h2 className="text-[15px] font-bold">What Vera still needs to ask you</h2>
-        <span className="text-[11.5px] shrink-0" style={{ color: 'var(--v7-text-mute)' }}>
-          {answeredCount}/{dossier.questions.length} answered
-        </span>
-      </div>
-      <p className="text-[13px] mb-5 leading-relaxed" style={{ color: 'var(--v7-text-mute)' }}>
-        These come from what your material didn't cover. Answer what you can — every
-        one you fill in changes the advice you get. You can leave the rest.
-      </p>
-
-      <div className="space-y-4">
-        {dossier.questions.map((q) => {
-          const existing = (dossier.answers[q.id] ?? '').trim();
-          const justSaved = savedIds.has(q.id);
-          return (
-            <div key={q.id}>
-              <div className="flex items-start gap-2">
-                {existing ? (
-                  <Check className="w-3.5 h-3.5 shrink-0 mt-1" style={{ color: 'var(--v7-cyan)' }} />
-                ) : (
-                  <span
-                    className="shrink-0 mt-1.5 rounded-full"
-                    style={{ width: '5px', height: '5px', background: 'var(--v7-text-mute)' }}
-                  />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13.5px] font-medium leading-snug">{q.question}</p>
-                  {q.why && (
-                    <p className="text-[11.5px] mt-1 leading-relaxed" style={{ color: 'var(--v7-text-mute)' }}>
-                      {q.why}
-                    </p>
-                  )}
-                  {existing ? (
-                    <p className="text-[13px] mt-1.5" style={{ color: 'var(--v7-text-dim)' }}>
-                      {existing}
-                    </p>
-                  ) : (
-                    <div className="flex items-center gap-2 mt-2">
-                      <input
-                        value={drafts[q.id] ?? ''}
-                        onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            saveOne(q);
-                          }
-                        }}
-                        placeholder="Your answer…"
-                        className="flex-1 min-w-0 rounded-lg px-3 py-2 text-[13px] outline-none"
-                        style={{
-                          background: 'var(--v7-bg, rgba(0,0,0,0.25))',
-                          border: '1px solid var(--v7-border, rgba(255,255,255,0.12))',
-                          color: 'var(--v7-text)',
-                        }}
-                      />
-                      <button
-                        onClick={() => saveOne(q)}
-                        disabled={!(drafts[q.id] ?? '').trim() || saveAnswers.isPending}
-                        className="shrink-0 px-3 py-2 rounded-lg text-[12px] font-semibold disabled:opacity-30"
-                        style={{ border: '1px solid var(--v7-border, rgba(255,255,255,0.14))', color: 'var(--v7-text-dim)' }}
-                      >
-                        {justSaved ? 'Saved' : 'Save'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {Object.values(drafts).some((v) => v.trim()) && (
-        <button
-          onClick={saveAll}
-          disabled={saveAnswers.isPending}
-          className="inline-flex items-center gap-2 mt-5 px-4 py-2.5 rounded-xl text-[13px] font-semibold disabled:opacity-40"
-          style={{ background: 'var(--v7-cyan-strong, #5b4fe8)', color: '#fff' }}
+    <AnimatePresence>
+      {phase !== 'done' && (
+        <motion.div
+          key="gap-questions"
+          className="mt-4"
+          style={{ overflow: 'hidden' }}
+          exit={{ opacity: 0, height: 0, marginTop: 0 }}
+          transition={{ duration: 0.5, ease: EASE }}
         >
-          {saveAnswers.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-          Save all answers
-        </button>
+          <Panel className="p-6">
+            {phase === 'completing' ? (
+              <GapQuestionsComplete />
+            ) : (
+              <>
+                <div className="flex items-baseline justify-between mb-1.5 gap-3">
+                  <h2 className="text-[15px] font-bold">What Vera still needs to ask you</h2>
+                  <span className="text-[11.5px] shrink-0" style={{ color: 'var(--v7-text-mute)' }}>
+                    {answeredCount}/{dossier.questions.length} answered
+                  </span>
+                </div>
+                <p className="text-[13px] mb-5 leading-relaxed" style={{ color: 'var(--v7-text-mute)' }}>
+                  These come from what your material didn't cover. Answer what you can — every
+                  one you fill in changes the advice you get. You can leave the rest.
+                </p>
+
+                <div className="space-y-4">
+                  {dossier.questions.map((q) => {
+                    const existing = (dossier.answers[q.id] ?? '').trim();
+                    const justSaved = savedIds.has(q.id);
+                    return (
+                      <div key={q.id}>
+                        <div className="flex items-start gap-2">
+                          {existing ? (
+                            <Check className="w-3.5 h-3.5 shrink-0 mt-1" style={{ color: 'var(--v7-cyan)' }} />
+                          ) : (
+                            <span
+                              className="shrink-0 mt-1.5 rounded-full"
+                              style={{ width: '5px', height: '5px', background: 'var(--v7-text-mute)' }}
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13.5px] font-medium leading-snug">{q.question}</p>
+                            {q.why && (
+                              <p className="text-[11.5px] mt-1 leading-relaxed" style={{ color: 'var(--v7-text-mute)' }}>
+                                {q.why}
+                              </p>
+                            )}
+                            {existing ? (
+                              <p className="text-[13px] mt-1.5" style={{ color: 'var(--v7-text-dim)' }}>
+                                {existing}
+                              </p>
+                            ) : (
+                              <div className="flex items-center gap-2 mt-2">
+                                <input
+                                  value={drafts[q.id] ?? ''}
+                                  onChange={(e) => setDrafts((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      saveOne(q);
+                                    }
+                                  }}
+                                  placeholder="Your answer…"
+                                  className="flex-1 min-w-0 rounded-lg px-3 py-2 text-[13px] outline-none"
+                                  style={{
+                                    background: 'var(--v7-bg, rgba(0,0,0,0.25))',
+                                    border: '1px solid var(--v7-border, rgba(255,255,255,0.12))',
+                                    color: 'var(--v7-text)',
+                                  }}
+                                />
+                                <button
+                                  onClick={() => saveOne(q)}
+                                  disabled={!(drafts[q.id] ?? '').trim() || saveAnswers.isPending}
+                                  className="shrink-0 px-3 py-2 rounded-lg text-[12px] font-semibold disabled:opacity-30"
+                                  style={{ border: '1px solid var(--v7-border, rgba(255,255,255,0.14))', color: 'var(--v7-text-dim)' }}
+                                >
+                                  {justSaved ? 'Saved' : 'Save'}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {Object.values(drafts).some((v) => v.trim()) && (
+                  <button
+                    onClick={saveAll}
+                    disabled={saveAnswers.isPending}
+                    className="inline-flex items-center gap-2 mt-5 px-4 py-2.5 rounded-xl text-[13px] font-semibold disabled:opacity-40"
+                    style={{ background: 'var(--v7-cyan-strong, #5b4fe8)', color: '#fff' }}
+                  >
+                    {saveAnswers.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    Save all answers
+                  </button>
+                )}
+              </>
+            )}
+          </Panel>
+        </motion.div>
       )}
-    </Panel>
+    </AnimatePresence>
   );
 }
 
@@ -347,6 +420,18 @@ function CompanyFile({ dossier, onRebuild }: { dossier: Dossier; onRebuild: () =
               }}
             />
           </div>
+          {/* Answers the question this number always raises once every asked
+              question is answered but the bar isn't at 100: it's not stuck,
+              it's counting against Vera's full 16-field profile, and only
+              5-8 of those become questions in any one round (see
+              generateGapQuestions) — the rest just weren't asked yet. */}
+          {unknown.length > 0 && (
+            <p className="text-[11px] mt-1.5 leading-relaxed" style={{ color: 'var(--v7-text-mute)' }}>
+              {known.length} of {dossier.fields.length} things Vera tracks about every company are filled
+              in. Answering everything asked above can still leave this under 100% — the rest weren't
+              covered by your material or by this round's questions.
+            </p>
+          )}
         </div>
 
         <div className="space-y-3">

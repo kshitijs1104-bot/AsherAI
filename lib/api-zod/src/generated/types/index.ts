@@ -67,3 +67,4 @@ export * from './venusCard';
 export * from './venusHistoryMessage';
 export * from './venusResponse';
 export * from './venusResponseConfidence';
+export * from './venusResponseGroundedIn';

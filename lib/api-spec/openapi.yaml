@@ -1047,6 +1047,15 @@ components:
         # rendered a single green "Verified precedent" pill and threw the rest
         # away. Declaring them is what lets the chat show its evidence.
         confidenceScore: { type: number }
+        # What actually justified "verified", when confidence is "verified" —
+        # the curated precedent dataset, or the founder's own resolved-
+        # decision track record (see lib/confidence.ts's
+        # ownHistoryQualifiesAsVerified). Null/absent when confidence is
+        # "exploratory". Lets the UI label the badge accurately instead of
+        # always crediting the dataset even on the sessions where a thin/
+        # zero-coverage sector was carried entirely by the founder's own
+        # history.
+        groundedIn: { type: string, enum: [precedent, own_history], nullable: true }
         evidenceRefs:
           type: array
           items: { $ref: "#/components/schemas/EvidenceRef" }

@@ -679,6 +679,7 @@ export const VenusAnalyzeResponse = zod.object({
   "confidenceNote": zod.string().optional(),
   "confidenceTier": zod.string().optional(),
   "confidenceScore": zod.number().optional(),
+  "groundedIn": zod.enum(['precedent', 'own_history']).nullish(),
   "evidenceRefs": zod.array(zod.object({
   "type": zod.enum(['precedent', 'own_decision']),
   "id": zod.number(),
@@ -716,6 +717,7 @@ export const IdeaReviewResponse = zod.object({
   "confidenceNote": zod.string().optional(),
   "confidenceTier": zod.string().optional(),
   "confidenceScore": zod.number().optional(),
+  "groundedIn": zod.enum(['precedent', 'own_history']).nullish(),
   "evidenceRefs": zod.array(zod.object({
   "type": zod.enum(['precedent', 'own_decision']),
   "id": zod.number(),

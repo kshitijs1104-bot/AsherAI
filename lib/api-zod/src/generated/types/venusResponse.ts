@@ -9,6 +9,7 @@ import type { ContradictionSignal } from './contradictionSignal';
 import type { EvidenceRef } from './evidenceRef';
 import type { VenusCard } from './venusCard';
 import type { VenusResponseConfidence } from './venusResponseConfidence';
+import type { VenusResponseGroundedIn } from './venusResponseGroundedIn';
 
 export interface VenusResponse {
   summary: string;
@@ -17,6 +18,7 @@ export interface VenusResponse {
   confidenceNote?: string;
   confidenceTier?: string;
   confidenceScore?: number;
+  groundedIn?: VenusResponseGroundedIn;
   evidenceRefs?: EvidenceRef[];
   contradictions?: ContradictionSignal[];
 }

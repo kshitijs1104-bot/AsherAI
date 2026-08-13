@@ -32,6 +32,11 @@ export interface EvidenceRef {
 export interface ConfidenceResult {
   score: number;
   tier: "verified" | "exploratory";
+  // What actually justified "verified" — null when the tier is "exploratory".
+  // The UI uses this to label the badge honestly ("Precedent-backed" vs.
+  // "Backed by your own track record") instead of always naming the curated
+  // dataset even when a founder's own resolved history is what carried it.
+  groundedIn: "precedent" | "own_history" | null;
   factors: ConfidenceFactors;
   contradictions: ContradictionSignal[];
   evidenceRefs: EvidenceRef[];
@@ -69,6 +74,44 @@ const OUTCOME_HISTORY_WEIGHT = 0.15;
 // the old binary tier-lookup could never express. Revisit once
 // confidenceFactors have accumulated in production logs.
 const VERIFIED_THRESHOLD = 0.3;
+
+// A second, independent path to "verified" alongside the precedent one
+// below — a founder's own resolved decisions, not the third-party dataset.
+// This is deliberately a HIGHER bar than merely being cited as evidence
+// (retrieval.ts's OWN_DECISION_MIN_SCORE = 0.08, and outcomeSentiment can be
+// null on a resolved-but-unrated row): earning "verified" off a founder's
+// own history requires a real, reasonably strong CLUSTER of it, not one
+// loosely-related past decision. It's held to a real bar rather than a low
+// one specifically BECAUSE it's independent of precedent coverage — this is
+// the mechanism that lets a sector with zero dataset coverage still earn a
+// confident badge after enough real, resolved usage, without that badge ever
+// being cheaper to reach than the precedent path is.
+//
+// Why this is honest rather than a repeat of the fabricated-"Verified" bug
+// this file's history is full of guarding against: `outcome` on a resolved
+// venus_decisions row is the FOUNDER's own report of what actually happened
+// (see venus_decisions.ts — "kept close to verbatim... this is ground truth,
+// not something to paraphrase away"), not a model inference and not Vera
+// citing its own earlier guess back at itself. It is first-party, externally
+// verified-by-reality evidence — arguably stronger than an unverified
+// third-party precedent, not weaker.
+const OWN_HISTORY_VERIFIED_MIN_COUNT = 2;
+const OWN_HISTORY_VERIFIED_MIN_SCORE = 0.15;
+
+// Whether this founder's own resolved-decision track record is, on its own,
+// strong enough to earn "verified" with zero precedent coverage at all. Only
+// counts decisions that were both matched with real topical relevance
+// (ownDecisions is already gated on that — see retrieveOwnResolvedDecisions)
+// AND actually had an outcome reported (outcomeSentiment set) — a decision
+// marked "resolved" with no sentiment logged is a founder who reported back
+// but didn't say whether it worked, which isn't a result to build confidence
+// on.
+function ownHistoryQualifiesAsVerified(ownDecisions: OwnDecisionMatch[]): boolean {
+  const reported = ownDecisions.filter(
+    (d) => d.decision.outcomeSentiment != null && d.score >= OWN_HISTORY_VERIFIED_MIN_SCORE,
+  );
+  return reported.length >= OWN_HISTORY_VERIFIED_MIN_COUNT;
+}
 
 export function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
@@ -190,12 +233,21 @@ export function computeConfidence(retrieval: RetrievalResult, ownDecisions: OwnD
   // badge to at least hint something's off) could still claim "Verified
   // precedent" while citablePrecedents, and therefore evidenceRefs below,
   // is empty — a badge asserting grounding with nothing shown to back it.
-  const tier: ConfidenceResult["tier"] =
-    score >= VERIFIED_THRESHOLD && retrieval.tier === "strong" && citablePrecedents.length > 0 ? "verified" : "exploratory";
+  const precedentVerified = score >= VERIFIED_THRESHOLD && retrieval.tier === "strong" && citablePrecedents.length > 0;
+  // A sector with thin or zero dataset coverage would otherwise be pinned to
+  // "exploratory" forever, no matter how long a founder has been using Vera —
+  // see OWN_HISTORY_VERIFIED_MIN_COUNT above for why this path is real
+  // evidence and not a shortcut. Checked only when the precedent path
+  // already failed: precedent coverage, when it clears the bar, stays the
+  // primary/first-listed reason.
+  const ownHistoryVerified = !precedentVerified && ownHistoryQualifiesAsVerified(ownDecisions);
+  const tier: ConfidenceResult["tier"] = precedentVerified || ownHistoryVerified ? "verified" : "exploratory";
+  const groundedIn: ConfidenceResult["groundedIn"] = precedentVerified ? "precedent" : ownHistoryVerified ? "own_history" : null;
 
   return {
     score: Number(score.toFixed(3)),
     tier,
+    groundedIn,
     factors: {
       evidenceQuality: Number(evidenceQuality.toFixed(3)),
       verificationBoost: Number(verificationBoost.toFixed(3)),
