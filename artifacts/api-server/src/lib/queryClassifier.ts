@@ -25,6 +25,14 @@ import { callGroqJSON } from "./groq";
 export type QueryKind = "factual_lookup" | "consultation" | "mixed";
 export type QueryComplexity = "simple" | "moderate" | "complex";
 
+// Which slice of the system prompt this message actually needs (see
+// buildVenusPrompt in groq.ts). Decided HERE, on the gpt-oss-20b pool, for
+// the reason this whole file exists on that model: 20b has its own TPM
+// allowance, separate from the gpt-oss-120b pool the real answer spends —
+// so choosing the apparatus costs latency, never a single token of the
+// budget that was actually running out.
+export type ResponseMode = "strategy" | "drafting" | "capability" | "open_ended";
+
 // Coarse failure families, not specific bugs — a rate per class is what
 // generalizes across arbitrary future queries. See response_feedback schema.
 export type IssueClass = "fabricated_entity" | "misread_intent" | "wrong_topic" | "other";
@@ -62,6 +70,12 @@ export interface QueryClassification {
   // sources, search anyway. The cost of an unnecessary search is latency; the
   // cost of a skipped one is an invented answer.
   failed: boolean;
+  // Drives which prompt sections are assembled for the answer call. Always
+  // "strategy" (the full reasoning stack) when classification failed or was
+  // ambiguous — see DEFAULT_CLASSIFICATION. Guessing "strategy" wrongly
+  // costs tokens; guessing away from it wrongly costs answer quality, so
+  // this only ever errs toward more instruction.
+  responseMode: ResponseMode;
 }
 
 // Used when classification is unavailable. Never blocks a response — a failed
@@ -76,6 +90,9 @@ export const DEFAULT_CLASSIFICATION: QueryClassification = {
   detectedIssue: null,
   issueClass: null,
   failed: true,
+  // The safe default in every sense: a request whose classification we don't
+  // trust gets the entire apparatus, exactly as it did before modes existed.
+  responseMode: "strategy",
 };
 
 const CLASSIFIER_SYSTEM_PROMPT = `Classify a founder's message to a business-advisor AI on two INDEPENDENT axes. Return ONLY JSON.
@@ -103,9 +120,15 @@ const CLASSIFIER_SYSTEM_PROMPT = `Classify a founder's message to a business-adv
 - "other" — a real correction that fits none of the above
 Otherwise null.
 
+"responseMode" — what the reply itself has to BE. Default to "strategy" whenever there is any doubt at all; it is the only safe answer for a real business question:
+- "drafting" — they are asking you to WRITE a piece of copy they will use as-is (a LinkedIn post, a reel/video script, an email, presentation talking points, a caption). The deliverable is the text itself. Asking for advice ABOUT content ("what should I post about", "is LinkedIn worth it") is NOT drafting — that is "strategy".
+- "capability" — the message is about the assistant itself: what it can do, whether it has some feature, who or what it is.
+- "open_ended" — a greeting or a vague opener with no concrete question in it ("hi", "what should I focus on today", "where do I start").
+- "strategy" — everything else, and anything you are unsure about: any real question about their business, a decision, a diagnosis, a plan, a number, a follow-up.
+
 Judge only what the message actually asks. Do not assume a business/startup topic — the user may ask about anything at all.
 
-Return exactly: {"kind":"...","complexity":"...","needsExternalFacts":true|false,"correctsPriorAnswer":true|false,"detectedIssue":"..."|null,"issueClass":"..."|null}`;
+Return exactly: {"kind":"...","complexity":"...","needsExternalFacts":true|false,"correctsPriorAnswer":true|false,"detectedIssue":"..."|null,"issueClass":"..."|null,"responseMode":"..."}`;
 
 function coerce<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
@@ -169,6 +192,15 @@ export async function classifyQuery(
       issueClass: correctsPriorAnswer
         ? coerce(parsed.issueClass, ["fabricated_entity", "misread_intent", "wrong_topic", "other"] as const, "other")
         : null,
+      // coerce()'s fallback is doing real safety work here: any value the
+      // model invents, misspells, or omits lands on "strategy" — the full
+      // stack — rather than silently stripping the reasoning apparatus off
+      // a genuine business question.
+      responseMode: coerce(
+        parsed.responseMode,
+        ["strategy", "drafting", "capability", "open_ended"] as const,
+        "strategy",
+      ),
       failed: false,
     };
   } catch (err) {

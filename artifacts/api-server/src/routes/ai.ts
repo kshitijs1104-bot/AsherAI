@@ -3,7 +3,7 @@ import { db, settingsTable, venusDecisionsTable, goalsTable, type VenusDecision,
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { VenusAnalyzeBody, IdeaReviewBody } from "@workspace/api-zod";
-import { getGroqClient, VENUS_PROMPT, buildFallbackVenusResponse, buildTransientErrorResponse, callGroqJSON, isContentPolicyRefusal, isQuotaExhaustedError, quotaRetryAfterMs, MODERATE_TIER_PRECEDENT_NOTE, EXTRACTED_FACTS_INSTRUCTION, EVIDENCE_CONVERGENCE_INSTRUCTION, sanitizeVenusResponse, estimateTokens, tpmLimitForModel, TPM_SAFETY_MARGIN, MIN_USABLE_MAX_TOKENS, buildGroundingInstructions } from "../lib/groq";
+import { getGroqClient, VENUS_PROMPT, buildVenusPrompt, buildFallbackVenusResponse, buildTransientErrorResponse, callGroqJSON, isContentPolicyRefusal, isQuotaExhaustedError, quotaRetryAfterMs, MODERATE_TIER_PRECEDENT_NOTE, EXTRACTED_FACTS_INSTRUCTION, EVIDENCE_CONVERGENCE_INSTRUCTION, sanitizeVenusResponse, estimateTokens, tpmLimitForModel, TPM_SAFETY_MARGIN, MIN_USABLE_MAX_TOKENS, buildGroundingInstructions } from "../lib/groq";
 import { retrievePrecedents, formatPrecedentsForPrompt, retrieveOwnResolvedDecisions, formatOwnDecisionsForPrompt, retrieveOpenSessionDecisions, formatOpenSessionDecisionsForPrompt, type RetrievalResult } from "../lib/retrieval";
 import { computeConfidence } from "../lib/confidence";
 import { detectFactConflicts, type ExtractedFact } from "../lib/factConflicts";
@@ -1809,7 +1809,46 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     const correctionInstruction = classification.correctsPriorAnswer
       ? buildCorrectionInstruction(classification.detectedIssue, classification.issueClass)
       : "";
-    const venusPromptForTier = (isModerate ? `${VENUS_PROMPT}${MODERATE_TIER_PRECEDENT_NOTE}` : VENUS_PROMPT) + correctionInstruction;
+    // Only the prompt sections this request can actually use (see
+    // buildVenusPrompt in groq.ts for the full reasoning). The static prompt
+    // used to be sent whole on every call at ~7,000 tokens against a 6,800
+    // -token free-tier budget — over the ceiling before any context or output
+    // existed, which is precisely the "TPM limit hit / can't respond"
+    // failure. Nothing is rewritten or weakened here: the strategy path still
+    // gets the entire causal-reasoning stack, it just stops carrying the
+    // drafting and capability blocks that a strategy answer can never use.
+    //
+    // The drafting block is ORed in on a keyword check as well as the
+    // classification. The classifier generalizes where a regex can't, but it
+    // isn't infallible, and the two failure costs are wildly asymmetric: a
+    // missed drafting request means a full LinkedIn post silently capped at
+    // "3-5 plain sentences" (the founder's deliverable, mangled), while a
+    // false positive costs ~618 tokens on a request that has ~1,000 spare.
+    // So this deliberately over-includes.
+    // Targeted, not maximally greedy: bare "post", "copy" and "word" were
+    // tried and pulled in far too much ordinary strategy vocabulary
+    // ("should I post about this", "copy that competitor", "how do I word
+    // this") — each false positive spends ~618 tokens out of the ~1,000 a
+    // strategy request has spare, which is the budget this change is
+    // supposed to be protecting. These stems only fire on an actual ask for
+    // written output.
+    const looksLikeDrafting =
+      /\b(draft|rewrite|caption|script|tweet|newsletter|blurb|talking points)\b/i.test(body.data.message) ||
+      /\bwrite\s+(me|a|an|up|the)\b/i.test(body.data.message);
+    const responseMode = classification.responseMode;
+    const venusPromptBase = buildVenusPrompt({
+      mode: responseMode,
+      includeDrafting: looksLikeDrafting,
+      // A rule explaining how to read a block is dead weight when the block
+      // itself isn't in the prompt — and these two are absent far more often
+      // than they're present.
+      hasOwnHistory: Boolean(ownHistoryBlock),
+      hasOpenSession: Boolean(openSessionBlock),
+    });
+    console.error(
+      `[promptMode] session=${sessionId} mode=${responseMode} drafting=${looksLikeDrafting} classifierFailed=${classification.failed} promptTokens~${estimateTokens(venusPromptBase)}`,
+    );
+    const venusPromptForTier = (isModerate ? `${venusPromptBase}${MODERATE_TIER_PRECEDENT_NOTE}` : venusPromptBase) + correctionInstruction;
     // REMOVED: historyContext, which rendered the last 8 turns as a text blob
     // inside the system prompt. The SAME turns are already sent as real,
     // role-tagged chat messages further down (see messageHistoryTurnCount's
@@ -2356,8 +2395,15 @@ router.post("/ai/idea-review", requireAuth, async (req, res) => {
     // had been applied only to the handler above. `false` for the factual
     // -lookup flag because idea review is a judgment task by definition —
     // there's no web search on this route to attribute anything to.
+    // Always the strategy stack — evaluating a business idea is a judgment
+    // task by definition, never a drafting/capability/greeting one — so this
+    // route can drop those blocks unconditionally rather than classifying.
+    // No own-history or open-session blocks are assembled on this route
+    // either (ownDecisions is deliberately [] here, see computeConfidence
+    // below), so the rules describing them would have nothing to describe.
+    const ideaVenusPrompt = buildVenusPrompt({ mode: "strategy" });
     const ideaSystemPrompt = [
-      isModerate ? `${VENUS_PROMPT}${MODERATE_TIER_PRECEDENT_NOTE}` : VENUS_PROMPT,
+      isModerate ? `${ideaVenusPrompt}${MODERATE_TIER_PRECEDENT_NOTE}` : ideaVenusPrompt,
       followUpInstruction,
       buildGroundingInstructions(false),
       isNone ? noPrecedentInstruction : precedentBlock,
