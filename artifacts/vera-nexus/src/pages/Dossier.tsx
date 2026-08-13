@@ -3,7 +3,7 @@ import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Fingerprint, Upload, Sparkles, Check, TrendingUp, TrendingDown, Minus,
-  CalendarDays, Loader2, AlertCircle,
+  CalendarDays, Loader2, AlertCircle, Plus, X,
 } from 'lucide-react';
 import {
   useDossier, useCreateDossier, useSaveDossierAnswers, useMonthlyWrap, useUploadAttachment,
@@ -369,6 +369,113 @@ function GapQuestions({ dossier }: { dossier: Dossier }) {
 }
 
 /* -------------------------------------------------------------------------
+ * The fields nothing ever asked about — generateGapQuestions only turns the
+ * 5-8 most valuable gaps into questions (see its own comment on why: a
+ * 16-question form gets abandoned), so a field can sit in "Not known yet"
+ * forever with no question ever generated for it. This is the direct route
+ * around that: every unknown field is fillable right here, saved through the
+ * exact same answers store as a guided question (saveDossierAnswers keys
+ * answers by question id OR, when there's no matching question, the field
+ * key itself — see mergeAnswersIntoFields in lib/dossier.ts on the server),
+ * so it moves into "known" and into what Vera reasons from the moment it's
+ * saved, same as anything answered above.
+ * ---------------------------------------------------------------------- */
+
+function UnknownFields({ dossierId, fields }: { dossierId: number; fields: { key: string; label: string }[] }) {
+  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const saveAnswers = useSaveDossierAnswers();
+
+  const open = (key: string) => setOpenKeys((prev) => new Set(prev).add(key));
+  const close = (key: string) =>
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+
+  const saveOne = (key: string) => {
+    const value = (drafts[key] ?? '').trim();
+    if (!value) return;
+    saveAnswers.mutate(
+      { dossierId, answers: { [key]: value } },
+      {
+        onSuccess: () => {
+          close(key);
+          setDrafts((prev) => ({ ...prev, [key]: '' }));
+        },
+      },
+    );
+  };
+
+  const chips = fields.filter((f) => !openKeys.has(f.key));
+  const opened = fields.filter((f) => openKeys.has(f.key));
+
+  return (
+    <div>
+      {opened.length > 0 && (
+        <div className="space-y-2 mb-2.5">
+          {opened.map((f) => (
+            <div key={f.key} className="flex items-center gap-2">
+              <input
+                autoFocus
+                value={drafts[f.key] ?? ''}
+                onChange={(e) => setDrafts((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveOne(f.key);
+                  }
+                  if (e.key === 'Escape') close(f.key);
+                }}
+                placeholder={f.label}
+                className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-[12.5px] outline-none"
+                style={{
+                  background: 'var(--v7-bg, rgba(0,0,0,0.25))',
+                  border: '1px solid var(--v7-border, rgba(255,255,255,0.12))',
+                  color: 'var(--v7-text)',
+                }}
+              />
+              <button
+                onClick={() => saveOne(f.key)}
+                disabled={!(drafts[f.key] ?? '').trim() || saveAnswers.isPending}
+                className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold disabled:opacity-30"
+                style={{ border: '1px solid var(--v7-border, rgba(255,255,255,0.14))', color: 'var(--v7-text-dim)' }}
+              >
+                {saveAnswers.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+              </button>
+              <button
+                onClick={() => close(f.key)}
+                title="Cancel"
+                className="shrink-0 p-1.5 rounded-lg"
+                style={{ color: 'var(--v7-text-mute)' }}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {chips.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => open(f.key)}
+              className="inline-flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-full"
+              style={{ border: '1px dashed var(--v7-border-strong, rgba(255,255,255,0.2))', color: 'var(--v7-text-dim)' }}
+            >
+              <Plus className="w-3 h-3" />
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------
  * The file itself
  * ---------------------------------------------------------------------- */
 
@@ -452,10 +559,15 @@ function CompanyFile({ dossier, onRebuild }: { dossier: Dossier; onRebuild: () =
             </p>
             {/* Named explicitly rather than hidden. A founder should be able
                 to see exactly where Vera is reasoning with a gap — that is
-                the difference between a file and a marketing page. */}
-            <p className="text-[13px] leading-relaxed" style={{ color: 'var(--v7-text-dim)' }}>
-              {unknown.map((f) => f.label).join(' · ')}
+                the difference between a file and a marketing page. Fillable
+                right here, not just named: these are the fields that never
+                got turned into one of the questions above (only the 5-8
+                most valuable gaps do), so without this they'd stay blank
+                forever no matter how thoroughly the founder answers. */}
+            <p className="text-[12px] mb-2.5 leading-relaxed" style={{ color: 'var(--v7-text-mute)' }}>
+              Fill in any of these and Vera stores it the same as everything else here.
             </p>
+            <UnknownFields dossierId={dossier.id} fields={unknown} />
           </div>
         )}
 

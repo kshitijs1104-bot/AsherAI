@@ -9,11 +9,19 @@ const promptPath = path.join(__dirname, 'groq.ts');
 const source = readFileSync(promptPath, 'utf8');
 
 test('Venus prompt includes direct-verdict instructions for real decision forks and binary questions', () => {
-  assert.match(source, /multi-option verdict breakdown/i);
-  assert.match(source, /single top-line verdict/i);
-  assert.match(source, /Do not force a verdict format/i);
-  assert.match(source, /short, informal, or fragmentary/i);
-  assert.match(source, /treat short phrases like/i);
-  assert.match(source, /weigh how strongly each stated option is supported or undermined/i);
-  assert.match(source, /Do not default to 60\/40|70\/30/i);
+  // Binary yes/no questions get an explicit up-front verdict, not hedging.
+  assert.match(source, /Lead with an explicit verdict word/i);
+  assert.match(source, /no "yes if\/no if" hedging/i);
+  // Short/fragmentary phrasing is still treated as a real, direct question.
+  assert.match(source, /short\/fragmentary queries[\s\S]*?complete strategic input/i);
+  // A genuine multi-path comparison gets a plain-language call, not a
+  // manufactured numeric split defaulting to some example ratio.
+  assert.match(source, /default 60\/40/i);
+  assert.match(source, /plain-language call/i);
+  // A decision card is never forced onto a question that doesn't have a
+  // genuine second viable path.
+  assert.match(source, /Skip for single-path or pure information questions/i);
+  // Options are weighed against each other by real signal (risk severity),
+  // not scored arbitrarily.
+  assert.match(source, /HIGH-severity risk against one option/i);
 });
