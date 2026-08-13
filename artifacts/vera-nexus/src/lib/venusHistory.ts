@@ -53,6 +53,15 @@ export interface ArithmeticIssueEntry {
   mentionB?: string;
 }
 
+// Promoted off shadow-mode (see lib/groundedness.ts on the server) — was
+// logged only and never reached the founder. Same non-blocking caveat
+// posture as ArithmeticIssueEntry above: never silently discarded (a real
+// fabrication with no warning erodes trust worse than a rare false
+// positive costs), never blocks the response either.
+export interface GroundednessIssueEntry {
+  description: string;
+}
+
 export interface ChatMessage {
   role: 'user' | 'venus';
   content?: string;
@@ -68,6 +77,7 @@ export interface ChatMessage {
   evidenceRefs?: EvidenceRefEntry[];
   contradictions?: ContradictionEntry[];
   arithmeticIssues?: ArithmeticIssueEntry[];
+  groundednessIssues?: GroundednessIssueEntry[];
   lengthConstraintNote?: string;
   // Set on a user message sent with a file attached. `content` still carries
   // the "[Attached file: x]" marker (see Venus.tsx's handleSend and

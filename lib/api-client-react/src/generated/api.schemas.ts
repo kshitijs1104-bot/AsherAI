@@ -400,6 +400,10 @@ export interface ContradictionSignal {
   precedentIds?: number[];
 }
 
+export interface GroundednessIssue {
+  description: string;
+}
+
 export interface VenusResponse {
   summary: string;
   cards: VenusCard[];
@@ -410,6 +414,7 @@ export interface VenusResponse {
   groundedIn?: VenusResponseGroundedIn;
   evidenceRefs?: EvidenceRef[];
   contradictions?: ContradictionSignal[];
+  groundednessIssues?: GroundednessIssue[];
 }
 
 export interface ArticleSummaryInput {

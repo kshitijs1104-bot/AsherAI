@@ -1062,6 +1062,23 @@ components:
         contradictions:
           type: array
           items: { $ref: "#/components/schemas/ContradictionSignal" }
+        # Promoted from shadow-mode (lib/groundedness.ts's detectUngroundedCurrency
+        # and detectUngroundedEntityClaims used to only console.error a
+        # [groundedness] log line, never reach the founder) to a live,
+        # non-blocking caveat — same trust posture as arithmeticIssues below:
+        # never silently reject a response over a heuristic that can false-
+        # positive, but never stay silent about a real fabrication risk
+        # either. A founder who's told "double-check this" trusts the product
+        # more than one who finds out later it was confidently wrong.
+        groundednessIssues:
+          type: array
+          items: { $ref: "#/components/schemas/GroundednessIssue" }
+
+    GroundednessIssue:
+      type: object
+      required: [description]
+      properties:
+        description: { type: string }
 
     EvidenceRef:
       type: object

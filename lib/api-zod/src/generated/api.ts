@@ -689,6 +689,9 @@ export const VenusAnalyzeResponse = zod.object({
   "contradictions": zod.array(zod.object({
   "description": zod.string(),
   "precedentIds": zod.array(zod.number()).optional()
+})).optional(),
+  "groundednessIssues": zod.array(zod.object({
+  "description": zod.string()
 })).optional()
 })
 
@@ -727,6 +730,9 @@ export const IdeaReviewResponse = zod.object({
   "contradictions": zod.array(zod.object({
   "description": zod.string(),
   "precedentIds": zod.array(zod.number()).optional()
+})).optional(),
+  "groundednessIssues": zod.array(zod.object({
+  "description": zod.string()
 })).optional()
 })
 

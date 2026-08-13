@@ -673,6 +673,7 @@ export function VenusPage() {
             // Both were already on the wire and both were being thrown away
             // here — see IntegrityNotices for why that mattered.
             arithmeticIssues: (res as any).arithmeticIssues,
+            groundednessIssues: res.groundednessIssues,
             lengthConstraintNote: (res as any).lengthConstraintNote,
             contextQuery: text,
           };
@@ -1429,6 +1430,7 @@ export function VenusPage() {
                         <>
                           <IntegrityNotices
                             arithmeticIssues={msg.arithmeticIssues}
+                            groundednessIssues={msg.groundednessIssues}
                             lengthConstraintNote={msg.lengthConstraintNote}
                           />
                           <EvidenceStrip
@@ -2082,13 +2084,16 @@ function confidenceState(
 // for, is exactly what erodes trust in everything else on the page.
 function IntegrityNotices({
   arithmeticIssues,
+  groundednessIssues,
   lengthConstraintNote,
 }: {
   arithmeticIssues?: { description: string }[];
+  groundednessIssues?: { description: string }[];
   lengthConstraintNote?: string;
 }) {
   const hasArithmetic = Array.isArray(arithmeticIssues) && arithmeticIssues.length > 0;
-  if (!hasArithmetic && !lengthConstraintNote) return null;
+  const hasGroundedness = Array.isArray(groundednessIssues) && groundednessIssues.length > 0;
+  if (!hasArithmetic && !hasGroundedness && !lengthConstraintNote) return null;
 
   return (
     <div
@@ -2104,6 +2109,12 @@ function IntegrityNotices({
           arithmeticIssues!.map((issue, i) => (
             <li key={`arith-${i}`} style={{ fontSize: '13px' }}>
               Numbers don't reconcile: {issue.description}
+            </li>
+          ))}
+        {hasGroundedness &&
+          groundednessIssues!.map((issue, i) => (
+            <li key={`ground-${i}`} style={{ fontSize: '13px' }}>
+              {issue.description}
             </li>
           ))}
         {lengthConstraintNote && (

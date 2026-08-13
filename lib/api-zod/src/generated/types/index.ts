@@ -35,6 +35,7 @@ export * from './goalWithProgress';
 export * from './goalWithProgressRisk';
 export * from './groqKeyInput';
 export * from './groqKeyStatus';
+export * from './groundednessIssue';
 export * from './healthStatus';
 export * from './ideaReviewInput';
 export * from './listChats200';

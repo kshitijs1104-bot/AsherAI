@@ -2214,15 +2214,26 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           sanitized.arithmeticIssues = arithmeticIssues;
         }
 
-        // Currency-groundedness: shadow-mode only — new, unvalidated
-        // heuristic (see groundedness.ts). Logged, never attached to the
-        // response, until a validation period confirms it isn't noisy.
-        // historyContext (the duplicated conversation blob) no longer exists —
-        // the same turns are read straight off effectiveSessionHistory here,
-        // which is if anything a more complete grounding source since it isn't
-        // capped at the 8 turns that blob rendered. webSearchBlock is included
-        // now too: a currency that appears in live search results is genuinely
-        // grounded, and omitting it would flag correctly-sourced figures.
+        // Currency- and entity-groundedness: PROMOTED off shadow mode — was
+        // logged only (see groundedness.ts's original comment), never
+        // reaching the founder, so a caught fabrication changed nothing
+        // about what they saw. Still never blocks or rejects a response —
+        // that risk (a false positive silently discarding a good answer) is
+        // exactly why this stayed shadow-mode as long as it did — but a
+        // heuristic catching a real fabrication and then saying nothing is
+        // the worse failure for a product whose whole pitch is trust: the
+        // founder finds out it was wrong later, with no warning it should
+        // have double-checked. Surfaced the same non-blocking way
+        // arithmeticIssues already proved out below: attached to the
+        // response, rendered under "Check before you rely on this," never
+        // silently swallowing a good answer. historyContext (the duplicated
+        // conversation blob) no longer exists — the same turns are read
+        // straight off effectiveSessionHistory here, which is if anything a
+        // more complete grounding source since it isn't capped at the 8
+        // turns that blob rendered. webSearchBlock is included too: a
+        // currency or entity that appears in live search results is
+        // genuinely grounded, and omitting it would flag correctly-sourced
+        // figures.
         const historyGroundingText = (effectiveSessionHistory ?? [])
           .map((h: { content?: string }) => h.content ?? "")
           .join(" ");
@@ -2231,21 +2242,35 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           ownHistoryBlock, openSessionBlock, goalBlock, memoryBlock,
           body.data.message,
         ].filter(Boolean).join(" ");
+        const groundednessIssues: { description: string }[] = [];
+
         const ungroundedCurrencies = detectUngroundedCurrency(responseStrings, groundingText);
         if (ungroundedCurrencies.length > 0) {
           console.error(`[groundedness] session=${sessionId} ungroundedCurrencies=${JSON.stringify(ungroundedCurrencies)} query="${body.data.message.slice(0, 200)}"`);
+          for (const currency of ungroundedCurrencies) {
+            groundednessIssues.push({
+              description: `Uses ${currency} — that currency doesn't appear anywhere in what you told Vera or what it found. Worth double-checking.`,
+            });
+          }
         }
 
-        // Ungrounded third-party entity claims: same shadow-mode treatment
-        // as the currency check above — new/unvalidated, logged only, never
-        // attached to the response. Catches the reported case directly: a
-        // named outside company (e.g. "YouTube") paired with a hard figure
-        // that appears nowhere in anything actually supplied to the model
-        // (see groundedness.ts for why the currency and arithmetic checks
-        // both miss this by construction).
+        // Ungrounded third-party entity claims: named outside company (e.g.
+        // "YouTube") paired with a hard figure that appears nowhere in
+        // anything actually supplied to the model (see groundedness.ts for
+        // why the currency and arithmetic checks both miss this by
+        // construction).
         const ungroundedEntityClaims = detectUngroundedEntityClaims(responseStrings, groundingText);
         if (ungroundedEntityClaims.length > 0) {
           console.error(`[groundedness] session=${sessionId} ungroundedEntityClaims=${JSON.stringify(ungroundedEntityClaims)} query="${body.data.message.slice(0, 200)}"`);
+          for (const claim of ungroundedEntityClaims) {
+            groundednessIssues.push({
+              description: `Mentions "${claim.entity}" alongside a specific figure, but neither was part of what you told Vera or what it found — worth verifying before you rely on it.`,
+            });
+          }
+        }
+
+        if (groundednessIssues.length > 0) {
+          sanitized.groundednessIssues = groundednessIssues;
         }
       } catch (integrityErr) {
         console.error("[responseIntegrity] check failed, continuing without it", integrityErr);
