@@ -190,12 +190,20 @@ router.post("/dossier/:id/answers", requireAuth, async (req, res) => {
 // happen here are deployment problems (a table that was never created, a
 // constraint that doesn't exist), and a generic message hides the one fact
 // that would fix them in a minute.
+//
+// node-postgres puts the real error's `code`/`message` on the raw driver
+// error, but drizzle-orm wraps that in a DrizzleQueryError whose own message
+// is just "Failed query: <sql>" — the actual reason lives on `.cause`. Reading
+// only the outer error meant this function never matched any branch below and
+// always showed the useless "Failed query: insert into..." prefix, no matter
+// what actually went wrong.
 function describeDbError(err: unknown): string {
-  const code = (err as { code?: string } | null)?.code;
+  const cause = err instanceof Error && err.cause instanceof Error ? err.cause : null;
+  const code = (cause as { code?: string } | null)?.code ?? (err as { code?: string } | null)?.code;
   if (code === "42P01") return "the company_dossiers table doesn't exist in this database — run the schema push";
   if (code === "42P10" || code === "42703") return "this database's schema is out of date — run the schema push";
   if (code === "ECONNREFUSED" || code === "57P01") return "the database isn't reachable right now — try again in a moment";
-  const message = err instanceof Error ? err.message : "";
+  const message = (cause ?? (err instanceof Error ? err : null))?.message ?? "";
   return message ? message.slice(0, 160) : "the database rejected the write";
 }
 
