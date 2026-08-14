@@ -35,15 +35,15 @@ test('the recommendation is one prioritized first move, never an enumerated bund
   // deleted, and it turns a consultant's call into a backlog — the founder
   // has to work out for themselves which of the four to do first, which is
   // exactly the judgment they came for.
-  assert.match(source, /ONE PRIORITIZED FIRST MOVE, NEVER A PARALLEL BUNDLE/i);
+  assert.match(source, /ONE PRIORITIZED FIRST MOVE.{0,10}NEVER A PARALLEL BUNDLE/i);
   // Actions beyond the first survive only as consequences of it, so depth is
   // preserved as a single thread rather than flattened into parallel items.
-  assert.match(source, /sequential consequence or contingency only, never a parallel item/i);
+  assert.match(source, /sequential consequence or contingency only, never parallel/i);
   // The counter-guard, and the reason this rule can't be stated as "give one
   // action": collapsing to a bare imperative ("map the pipeline.") trades a
-  // checklist for something even less useful. The chain, the behavior link
-  // and the 30-60 day metric all still apply.
-  assert.match(source, /Not license to go bare/i);
+  // checklist for something even less useful. The chain and metric still
+  // apply — compression into one thread is the fix, not less depth.
+  assert.match(source, /never bare \("map the pipeline\.?"\)/i);
 });
 
 test('a hold/wait verdict names the condition that would reverse it', () => {
@@ -53,4 +53,37 @@ test('a hold/wait verdict names the condition that would reverse it', () => {
   // turns a point-in-time verdict into a decision rule they can hold onto.
   assert.match(source, /the condition that reverses it/i);
   assert.match(source, /hidden expiry date/i);
+});
+
+test('a plan target either uses a real baseline or is explicitly marked an estimate', () => {
+  // THE FAILURE THIS GUARDS: EVERY 30/60-DAY PLAN NEEDS NUMBERS demands a
+  // concrete target, and without a counterweight the model invents one that
+  // merely looks measured (a specific "≤35 days" or "≥20%" with no founder
+  // baseline behind it) — precisely the "fake precision" NO FAKE PRECISION
+  // already forbids for probabilities and market sizing, just not yet for
+  // plan targets. This reuses that same discipline instead of inventing a
+  // parallel one.
+  assert.match(source, /Same NO FAKE PRECISION rule governs the number/i);
+  assert.match(source, /relative framing/i);
+  assert.match(source, /labeled estimate/i);
+});
+
+test('a tactical recommendation branches only on a fact the first move is meant to reveal', () => {
+  // THE PRECISE TRIGGER, deliberately narrower than "something is unknown."
+  // "We don't know the founder's team size" must NOT block a recommendation
+  // (CONTEXT SUFFICIENCY GATE already guarantees that) — but "which sales
+  // stage is actually causing the slowdown" SHOULD block a stage-specific
+  // fix, because the plan's own first move (map the cycle by stage) is what
+  // would answer that question. Branching has to track causal dependency on
+  // the first move's outcome, not general uncertainty, or Vera regresses
+  // into hedging every recommendation with an unresolved fact anywhere near
+  // it — which CONTEXT SUFFICIENCY GATE and MAKE THE BET both already guard
+  // against from the other direction.
+  assert.match(source, /causally dependent on a fact the first move exists to reveal/i);
+  assert.match(source, /branch on that fact/i);
+  // The escape hatch: mere absence of a fact is not the trigger, and the
+  // overall verdict is never itself hedged into a branch — only the
+  // downstream tactical detail that logically depends on it is.
+  assert.match(source, /mere absence of a fact doesn't trigger this/i);
+  assert.match(source, /the overall call is never itself a branch/i);
 });
