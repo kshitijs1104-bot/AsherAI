@@ -38,7 +38,7 @@ test('the recommendation is one prioritized first move, never an enumerated bund
   assert.match(source, /ONE PRIORITIZED FIRST MOVE.{0,10}NEVER A PARALLEL BUNDLE/i);
   // Actions beyond the first survive only as consequences of it, so depth is
   // preserved as a single thread rather than flattened into parallel items.
-  assert.match(source, /sequential consequence or contingency only, never parallel/i);
+  assert.match(source, /that move's consequence or contingency, never a parallel item/i);
   // The counter-guard, and the reason this rule can't be stated as "give one
   // action": collapsing to a bare imperative ("map the pipeline.") trades a
   // checklist for something even less useful. The chain and metric still
@@ -79,8 +79,8 @@ test('a tactical recommendation branches only on a fact the first move is meant 
   // into hedging every recommendation with an unresolved fact anywhere near
   // it — which CONTEXT SUFFICIENCY GATE and MAKE THE BET both already guard
   // against from the other direction.
-  assert.match(source, /causally dependent on a fact the first move exists to reveal/i);
-  assert.match(source, /branch on that fact/i);
+  assert.match(source, /causally dependent on a fact the first move exists to uncover/i);
+  assert.match(source, /branch on it \("if X, do Y; if Z, do W"\)/i);
   // The escape hatch: mere absence of a fact is not the trigger, and the
   // overall verdict is never itself hedged into a branch — only the
   // downstream tactical detail that logically depends on it is.
