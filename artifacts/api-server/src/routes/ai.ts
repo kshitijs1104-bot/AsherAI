@@ -2058,6 +2058,13 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         reasoning_effort: adaptiveReasoningEffort,
       },
       "ai/analyze",
+      // A short honest sentence ("I can't read that PDF — paste the figures
+      // and I'll work through them") is a legitimate answer to some
+      // questions, and JSON mode rejects it as a schema violation. Without
+      // this, that exact answer became a 400 and the founder saw a generic
+      // failure instead of the reply the model had already written. See
+      // salvageProse in groq.ts.
+      { salvageProseAs: "summary" },
     );
 
     if (parsed) {

@@ -733,7 +733,11 @@ function clampMaxTokensToTpmBudget(params: GroqJsonParams, label: string): GroqJ
 function isOversizedPayload(err: any): boolean {
   const status = err?.status ?? err?.response?.status;
   if (status === 413) return true;
-  const msg = (err?.message || err?.error?.message || "").toLowerCase();
+  // Same nesting problem as the predicates below — err.error.message is the
+  // body's top level, and the human-readable string is one deeper. err.message
+  // happens to contain the stringified body, so this test was passing by
+  // accident; groqErrorField makes it deliberate.
+  const msg = (err?.message || groqErrorField(err, "message")).toLowerCase();
   return /too large|too long|context length|maximum context|payload/i.test(msg);
 }
 
@@ -880,10 +884,37 @@ function ensureJsonWordPresent(messages: GroqJsonParams["messages"]): GroqJsonPa
   return [...messages, { role: "system", content: "Respond with a single valid json object as instructed above." }];
 }
 
+// ---- Where a Groq error actually keeps its details ----
+//
+// THE BUG THIS CLOSES, and it silently disabled a whole class of recovery.
+// groq-sdk's APIError stores the RESPONSE BODY on `err.error`, and that body
+// is itself `{ "error": { message, type, code, failed_generation } }`. So the
+// fields these predicates want live at `err.error.error.code`, one level
+// deeper than the `err.code` / `err.error.code` they were reading. Both of
+// those are always undefined on a real Groq error.
+//
+// The consequence was invisible from the code and obvious in production: a
+// json_validate_failed 400 — the model answering in prose because the prompt
+// asked it to — was never RECOGNISED as one, so the brace repair, the fresh-
+// sample retry and the prose salvage below all sat there unreachable while
+// the raw 400 propagated out of /ai/analyze as a stack trace. Everything
+// under `isJsonValidateFailedError` in createWithRetry was dead code.
+//
+// One accessor now, used by every predicate, so the next SDK shape change
+// breaks (or gets fixed in) exactly one place. Every level is still checked
+// rather than only the real one: a fetch-level error, a mocked error in a
+// test, and a future flattened SDK shape all stay handled.
+function groqErrorField(err: any, field: string): string {
+  const body = err?.error;
+  const nested = body?.error;
+  const value = err?.[field] ?? nested?.[field] ?? body?.[field];
+  return typeof value === "string" ? value : "";
+}
+
 export function isContentPolicyRefusal(err: any): boolean {
   const status = err?.status ?? err?.response?.status;
-  const code = (err?.code || err?.error?.code || "").toLowerCase();
-  const msg = (err?.message || err?.error?.message || "").toLowerCase();
+  const code = groqErrorField(err, "code").toLowerCase();
+  const msg = (err?.message || groqErrorField(err, "message")).toLowerCase();
   return status === 400 && (code.includes("content") || code.includes("policy") || /content.?polic|flagged|refus/i.test(msg));
 }
 
@@ -893,15 +924,20 @@ export function isContentPolicyRefusal(err: any): boolean {
 // observed). The model's attempted output still exists — Groq includes it as
 // "failed_generation" in the error body — it's just never handed back as a
 // completion, so it has to be pulled out of the error itself.
-function isJsonValidateFailedError(err: any): boolean {
+// Exported for tests: this predicate returning false when it should return
+// true is what made every json_validate_failed recovery path unreachable in
+// production (see groqErrorField above), and nothing in the codebase would
+// have surfaced that — the failure looks identical to "the model was just
+// broken". It is worth a test against the real error shape.
+export function isJsonValidateFailedError(err: any): boolean {
   const status = err?.status ?? err?.response?.status;
-  const code = (err?.code || err?.error?.code || "").toLowerCase();
+  const code = groqErrorField(err, "code").toLowerCase();
   return status === 400 && code === "json_validate_failed";
 }
 
-function extractFailedGeneration(err: any): string | null {
-  const gen = err?.failed_generation ?? err?.error?.failed_generation;
-  return typeof gen === "string" ? gen : null;
+export function extractFailedGeneration(err: any): string | null {
+  const gen = groqErrorField(err, "failed_generation");
+  return gen || null;
 }
 
 // Groq's 429s cover two very different situations: a per-minute burst limit
@@ -912,7 +948,7 @@ function extractFailedGeneration(err: any): string | null {
 // body rather than guessing a fixed number, since it varies with how far
 // over budget the account is at the moment of the call.
 function parseRetryAfterMs(err: any): number | null {
-  const msg: string = err?.error?.message || err?.message || "";
+  const msg: string = groqErrorField(err, "message") || err?.message || "";
   const match = msg.match(/try again in\s+(?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i);
   if (!match) return null;
   const hours = Number(match[1] ?? 0);
@@ -942,7 +978,40 @@ export function quotaRetryAfterMs(err: any): number | null {
   return parseRetryAfterMs(err);
 }
 
-async function createWithRetry(groq: Groq, params: GroqJsonParams, label: string, attempts = 3) {
+// ---- Rescuing a real answer that simply wasn't wearing JSON ----
+//
+// THE FAILURE THIS CLOSES, observed in production: a founder attached a PDF
+// Vera couldn't read, and the model — correctly following the "say plainly
+// you can't read that file" instruction in attachmentContext.ts — answered in
+// one honest sentence of prose. Groq's JSON mode rejected its own generation
+// (json_validate_failed), all three attempts produced the same sentence,
+// and the 400 propagated out of /ai/analyze as a generic transient error.
+// The founder got a stack-trace-shaped failure instead of the perfectly good
+// answer that was sitting inside it.
+//
+// This is a general shape, not a PDF-specific one: any instruction that
+// pushes the model toward a short plain refusal or clarification fights JSON
+// mode, and losing the model's actual words to a schema technicality is
+// never the right outcome. When the caller says which field the prose
+// belongs in, the prose is wrapped into that field rather than thrown away.
+// Opt-in per call site because only the caller knows its own schema.
+function salvageProse(failedGeneration: string | null, field: string | undefined): string | null {
+  if (!field || !failedGeneration) return null;
+  const prose = failedGeneration.trim();
+  // Something that starts as an object/array is malformed or truncated JSON,
+  // not prose — brace repair already had its shot at it, and stuffing a
+  // broken JSON fragment into a text field would surface as garbage.
+  if (!prose || prose.startsWith("{") || prose.startsWith("[")) return null;
+  return JSON.stringify({ [field]: prose });
+}
+
+interface CallOptions {
+  // Field name to wrap a plain-prose response into when the provider rejects
+  // it as invalid JSON — see salvageProse above.
+  salvageProseAs?: string;
+}
+
+async function createWithRetry(groq: Groq, params: GroqJsonParams, label: string, options: CallOptions = {}, attempts = 3) {
   let lastErr: unknown;
   let currentParams = params;
   for (let i = 0; i < attempts; i++) {
@@ -999,7 +1068,18 @@ async function createWithRetry(groq: Groq, params: GroqJsonParams, label: string
           return { choices: [{ message: { content: repaired }, finish_reason: "stop" }] } as any;
         }
         console.error(`[callGroqJSON] "${label}" — Groq rejected its own generation as invalid JSON (json_validate_failed) and local repair failed, retrying a fresh generation (${i + 1}/${attempts - 1})`);
-        if (i === attempts - 1) throw err;
+        if (i === attempts - 1) {
+          // Out of attempts: the model keeps answering in prose because prose
+          // is what this prompt genuinely calls for. Ship its answer in the
+          // caller's text field rather than turning a good sentence into an
+          // error page. See salvageProse above.
+          const salvaged = salvageProse(failedGeneration, options.salvageProseAs);
+          if (salvaged) {
+            console.error(`[callGroqJSON] "${label}" — salvaged a plain-prose answer (${failedGeneration!.trim().length} chars) into "${options.salvageProseAs}" instead of failing the request`);
+            return { choices: [{ message: { content: salvaged }, finish_reason: "stop" }] } as any;
+          }
+          throw err;
+        }
         continue; // same params — a fresh sample, not a shrink; this isn't a size problem
       }
       if (!isRetryableTransient(err) || i === attempts - 1) throw err;
@@ -1015,6 +1095,7 @@ export async function callGroqJSON(
   groq: Groq,
   params: GroqJsonParams,
   label: string,
+  options: CallOptions = {},
 ): Promise<{ parsed: any | null; raw: string; errorType?: "parse" | "transient" }> {
   // Every caller gets Groq's JSON mode by default so the provider enforces
   // valid JSON at the API level (never markdown fences, never prose before/
@@ -1047,7 +1128,7 @@ export async function callGroqJSON(
     },
     label,
   );
-  const completion = await createWithRetry(groq, paramsWithJsonMode, label);
+  const completion = await createWithRetry(groq, paramsWithJsonMode, label, options);
   const raw = completion.choices[0]?.message?.content || "";
   const finishReason = completion.choices[0]?.finish_reason;
 

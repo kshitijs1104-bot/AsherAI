@@ -1156,7 +1156,7 @@ export function VenusPage() {
           ref={fileInputRef}
           type="file"
           onChange={handleFileSelect}
-          accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx"
+          accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.md,.markdown,.json"
           className="hidden"
         />
         <div style={{ padding: isNarrow ? '14px 16px 0' : '14px 32px 0' }}>

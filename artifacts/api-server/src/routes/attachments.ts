@@ -6,7 +6,7 @@ import multer from "multer";
 import { db, attachmentsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { requireAuth, requireUserId } from "../middlewares/auth";
-import { UPLOADS_DIR } from "../lib/attachmentContext";
+import { UPLOADS_DIR, ingestInBackground } from "../lib/attachmentIngest";
 
 const router = Router();
 
@@ -16,10 +16,11 @@ const router = Router();
 // silently delete every founder's uploaded files. Swapping to real object
 // storage later only touches this one constant and the two handlers below.
 //
-// UPLOADS_DIR now lives in lib/attachmentContext.ts — the reader (which
-// extracts text-like file contents into the prompt) and this writer must
-// resolve to the same directory, and two independent `path.resolve` calls
-// are exactly the kind of thing that silently drifts apart.
+// UPLOADS_DIR now lives in lib/attachmentIngest.ts — the reader (which
+// extracts file contents and caches them alongside the upload) and this
+// writer must resolve to the same directory, and two independent
+// `path.resolve` calls are exactly the kind of thing that silently drifts
+// apart.
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -154,6 +155,17 @@ router.post("/attachments", requireAuth, async (req, res) => {
         storagePath: req.file.filename,
       })
       .returning();
+
+    // Start reading the file the moment it lands, rather than when the
+    // founder sends their message. Images now cost a real vision round-trip
+    // (see lib/visionExtract.ts), and the founder is typically still typing
+    // their question for several seconds after the picker closes — so doing
+    // this here usually removes the entire extraction latency from their
+    // wait, and lets what the document says be distilled into Company Memory
+    // (attachmentIngest.ts) even if they never ask about it. Detached on
+    // purpose: the upload response must not wait on a model call, and a
+    // failure in here can only mean the file gets read on first use instead.
+    ingestInBackground(attachment);
 
     return res.json({ id: attachment.id, fileName: attachment.fileName, mimeType: attachment.mimeType, sizeBytes: attachment.sizeBytes });
   } catch (err) {

@@ -2,14 +2,11 @@ import { Router } from "express";
 import { z } from "zod/v4";
 import { db, attachmentsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
-import fs from "node:fs";
-import path from "node:path";
 import { requireAuth, requireUserId } from "../middlewares/auth";
 import { getGroqClient } from "../lib/groq";
 import { getOrCreateActiveProfile } from "../lib/businessProfiles";
 import { addCompanyFact } from "../lib/companyMemory";
-import { UPLOADS_DIR } from "../lib/attachmentContext";
-import { extractDocumentText, isExtractableMimeType } from "../lib/documentText";
+import { ensureIngest } from "../lib/attachmentIngest";
 import {
   extractDossier,
   generateGapQuestions,
@@ -98,20 +95,20 @@ router.post("/dossier", requireAuth, async (req, res) => {
         .where(and(eq(attachmentsTable.id, body.data.attachmentId), eq(attachmentsTable.userId, userId)))
         .limit(1);
       if (!attachment) return res.status(404).json({ error: "That file could not be found" });
-      if (!isExtractableMimeType(attachment.mimeType)) {
-        return res.status(422).json({ error: `Vera can't read ${attachment.mimeType} files yet — paste the text instead, or upload a PDF, Word doc, spreadsheet or text file.` });
-      }
-      const filePath = path.join(UPLOADS_DIR, attachment.storagePath);
-      if (!path.resolve(filePath).startsWith(UPLOADS_DIR)) return res.status(400).json({ error: "Invalid file reference" });
-      const extracted = extractDocumentText(fs.readFileSync(filePath), attachment.mimeType);
-      if (extracted.kind !== "text" || !extracted.text.trim()) {
+      // Goes through the same ingest the chat uses (lib/attachmentIngest.ts),
+      // which means the intake now accepts a PHOTO OF A DECK — the file
+      // format founders actually have to hand — instead of rejecting every
+      // image with "paste the text instead". It also reuses the extraction
+      // already done at upload rather than re-reading the file here.
+      const ingest = await ensureIngest(attachment);
+      if (ingest.status !== "text" || !ingest.text.trim()) {
         // The honest failure. A scan has no text layer, and guessing at its
         // contents is exactly the behaviour the scanner exists to prevent.
         return res.status(422).json({
-          error: `Couldn't read "${attachment.fileName}" — ${extracted.note ?? "no readable text in it"}. Paste the text instead and I'll work from that.`,
+          error: `Couldn't read "${attachment.fileName}" — ${ingest.note ?? "no readable text in it"}. Paste the text instead and I'll work from that.`,
         });
       }
-      sourceText = extracted.text.slice(0, MAX_PASTE_CHARS);
+      sourceText = ingest.text.slice(0, MAX_PASTE_CHARS);
       sourceLabel = `Uploaded: ${attachment.fileName}`;
     }
 

@@ -20,11 +20,14 @@ import zlib from "node:zlib";
 // public specs with nothing new in package.json.
 //
 // KNOWN AND ACCEPTED LIMIT: a scanned/photographed document (an image inside
-// a PDF, a phone photo of a contract) has no text layer, so nothing here can
-// read it. That case is DETECTED, not guessed at — extractDocumentText
-// returns `kind: "no-text-layer"` and the caller says so plainly rather than
-// inventing content. Silent failure is the only unacceptable outcome; a
-// truthful "this looks like a scan, send me a text version" is fine.
+// a PDF) has no text layer, so nothing HERE can read it — rasterising PDF
+// pages would mean the image-codec dependency this file exists to avoid.
+// That case is DETECTED, not guessed at: extractDocumentText returns
+// `kind: "no-text-layer"` and the caller says so plainly rather than
+// inventing content. It is no longer a dead end either — images themselves
+// ARE readable now (see visionExtract.ts), so the honest answer comes with a
+// route that works: send a screenshot or photo of the pages that matter.
+// Silent failure remains the only unacceptable outcome.
 
 export type ExtractionKind = "text" | "no-text-layer" | "unsupported" | "failed";
 
@@ -326,7 +329,7 @@ function extractPdf(buf: Buffer): ExtractedDocument {
     return {
       kind: "no-text-layer",
       text: "",
-      note: "this PDF has no extractable text layer — it is most likely a scan or photo of a document rather than a digital one",
+      note: "this PDF has no extractable text layer — it is most likely a scan or photo of a document rather than a digital one, so there is no text in it to read",
     };
   }
   return { kind: "text", text };

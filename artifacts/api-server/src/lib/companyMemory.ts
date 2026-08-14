@@ -16,7 +16,12 @@ export interface AddCompanyFactInput {
   factType?: string; // general | constraint | milestone | market | team | metric
   entryKind?: "business_fact" | "preference" | "decision_note";
   claimType?: "style_preference" | "user_reported_belief" | "verified";
-  sourceType: "onboarding" | "chat" | "checkin" | "decision" | "manual";
+  // "document" = read out of a file the founder attached and Vera actually
+  // read (see attachmentIngest.ts's distilDocumentFacts). Kept distinct from
+  // "chat" because the founder never typed it — the UI's "What Vera has
+  // learned" list is only auditable if a fact extracted from a P&L doesn't
+  // look like something they said in conversation.
+  sourceType: "onboarding" | "chat" | "checkin" | "decision" | "manual" | "document";
   confidence?: number;
   // Which business_profiles row this fact belongs to (see
   // businessProfiles.ts). Only meaningful for entryKind "business_fact" —

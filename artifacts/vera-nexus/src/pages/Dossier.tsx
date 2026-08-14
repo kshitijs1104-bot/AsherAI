@@ -139,7 +139,7 @@ function Intake({ onDone }: { onDone: () => void }) {
           // extension and maps to a canonical mime — this list and that map
           // are the same contract written twice, and the previous version of
           // this list advertised .md/.json which the server rejected.
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.markdown,.json"
+          accept="image/png,image/jpeg,image/gif,image/webp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.md,.markdown,.json"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) submitFile(file);
@@ -148,13 +148,14 @@ function Intake({ onDone }: { onDone: () => void }) {
         />
       </div>
 
-      {/* Said up front, not discovered after a failed upload. A founder who
-          uploads a scanned contract and gets a vague error assumes the
-          product is broken; one who was told the limit first just sends the
-          digital copy. */}
+      {/* Said up front, not discovered after a failed upload. Images now go
+          through the vision reader on the server (lib/visionExtract.ts), so a
+          photo of a deck is a first-class input here — the only remaining
+          dead end is a SCANNED PDF, which has no text layer and isn't sent as
+          an image either, and that's the one case worth naming. */}
       <p className="text-[11.5px] mt-3" style={{ color: 'var(--v7-text-mute)' }}>
-        PDF, Word, Excel, CSV or text. Scanned or photographed documents have no
-        text to read — send a digital version or paste the text.
+        PDF, Word, Excel, CSV, text — or a screenshot or photo, which Vera reads
+        too. A scanned PDF has no text in it; send a photo of the pages instead.
       </p>
       {text.trim().length > 0 && text.trim().length < 40 && (
         <p className="text-[11.5px] mt-1.5" style={{ color: 'var(--v7-text-mute)' }}>

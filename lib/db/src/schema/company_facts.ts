@@ -66,7 +66,10 @@ export const companyFactsTable = pgTable(
     // Where this fact came from — lets retrieval/UI weight or filter by
     // provenance (e.g. trust an onboarding-form answer differently than a
     // loosely-classified chat aside).
-    sourceType: text("source_type").notNull(), // onboarding | chat | checkin | decision | manual
+    // "document" rows come from a file the founder attached, distilled by
+    // attachmentIngest.ts — the founder never typed them, which is exactly
+    // why they need their own provenance rather than being filed as "chat".
+    sourceType: text("source_type").notNull(), // onboarding | chat | checkin | decision | manual | document
 
     // Optional 0-1 confidence for facts inferred rather than stated outright.
     // Null means "stated directly, not inferred" — not "unknown confidence".
