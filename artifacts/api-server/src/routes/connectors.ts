@@ -179,8 +179,13 @@ router.post("/connectors/:type/sync", requireAuth, async (req, res) => {
     const created = await pollConnector(userId, connector);
     return res.json({ created });
   } catch (err) {
+    // The raw message used to be returned to the caller. Errors on this path
+    // come from third-party API clients mid-sync, and those messages carry
+    // request URLs, provider-side detail and occasionally fragments of the
+    // token being used — none of which the founder can act on, all of which
+    // is useful to someone probing. Logged in full, reported generically.
     req.log.error(err);
-    return res.status(500).json({ error: err instanceof Error ? err.message : "Sync failed" });
+    return res.status(500).json({ error: "Sync failed — try again, or reconnect this integration." });
   }
 });
 

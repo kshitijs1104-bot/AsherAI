@@ -1091,10 +1091,13 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // (once built) Goal state could leak between unrelated people. Now backed
     // by a Clerk-verified user id via requireAuth above.
     const sessionId = requireUserId(req);
-    const headerKey = req.headers["x-groq-api-key"] as string | undefined;
-    const groq = headerKey
-      ? new (await import("groq-sdk").then(m => m.default))({ apiKey: headerKey })
-      : await getGroqClient(sessionId);
+    // REMOVED: an `x-groq-api-key` request header that, when present, was used
+    // to construct the Groq client instead of the server's own credential.
+    // Any caller could set it, so it was an unauthenticated way to steer this
+    // route's outbound LLM calls at an arbitrary third-party key — and, with
+    // CORS previously set to `*`, settable from any origin. Inference now
+    // always runs on the server's own key; see getGroqClient in lib/groq.ts.
+    const groq = getGroqClient();
 
     // ---- Every turn gets logged, including the ones that never reach the model ----
     //
@@ -2358,117 +2361,6 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/ai/idea-review", requireAuth, async (req, res) => {
-  const body = IdeaReviewBody.safeParse(req.body);
-  if (!body.success) return res.status(400).json({ error: "Invalid request body" });
-
-  try {
-    const sessionId = requireUserId(req);
-    const headerKey = req.headers["x-groq-api-key"] as string | undefined;
-    const groq = headerKey
-      ? new (await import("groq-sdk").then(m => m.default))({ apiKey: headerKey })
-      : await getGroqClient(sessionId);
-
-    if (!groq) {
-      return res.json(buildFallbackVenusResponse(body.data.idea));
-    }
-
-    const contextParts = [
-      body.data.stage && `Stage: ${body.data.stage}`,
-      body.data.industry && `Industry: ${body.data.industry}`,
-      body.data.teamSize && `Team size: ${body.data.teamSize}`,
-    ].filter(Boolean).join(", ");
-
-    const retrieval = await retrievePrecedents(body.data.idea, { sector: body.data.industry });
-
-    const isModerate = retrieval.tier === "moderate";
-    const isNone = retrieval.tier === "none";
-
-    const precedentBlock = `VERIFIED PRECEDENTS (retrieved from curated dataset, confidence ${retrieval.confidence}):\n\n${formatPrecedentsForPrompt(retrieval.precedents)}`;
-    const followUpInstruction = `Conversation routing: narrow follow-up → answer directly and narrowly, at most one supporting card. Broad question → full template, cards only for facets that genuinely need one (not a default 2+). Either way, "Conversation context so far" is background only — never treat an earlier turn's request, including a past draft, as pending action this turn unless the current message asks for it.`;
-    const noPrecedentInstruction = `NO VERIFIED PRECEDENT MATCH: There are no verified precedents for this request. You must not invent company names or fabricate specific precedent-based causal claims. Respond with general strategic reasoning only, clearly labeled as unverified and not derived from Venus AI's dataset.`;
-
-    // Same shared guard /ai/analyze uses (see groq.ts). This route had NO
-    // grounding guard at all until now: it runs the same VENUS_PROMPT over
-    // the same precedent dataset and can name real-world entities exactly
-    // the way the fabricated-schools answer did, but every hardening pass
-    // had been applied only to the handler above. `false` for the factual
-    // -lookup flag because idea review is a judgment task by definition —
-    // there's no web search on this route to attribute anything to.
-    // Always the strategy stack — evaluating a business idea is a judgment
-    // task by definition, never a drafting/capability/greeting one — so this
-    // route can drop those blocks unconditionally rather than classifying.
-    // No own-history or open-session blocks are assembled on this route
-    // either (ownDecisions is deliberately [] here, see computeConfidence
-    // below), so the rules describing them would have nothing to describe.
-    const ideaVenusPrompt = buildVenusPrompt({ mode: "strategy" });
-    const ideaSystemPrompt = [
-      isModerate ? `${ideaVenusPrompt}${MODERATE_TIER_PRECEDENT_NOTE}` : ideaVenusPrompt,
-      followUpInstruction,
-      buildGroundingInstructions(false),
-      isNone ? noPrecedentInstruction : precedentBlock,
-    ].join("\n\n");
-
-    const ideaMessages: { role: "system" | "user"; content: string }[] = [
-      { role: "system", content: ideaSystemPrompt },
-      {
-        role: "user",
-        content: `Review this business idea: "${body.data.idea}"${contextParts ? `\n\nContext: ${contextParts}` : ""}`,
-      },
-    ];
-    // Same fix as /ai/analyze above: a flat 6000 request ignored the real
-    // TPM budget, which VENUS_PROMPT alone (4527 tokens post-compression)
-    // already leaves little room under. Compute the real ceiling from the
-    // actual assembled messages instead of guessing.
-    const ideaEstimatedPromptTokens = ideaMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-    const ideaTpmBudget = Math.floor(tpmLimitForModel("openai/gpt-oss-120b") * TPM_SAFETY_MARGIN);
-    const ideaRequestedMaxTokens = Math.max(MIN_USABLE_MAX_TOKENS, Math.min(6000, ideaTpmBudget - ideaEstimatedPromptTokens));
-
-    const { parsed } = await callGroqJSON(
-      groq,
-      {
-        model: "openai/gpt-oss-120b",
-        messages: ideaMessages,
-        temperature: 0.4,
-        max_tokens: ideaRequestedMaxTokens,
-      },
-      "ai/idea-review",
-    );
-
-    if (parsed) {
-      // Same computed-confidence approach as /ai/analyze (see confidence.ts).
-      // ownDecisions is intentionally [] here: idea-review evaluates a
-      // hypothetical new idea, not a founder's own resolved decision, so
-      // outcomeHistoryFactor has nothing meaningful to draw from in this route.
-      const confidenceResult = computeConfidence(retrieval, []);
-      parsed.confidenceTier = retrieval.tier;
-      parsed.confidence = confidenceResult.tier;
-      parsed.confidenceScore = confidenceResult.score;
-      parsed.confidenceFactors = confidenceResult.factors;
-      parsed.evidenceRefs = confidenceResult.evidenceRefs;
-      parsed.groundedIn = confidenceResult.groundedIn;
-      if (confidenceResult.contradictions.length > 0) {
-        parsed.contradictions = confidenceResult.contradictions;
-      }
-      const contradictionNote = confidenceResult.contradictions.length > 0
-        ? " Precedents disagree on outcome for this pattern — treat as a split signal, not consensus."
-        : "";
-      parsed.confidenceNote = (retrieval.tier === "none"
-        ? "Grounded in general strategic reasoning — no direct match in the curated dataset for this specific question."
-        : retrieval.tier === "moderate"
-          ? "Grounded in a small or adjacent set of precedents — a slightly thinner evidence base than a direct match."
-          : "Grounded in verified precedent coverage.") + contradictionNote;
-      applyTierLabel(parsed, retrieval);
-      return res.json(sanitizeVenusResponse(parsed));
-    }
-    return res.json(buildTransientErrorResponse(body.data.idea));
-  } catch (err: any) {
-    req.log.error(err);
-    const { kind, retryAfterMs } = classifyGroqError(err);
-    return res.json(buildTransientErrorResponse(body.data.idea, kind, retryAfterMs));
-  }
-});
-
 const ReportOutcomeBody = z.object({
   outcome: z.string().min(1),
   sentiment: z.enum(["positive", "negative", "mixed"]).optional(),
@@ -2561,7 +2453,7 @@ router.post("/ai/decisions/:id/outcome", requireAuth, async (req, res) => {
     if (!existing) return res.status(404).json({ error: "Decision not found" });
 
     let lesson: string | null = null;
-    const groq = await getGroqClient(sessionId);
+    const groq = getGroqClient();
     if (groq) {
       const { parsed } = await callGroqJSON(
         groq,
@@ -2647,7 +2539,7 @@ router.post("/ai/company-report", requireAuth, async (req, res) => {
     if (!companyName) return res.status(400).json({ error: "companyName is required" });
 
     const sessionId = requireUserId(req);
-    const groq = await getGroqClient(sessionId);
+    const groq = getGroqClient();
 
     if (!groq) {
       return res.json({
@@ -2735,69 +2627,6 @@ ${sourceMaterial}`;
   } catch (err) {
     req.log.error(err);
     return res.status(500).json({ error: "Failed to generate company report" });
-  }
-});
-
-router.post("/ai/summarize-article", async (req, res) => {
-  try {
-    const { articleId, title, body } = req.body as { articleId?: number; title?: string; body?: string };
-    if (!title || !body) return res.status(400).json({ error: "title and body are required" });
-
-    const sessionId = (req.headers["x-session-id"] as string) || req.ip || "default";
-    const groq = await getGroqClient(sessionId);
-
-    if (!groq) {
-      return res.json({
-        articleId,
-        bullets: [
-          "Configure your Groq API key in Settings to unlock AI article summaries.",
-          "Visit console.groq.com to create a free key in under 60 seconds.",
-          "Paste the key in Vera Settings and refresh — summaries appear instantly.",
-        ],
-        stats: [
-          { label: "Status", value: "No API key" },
-          { label: "Fix", value: "Settings → Groq Key" },
-          { label: "Cost", value: "Free tier" },
-        ],
-      });
-    }
-
-    const completion = await groq.chat.completions.create({
-      model: "openai/gpt-oss-20b",
-      messages: [
-        {
-          role: "system",
-          content: `Summarize this market news article in exactly 3 concise bullet points (max 20 words each) for a time-pressed reader, plus 3 key stats extracted from the text as label/value pairs. Return ONLY valid JSON, no markdown, no preamble.`,
-        },
-        {
-          role: "user",
-          content: `Title: ${title}\n\nBody: ${body}`,
-        },
-      ],
-      temperature: 0.2,
-      // gpt-oss-20b is also a reasoning model, so it's subject to the same
-      // failure mode as the other routes in this file: hidden reasoning
-      // tokens draw from this same max_tokens budget. This call goes
-      // straight to groq.chat.completions.create instead of through
-      // callGroqJSON, so it doesn't inherit that fix automatically —
-      // reasoning_effort/include_reasoning are set explicitly here instead,
-      // plus a somewhat larger budget since 400 left almost no margin.
-      max_tokens: 700,
-      reasoning_effort: "low",
-      include_reasoning: false,
-      response_format: { type: "json_object" },
-    });
-
-    const content = completion.choices[0]?.message?.content || "";
-    try {
-      const parsed = JSON.parse(content);
-      return res.json({ articleId, bullets: parsed.bullets || [], stats: parsed.stats || [] });
-    } catch {
-      return res.json({ articleId, bullets: [content.slice(0, 120)], stats: [] });
-    }
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to summarize article" });
   }
 });
 

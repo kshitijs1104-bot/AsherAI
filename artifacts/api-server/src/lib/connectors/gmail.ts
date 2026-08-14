@@ -56,7 +56,7 @@ export async function pollGmailConnector(userId: string, connector: Connector): 
   return runPoll(connector, async () => {
     const accessToken = await getValidGmailAccessToken(connector);
     const gmail = await createGmailClient(async () => accessToken);
-    const groq = await getGroqClient(userId);
+    const groq = getGroqClient();
 
     let created = 0;
     try {

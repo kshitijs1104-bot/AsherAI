@@ -131,7 +131,12 @@ router.post("/queue/:id/action", requireAuth, async (req, res) => {
         resolvedAt: new Date(),
         ...(body.data.action === "edit" ? { draftContent: body.data.edited_content } : {}),
       })
-      .where(eq(queueItemsTable.id, itemId))
+      // userId is repeated here even though the SELECT above already proved
+      // ownership of this row. A write that carries its own ownership
+      // condition cannot be detached from the check that authorises it — the
+      // previous version was correct only for as long as nobody reordered,
+      // extracted or early-returned around that read.
+      .where(and(eq(queueItemsTable.id, itemId), eq(queueItemsTable.userId, userId)))
       .returning();
 
     return res.json({ item: updated });

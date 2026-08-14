@@ -5,7 +5,16 @@ import { z } from "zod/v4";
 export const settingsTable = pgTable("settings", {
   id: serial("id").primaryKey(),
   sessionId: text("session_id").notNull().unique(),
-  groqApiKey: text("groq_api_key"),
+  // REMOVED: groqApiKey. It held a founder-supplied Groq API key in plaintext
+  // — an actual credential, stored unencrypted next to ordinary business data,
+  // while the only other credential in this schema (connectors.oauthTokenRef)
+  // is AES-256-GCM encrypted for exactly that reason. The feature that wrote
+  // it (/settings/groq-key) had no UI left, so the risk was being carried for
+  // nothing. All inference now runs on the server's own GROQ_API_KEY.
+  //
+  // The column is dropped from the model here; run `drizzle-kit push` (or
+  // generate a migration) to drop it in the database and destroy any keys
+  // still stored in existing rows.
   tier: text("tier").notNull().default("personal"),
   onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
   companyName: text("company_name"),

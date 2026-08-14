@@ -119,7 +119,7 @@ router.post("/dossier", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Paste something about the company, or attach a document." });
     }
 
-    const groq = await getGroqClient(userId);
+    const groq = getGroqClient();
     if (!groq) return res.status(400).json({ error: "No Groq API key configured — add one in Settings" });
 
     const extraction = await extractDossier(groq, sourceText);
@@ -255,7 +255,7 @@ router.get("/dossier/wrap", requireAuth, async (req, res) => {
       ? req.query.period
       : currentPeriodMonth(new Date());
 
-    const groq = await getGroqClient(userId);
+    const groq = getGroqClient();
     const wrap = await buildMonthlyWrap(userId, requested, groq);
 
     // Only freeze a month that's actually over — persisting the current

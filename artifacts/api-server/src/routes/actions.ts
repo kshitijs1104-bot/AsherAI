@@ -58,7 +58,7 @@ router.post("/actions/:type/run", requireAuth, async (req, res) => {
 
   try {
     const userId = requireUserId(req);
-    const groq = await getGroqClient(userId);
+    const groq = getGroqClient();
     if (!groq) return res.status(400).json({ error: "No Groq API key configured — add one in Settings" });
 
     // untrustedInput: false — unlike the connector pollers, `input` here is

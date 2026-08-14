@@ -1,6 +1,6 @@
 import Groq from "groq-sdk";
-import { db, settingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+// The db/settingsTable/eq imports are gone with getGroqClient's per-user key
+// lookup — this module no longer touches the database at all.
 
 // ---- The system prompt, assembled per request instead of sent whole ----
 //
@@ -1144,23 +1144,33 @@ export async function callGroqJSON(
   }
 }
 
-export async function getGroqClient(sessionId: string): Promise<Groq | null> {
-  try {
-    const [settings] = await db
-      .select()
-      .from(settingsTable)
-      .where(eq(settingsTable.sessionId, sessionId))
-      .limit(1);
+// ---- Inference always runs on the server's own credential ----
+//
+// This used to take a sessionId, look up settings.groqApiKey for that user,
+// and prefer it over the server's key — the "bring your own API key" path.
+// That whole path is gone: the column, the /settings/groq-key endpoints that
+// wrote it, and the `x-groq-api-key` header override that bypassed even that.
+//
+// Removing it closes three things at once. A user-supplied key was a real
+// credential stored in plaintext in the settings table. The header variant
+// was settable by any caller on routes that read it, making the server's
+// outbound LLM calls steerable from outside. And "which key is this request
+// using?" stopped being answerable per-request, which is the sort of ambiguity
+// that hides billing and abuse problems.
+//
+// The client is built once and reused. Groq's SDK holds no per-request state,
+// so a module-level instance is safe and avoids re-constructing it on every
+// call. Returns null (rather than throwing) when GROQ_API_KEY is unset, since
+// every caller already handles a null client by degrading to a non-LLM
+// fallback response.
+let cachedGroqClient: Groq | null | undefined;
 
-    const apiKey = settings?.groqApiKey || process.env.GROQ_API_KEY;
-    if (!apiKey) return null;
-
-    return new Groq({ apiKey });
-  } catch {
+export function getGroqClient(): Groq | null {
+  if (cachedGroqClient === undefined) {
     const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) return null;
-    return new Groq({ apiKey });
+    cachedGroqClient = apiKey ? new Groq({ apiKey }) : null;
   }
+  return cachedGroqClient;
 }
 
 export const VENUS_PROMPT = VENUS_SYSTEM_PROMPT;

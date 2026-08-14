@@ -42,7 +42,7 @@ export async function pollSheetsConnector(userId: string, connector: Connector):
 
     const accessToken = await getValidAccessToken(connector);
     const sheets = await createSheetsClient(async () => accessToken);
-    const groq = await getGroqClient(userId);
+    const groq = getGroqClient();
 
     let created = 0;
     try {

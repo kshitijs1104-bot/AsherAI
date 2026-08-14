@@ -9,6 +9,14 @@
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
+  "pnpm": {
+    "overrides": {
+      "fast-uri": ">=3.1.5",
+      "ip-address": ">=10.3.1",
+      "hono": ">=4.12.34",
+      "@hono/node-server": ">=1.19.15"
+    }
+  },
   "devDependencies": {
     "prettier": "^3.8.4",
     "typescript": "~5.9.3"

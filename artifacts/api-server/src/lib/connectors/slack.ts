@@ -16,7 +16,7 @@ export async function pollSlackConnector(userId: string, connector: Connector): 
     const tokens = JSON.parse(decryptToken(connector.oauthTokenRef)) as SlackTokens;
 
     const slack = await createSlackClient(async () => tokens.accessToken);
-    const groq = await getGroqClient(userId);
+    const groq = getGroqClient();
 
     let created = 0;
     try {

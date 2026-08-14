@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { SaveGroqKeyBody, SaveOnboardingBody } from "@workspace/api-zod";
+import { SaveOnboardingBody } from "@workspace/api-zod";
 import { requireAuth, requireUserId } from "../middlewares/auth";
 
 const router = Router();
@@ -41,60 +41,19 @@ async function getOrCreateSettings(sessionId: string) {
   return fallback;
 }
 
-router.get("/settings/groq-key", requireAuth, async (req, res) => {
-  try {
-    const sessionId = getSessionId(req);
-    const settings = await getOrCreateSettings(sessionId);
-
-    const hasKey = !!settings.groqApiKey;
-    const maskedKey = hasKey
-      ? settings.groqApiKey!.slice(0, 8) + "****" + settings.groqApiKey!.slice(-4)
-      : null;
-
-    return res.json({ configured: hasKey, maskedKey });
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to get key status" });
-  }
-});
-
-router.post("/settings/groq-key", requireAuth, async (req, res) => {
-  try {
-    const body = SaveGroqKeyBody.safeParse(req.body);
-    if (!body.success) return res.status(400).json({ error: "Invalid API key" });
-
-    const sessionId = getSessionId(req);
-    const settings = await getOrCreateSettings(sessionId);
-
-    await db
-      .update(settingsTable)
-      .set({ groqApiKey: body.data.apiKey, updatedAt: new Date() })
-      .where(eq(settingsTable.sessionId, sessionId));
-
-    const maskedKey = body.data.apiKey.slice(0, 8) + "****" + body.data.apiKey.slice(-4);
-    return res.json({ configured: true, maskedKey });
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to save key" });
-  }
-});
-
-router.delete("/settings/groq-key", requireAuth, async (req, res) => {
-  try {
-    const sessionId = getSessionId(req);
-    await getOrCreateSettings(sessionId);
-
-    await db
-      .update(settingsTable)
-      .set({ groqApiKey: null, updatedAt: new Date() })
-      .where(eq(settingsTable.sessionId, sessionId));
-
-    return res.json({ configured: false, maskedKey: null });
-  } catch (err) {
-    req.log.error(err);
-    return res.status(500).json({ error: "Failed to delete key" });
-  }
-});
+// REMOVED: GET/POST/DELETE /settings/groq-key.
+//
+// These let a founder store their own Groq API key, which was then preferred
+// over the server's when making inference calls. Two problems, either one
+// sufficient on its own: the key was written to settings.groq_api_key in
+// plaintext — a real credential sitting unencrypted beside business data, in
+// a schema where the one other credential (connectors.oauthTokenRef) is
+// AES-256-GCM encrypted precisely because it is one — and no screen in the
+// product had called these endpoints in some time, so the storage existed
+// without the feature.
+//
+// Inference now always uses the server's GROQ_API_KEY (see lib/groq.ts).
+// The column itself is dropped in lib/db/src/schema/settings.ts.
 
 router.get("/settings/onboarding", requireAuth, async (req, res) => {
   try {

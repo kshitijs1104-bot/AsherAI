@@ -79,7 +79,7 @@ async function main() {
     const periodMonth = currentPeriodMonth(today);
     for (const userId of usersTouched) {
       try {
-        const groq = await getGroqClient(userId);
+        const groq = getGroqClient();
         const wrap = await buildMonthlyWrap(userId, periodMonth, groq);
         // A month with nothing in it gets no stored wrap — an empty wrap is
         // worse than none, and storing one would freeze the emptiness even
