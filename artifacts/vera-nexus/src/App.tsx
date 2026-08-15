@@ -40,6 +40,9 @@ const VeraPrototype = import.meta.env.DEV
 import { OnboardingGate } from "@/pages/enterprise/Onboarding";
 import { PlanGate } from "@/pages/enterprise/Plan";
 import { CheckoutGate } from "@/pages/enterprise/Checkout";
+import { PrivacyGate } from "@/pages/legal/PrivacyGate";
+import { PrivacyPolicyPage } from "@/pages/legal/PrivacyPolicyPage";
+import { usePrivacyAccepted } from "@/lib/privacyConsent";
 
 const queryClient = new QueryClient();
 
@@ -133,7 +136,43 @@ function RequireAuth({ children }: { children: ReactNode }) {
     return <RedirectToSignIn signInFallbackRedirectUrl={returnTo} signUpFallbackRedirectUrl={returnTo} />;
   }
 
+  return <RequireConsent>{children}</RequireConsent>;
+}
+
+// ---- Consent is a condition on the product, not a step in the funnel ----
+//
+// This sits INSIDE RequireAuth and wraps every protected route at once, which
+// is deliberate. The obvious implementation — a /enterprise/privacy screen
+// between Clerk and onboarding — would have covered the one path a brand new
+// signup happens to take and nothing else: an existing account whose consent
+// predates a policy change, a bookmarked deep link, a shared /vera/dossier URL
+// and a typo'd path all reach the app without passing through the funnel.
+//
+// Here there is no such gap. Whatever a signed-in visitor asked for, they get
+// the policy first and the product second. It renders in place of `children`
+// rather than over the top of it, so no protected screen mounts, no data
+// request fires, and nothing of the product is visible behind the text.
+//
+// Nothing navigates on acceptance: the gate writes the record, this re-renders,
+// and the originally requested route appears underneath. Someone who signed up
+// and landed here continues to onboarding; someone who pasted a link gets the
+// link. Consent costs them their place in the queue, not their destination.
+function RequireConsent({ children }: { children: ReactNode }) {
+  const accepted = usePrivacyAccepted();
+
+  if (!accepted) return <PrivacyGate />;
+
   return <>{children}</>;
+}
+
+// Holds something back until the policy has been accepted. Needed for exactly
+// one thing: the SkinPicker is mounted beside the router rather than inside it,
+// so RequireConsent above does not cover it, and on a brand new account both
+// would open at once — a dismissible "choose how Vera looks" dialog stacked on
+// top of a consent screen that must not be dismissible. First-run order is now
+// the policy, then the look.
+function AfterConsent({ children }: { children: ReactNode }) {
+  return usePrivacyAccepted() ? <>{children}</> : null;
 }
 
 // /enterprise/signup used to render a form that took a name and an email,
@@ -209,6 +248,12 @@ function Router() {
           SignupEntry. */}
       <Route path="/enterprise/signup" component={SignupEntry} />
 
+      {/* The privacy policy, same text every account is shown and has to accept
+          before it can use anything (see RequireConsent). Public on purpose: a
+          policy you can only read after signing up is one you cannot read
+          before deciding whether to sign up. */}
+      <Route path="/privacy" component={PrivacyPolicyPage} />
+
       {/* ---------- EVERYTHING BELOW REQUIRES A VERIFIED SESSION ---------- */}
       <Route>
         <RequireAuth>
@@ -278,7 +323,9 @@ function App() {
                 appear over the sign-in screen. Renders null when a skin has
                 already been chosen, so this costs a mount and nothing else. */}
             <SignedIn>
-              <SkinPicker />
+              <AfterConsent>
+                <SkinPicker />
+              </AfterConsent>
             </SignedIn>
             <Toaster />
           </>

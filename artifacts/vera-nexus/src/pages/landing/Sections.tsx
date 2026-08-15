@@ -543,10 +543,15 @@ export function ReviewSection() {
 
         <Reveal delay={0.06} y={24} amount={0.15}>
           <div className="lp-wrapped">
+            {/* "Northwind Labs" is not a customer and its numbers are not
+                results — this is a mockup of the feature, and the same invented
+                company that the deleted testimonials were attributed to. The
+                section stays, because showing what a product produces is fair;
+                the label is what keeps it from reading as a case study. */}
             <div className="lp-wrapped-head">
               <div>
                 <div className="lp-v-key" style={{ color: 'var(--lp-teal)' }}>
-                  Northwind Labs
+                  Northwind Labs · sample company
                 </div>
                 <div className="lp-h3" style={{ marginTop: 10 }}>
                   July review
@@ -554,7 +559,7 @@ export function ReviewSection() {
               </div>
               <div className="lp-chip">
                 <span className="lp-dot" />
-                Assembled from 22 days of activity
+                Example — not a customer's data
               </div>
             </div>
 
@@ -576,71 +581,22 @@ export function ReviewSection() {
   );
 }
 
-/* =============================================================== 8. Testimonials */
+/* ============================================== 8. Testimonials — REMOVED */
 
-// Placeholder quotes. Names, companies and numbers are invented for layout —
-// swap them for real, attributed customer quotes before this page goes live.
-const QUOTES = [
-  {
-    text: 'I stopped re-explaining my company at the top of every conversation. That gave me back an hour a week — but the real change is that the advice now accounts for calls I made in March.',
-    who: 'Maya Ellison',
-    role: 'Founder & CEO, Northwind Labs',
-    initials: 'ME',
-    grad: 'linear-gradient(135deg, #2fdcc0, #8b7bff)',
-  },
-  {
-    text: 'We were three days from doubling paid search. Vera traced the margin drop back to our own annual discount instead. That is a mistake we did not spend $60k learning.',
-    who: 'Daniel Osei',
-    role: 'Co-founder, Ledgerline',
-    initials: 'DO',
-    grad: 'linear-gradient(135deg, #8b7bff, #e0a340)',
-  },
-  {
-    text: 'The goal, the decisions and the numbers finally sit in one thread. I open one thing in the morning now instead of six, and I make the call before lunch instead of on Friday.',
-    who: 'Priya Raghavan',
-    role: 'Founder, Tessellate',
-    initials: 'PR',
-    grad: 'linear-gradient(135deg, #e0a340, #2fdcc0)',
-  },
-];
-
-export function TestimonialsSection() {
-  return (
-    <section className="lp-section">
-      <div className="lp-container">
-        <Reveal>
-          <div style={{ maxWidth: 600, marginBottom: 48 }}>
-            <div className="lp-eyebrow">From founders</div>
-            <h2 className="lp-h2" style={{ marginTop: 20 }}>
-              Fewer open tabs. Better calls.
-            </h2>
-          </div>
-        </Reveal>
-
-        <RevealGroup className="lp-quotes" stagger={0.1}>
-          {QUOTES.map((quote) => (
-            <RevealItem key={quote.who}>
-              <Spotlight className="lp-card lp-quote" style={{ height: '100%' }}>
-                <p className="lp-quote-text">{quote.text}</p>
-                <div className="lp-quote-who">
-                  <span className="lp-avatar" style={{ background: quote.grad }}>
-                    {quote.initials}
-                  </span>
-                  <span>
-                    <span
-                      className="lp-small"
-                      style={{ color: 'var(--lp-text)', display: 'block', fontWeight: 550 }}
-                    >
-                      {quote.who}
-                    </span>
-                    <span className="lp-small">{quote.role}</span>
-                  </span>
-                </div>
-              </Spotlight>
-            </RevealItem>
-          ))}
-        </RevealGroup>
-      </div>
-    </section>
-  );
-}
+// There was a TestimonialsSection here: three quotes attributed to "Maya
+// Ellison, Founder & CEO, Northwind Labs" and two others, with headshot
+// initials, job titles and figures like "a mistake we did not spend $60k
+// learning". Every name, company and number was invented. A code comment said
+// so and asked whoever shipped the page to swap them for real ones first.
+//
+// It is deleted rather than commented out or emptied, because the risk was never
+// that the layout needed filling. Invented endorsements presented as real
+// customers are a deceptive practice in their own right — FTC Act §5 in the US
+// and the Consumer Protection Act's unfair-trade-practice provisions in India
+// both reach them, and the endorsement rules were tightened specifically to
+// cover fabricated reviews. The exposure does not depend on anyone being
+// deceived by these particular three.
+//
+// Vera has no customers to quote yet. The honest version of this section is its
+// absence; when there are real, attributed, permissioned quotes, write it again
+// from those. Do not restore this one.

@@ -1,9 +1,11 @@
 /* ---------------------------------------------------------------------------
    Vera — landing page.
 
-   Section order matches the brief: hero, the problem, five feature stories,
-   the command centre, three pillars, how it works, the monthly review,
-   testimonials, final CTA.
+   Section order: hero, the problem, five feature stories, the command centre,
+   three pillars, how it works, the monthly review, final CTA. A testimonials
+   section used to sit between the review and the CTA; it is gone, and the note
+   where it lived in Sections.tsx explains why it is not coming back in that
+   form.
 
    Two decisions worth stating up front:
 
@@ -32,7 +34,6 @@ import {
   HowItWorksSection,
   PillarsSection,
   ReviewSection,
-  TestimonialsSection,
 } from './Sections';
 import { Reveal, SplitText, Spotlight, useScrolledPast, useSequence } from './bits';
 import { VeraMark } from '../../components/VeraMark';
@@ -449,9 +450,21 @@ function FinalCta() {
           </div>
         </Reveal>
 
+        {/* This read "Your data is never used for training". It had to go: the
+            privacy policy every account now accepts says in section 4 that we
+            DO train on your content. Whichever of the two statements you
+            believe, a marketing page promising the opposite of the agreement is
+            the worst possible version — it is the misrepresentation, in writing,
+            with a signed document contradicting it.
+
+            The replacement links to the policy instead of summarising it, so
+            there is one statement of what happens and no second copy to drift. */}
         <Reveal delay={0.26}>
           <p className="lp-small" style={{ marginTop: 26 }}>
-            No credit card to start · Your data is never used for training
+            No credit card to start ·{' '}
+            <Link href="/privacy" style={{ color: 'var(--lp-teal)' }}>
+              How we handle your data
+            </Link>
           </p>
         </Reveal>
       </div>
@@ -475,6 +488,9 @@ function Footer() {
             <a href="#command-centre">Command centre</a>
             <a href="#how">How it works</a>
             <a href="#review">Monthly review</a>
+            {/* A wouter <Link>, not an anchor, because this one leaves the page
+                — the four above are in-page jumps. */}
+            <Link href="/privacy">Privacy</Link>
           </div>
           <span className="lp-small">© {new Date().getFullYear()} Vera</span>
         </div>
@@ -499,7 +515,6 @@ export function LandingPage() {
         <PillarsSection />
         <HowItWorksSection />
         <ReviewSection />
-        <TestimonialsSection />
         <FinalCta />
       </main>
       <Footer />

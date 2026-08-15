@@ -1381,53 +1381,13 @@
   color: var(--lp-text-3);
 }
 
-/* --- Testimonials ---------------------------------------------------------- */
-
-.lp-quotes {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-}
-
-@media (max-width: 940px) {
-  .lp-quotes {
-    grid-template-columns: 1fr;
-  }
-}
-
-.lp-quote {
-  padding: 28px 26px 24px;
-  display: flex;
-  flex-direction: column;
-  min-height: 268px;
-}
-
-.lp-quote-text {
-  font-size: 1.0313rem;
-  line-height: 1.62;
-  letter-spacing: -0.014em;
-  color: var(--lp-text);
-}
-
-.lp-quote-who {
-  margin-top: auto;
-  padding-top: 24px;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-
-.lp-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #0a0b0f;
-  flex: none;
-}
+/* --- Testimonials --------------------------------------------------------- */
+/*
+   The .lp-quotes / .lp-quote / .lp-quote-text / .lp-quote-who / .lp-avatar
+   rules that were here are deleted along with the section they styled — see
+   the note in Sections.tsx. Left behind they would be a ready-made slot for
+   the fabricated version to be pasted back into.
+*/
 
 /* --- Final CTA ------------------------------------------------------------- */
 
