@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   Vera — privacy policy. ONE source of truth.
+   Vera — privacy policy and terms. ONE source of truth.
 
    The same text is rendered in two places and must never diverge between them:
 
@@ -13,12 +13,14 @@
    what was agreed. So both surfaces render PolicyProse below, and the only
    thing that differs between them is which colour tokens they hand it.
 
-   THIS IS A DRAFT WRITTEN AGAINST THE CODE, NOT LEGAL ADVICE. Every claim
-   below was checked against what the software actually does today — the
-   subprocessor list is the set of external services the server really calls,
-   the retention section describes the deletion paths that really exist (and
-   admits the one that does not yet). It still needs a lawyer's pass before it
-   is relied on, and the four placeholders in POLICY_META need real values.
+   THIS IS A DRAFT WRITTEN AGAINST THE CODE, NOT LEGAL ADVICE. Every factual
+   claim was checked against what the software actually does: the subprocessor
+   list is the set of external services the server really calls, and the
+   deletion section describes the cascade that api-server/src/lib/
+   dataDeletion.ts really performs. The liability and IP sections are drafted to
+   be as protective as honest drafting allows, which is not the same as being
+   unchallengeable — see the note above section 17. It needs a lawyer's pass
+   before it is relied on, and POLICY_META needs real values.
 
    WHEN YOU CHANGE THE MEANING OF ANYTHING HERE, bump PRIVACY_POLICY_VERSION in
    src/lib/privacyConsent.ts. That is what re-prompts everyone who accepted the
@@ -26,15 +28,10 @@
    users consented to a policy they never read.
 --------------------------------------------------------------------------- */
 
-// ---- FILL THESE IN BEFORE THIS SHIPS TO ANYONE OUTSIDE THE TEAM ----
-//
-// Left as obvious placeholders rather than plausible-looking guesses: a policy
-// naming a legal entity that does not exist, or an address nobody reads, is a
-// misstatement in a document whose whole value is being accurate.
 export const POLICY_META = {
   /**
    * The parent company: data controller for section 1, and owner for section
-   * 13. One constant for both because they are the same company — a policy
+   * 14. One constant for both because they are the same company — a policy
    * where the entity you agreed with and the entity that owns the software are
    * named separately invites the question of which one you are dealing with.
    *
@@ -47,7 +44,7 @@ export const POLICY_META = {
    */
   parentEntity: '',
   /** Where a request under "Your choices" actually lands. Must be monitored. */
-  contactEmail: 'privacy@vera.ai',
+  contactEmail: 'kshitij.s1104@gmail.com',
   /** Governing law / primary place of processing. */
   jurisdiction: 'India',
   /** Human-readable date shown in the header. Keep in step with the version. */
@@ -63,17 +60,22 @@ export const OWNER_NAME = POLICY_META.parentEntity || "Vera's parent company";
  * Kept to six lines that each fit on two, because this block has a job the rest
  * of the document does not: it is the part that has to be READ, not merely
  * shown, so it has to fit in the consent screen's reading pane at a 720px-tall
- * window. Measured — it is within ~300px. Adding a seventh line, or letting one
+ * window. Measured — it is within ~320px. Adding a seventh line, or letting one
  * of these run to three, pushes the last one below the fold and quietly turns
  * the summary back into something people scroll past.
  */
 export const POLICY_SUMMARY: readonly string[] = [
-  'Vera remembers your business, so it holds a lot about it: what you type, what you upload, whatever you connect.',
-  'We use that content to run Vera for you, and to train and improve the models behind it.',
-  'We may license or sell data in future. We have not yet, and we will tell you 30 days before we do.',
-  'We will never sell your credentials, your tokens or your files, or anything that identifies you, without asking first.',
-  'You can opt out of training, opt out of any sale, and have everything deleted — by email, any time, keeping your account.',
-  'What you write and upload is yours. Vera itself — software, prompts, design — is ours, and cannot be copied.',
+  // Lines 1, 3 and 6 are kept under ~70 characters so they set on ONE line at
+  // the consent screen's width. That is not stylistic: at two lines each the
+  // block ran 44px past the reading pane and pushed the last point below the
+  // fold. Lines 2, 4 and 5 are allowed to run to two because they carry the
+  // three things someone would later claim they were never told.
+  'Vera remembers your business: what you type, upload, and connect.',
+  'Vera stores that content and trains on it. That is how it becomes a better consultant for you, and it is not optional.',
+  'We never sell your data. It is encrypted and used only to run Vera.',
+  'Delete a chat and its messages, files and derived notes are gone. Close your account and everything is gone.',
+  'Vera can be confidently wrong. Acting on what it tells you is your risk and your decision, not a guarantee from us.',
+  "What you write is yours. Vera's software, prompts and design are ours.",
 ];
 
 type Block = string | readonly string[];
@@ -91,8 +93,9 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
     heading: '1. Who this is and what it covers',
     body: [
       `Vera is a private operating system for founders, built and operated by ${OWNER_NAME}, which is the company you are agreeing with here. This policy covers the Vera web app, the API behind it, and the marketing site. It explains what we hold about you and your company, why, who else touches it, and what you can tell us to stop doing.`,
-      `Vera is sold to businesses and is not intended for anyone under 18. We do not knowingly collect data from children. If you believe a minor has an account, write to ${POLICY_META.contactEmail} and we will remove it.`,
+      'Vera is a product for businesses, and we ask for a work email address when you sign up. We do not direct Vera at children, we do not market it to them, and we do not knowingly collect personal data from a child. If you believe a child has given us data, write to us at the address in section 13 and we will delete it.',
       'Where this policy says "your data", it means both personal data about you and commercial data about your company. Both are treated the same way here, because in practice they arrive mixed together in the same sentence.',
+      'Sections 1 to 13 are the privacy policy. Sections 14 to 18 are the terms on which Vera is provided — ownership, the limits of what Vera can promise you, and the limits of what we are liable for. Using Vera means agreeing to all of it.',
     ],
   },
   {
@@ -103,13 +106,13 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
       [
         'Account and identity — your name, email address and sign-in metadata. Handled by our authentication provider (see section 5); we hold the resulting user id and email, never your password.',
         'Business profile — company name, stage, industry, team size, country, revenue figure and primary goal, from the onboarding steps and from Settings. This is attached to every request Vera makes on your behalf.',
-        'What you say to Vera — the full text of your messages and Vera\'s replies, stored server-side as a permanent log so that threads, decisions and goals stay linked to each other over months.',
+        'What you say to Vera — the full text of your messages and Vera\'s replies, stored server-side as a durable log so that threads, decisions and goals stay linked to each other over months.',
         'What Vera derives from you — facts about your company, decisions, goals, roadmap items, learnings, monthly reviews and confidence scores. This is the memory layer; it is the product.',
-        'Files you upload — images and documents you attach in the composer. The file itself is stored on our server, and its text or visual content is extracted so Vera can read it.',
-        'Connected accounts — if, and only if, you connect one: Gmail, Google Calendar, Google Sheets, Notion, Jira, Slack, LinkedIn or WhatsApp. We hold an encrypted access token plus the specific content the connector is scoped to read. Disconnecting revokes the token.',
+        'Files you upload — images and documents you attach in the composer. The file is stored on our server, and its text or visual content is extracted once so Vera can read it without re-reading the file on every question.',
+        'Connected accounts — if, and only if, you connect one: Gmail, Google Calendar, Google Sheets, Notion, Jira, Slack, LinkedIn or WhatsApp. We hold an encrypted access token plus the specific content the connector is scoped to read. Disconnecting deletes our copy of the token.',
         'Technical and usage data — IP address, browser and device information, request logs, timestamps and error traces. Kept to run the service, rate-limit abuse and debug failures.',
       ],
-      'We do not ask for and do not want: payment card numbers (our payment provider handles those and we never see the full number), government identifiers, health data, or your customers\' personal data. Please do not paste any of those into a chat.',
+      'We do not ask for and do not want: payment card numbers (our payment provider handles those and we never see the full number), government identifiers, health data, biometric data, or your own customers\' personal data. Please do not paste any of those into a chat. If you do, you are responsible for having the right to share it, and section 18 applies.',
     ],
   },
   {
@@ -118,129 +121,138 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
     body: [
       [
         'Running Vera — answering you, remembering context between sessions, building your dossier, tracking goals and decisions, and assembling the monthly review.',
-        'Making Vera better — measuring where it was wrong, unclear, ungrounded or too slow, and fixing that. This includes training, described separately below because it deserves to be.',
+        'Making Vera better at advising you — storing and training on your content, described in full in section 4 because it is the mechanism the whole product rests on.',
         'Keeping it safe and working — abuse prevention, rate limiting, security investigation, backups and debugging.',
         'Talking to you — service notices, and product email you can unsubscribe from.',
         'Legal obligations — responding to lawful requests, and defending or establishing legal claims.',
       ],
-      'We do not run advertising, and we do not build advertising profiles of you.',
+      'That list is exhaustive. We do not run advertising, we do not build advertising profiles, we do not sell your data (section 6), and we do not use your data for any purpose outside what is written above.',
     ],
   },
   {
     id: 'training',
-    heading: '4. Training and improving the model',
+    heading: '4. Vera stores your data and trains on it — and that is not optional',
     body: [
-      'This is the part most policies bury, so: we use your content to train, tune and evaluate the models, prompts and retrieval behind Vera. That includes your messages, Vera\'s replies, the facts and decisions Vera derived from them, the content of files you uploaded, and any feedback you gave on a response.',
-      'How we limit it:',
+      'This is the mechanism of the product, so it is stated plainly rather than buried. Vera has to store what you tell it, and it learns from what it stores. That is the difference between Vera and a chat window that forgets you: the reason it can account for a decision you made in March is that the March conversation is still there, and the reason its judgement improves is that it is trained on real founder problems rather than generic text.',
+      'What that covers: your messages and Vera\'s replies, the facts and decisions Vera derived from them, the extracted content of files you uploaded, and any feedback you gave on a response.',
+      'Because storage and training are how Vera works, they are not features you can switch off while continuing to use it. Signing up means agreeing to them. If you do not want your content stored and learned from, the honest answer is that Vera is not usable on those terms, and closing your account (section 7) deletes everything we hold. Where the law of your country gives you a right to object to this specific processing, section 9 tells you how to raise it — we will consider any objection properly, but in most cases honouring it means closing the account, because there is no version of Vera that runs without memory.',
+      'What we limit, and hold ourselves to:',
       [
         'We aggregate and strip identifiers wherever the work does not require them — which is most of the time, because what we are usually trying to learn is a pattern, not a company.',
-        'Training data is held under the same access controls as production data. It is not a looser copy in a spreadsheet somewhere.',
-        'We do not publish your content, and we do not use it in marketing, case studies or demos without asking you in writing first.',
+        'Training data sits under the same encryption and access controls as production data. It is not a looser copy in a spreadsheet somewhere.',
         'Your credentials and connected-account tokens are never training input. They are secrets, not text.',
+        'We do not publish your content, and we will not use it in marketing, case studies, demos or public examples without asking you in writing first.',
+        'We do not sell it, license it, or share it with anyone outside the processors in section 5.',
       ],
-      `You can opt out of training at any time by emailing ${POLICY_META.contactEmail}. Vera keeps working exactly as before — opting out costs you no feature, and we will not ask you to justify it.`,
-      'One honest limit: where your content has already been incorporated into a trained model or an aggregated dataset, we cannot always extract it again afterwards. What an opt-out or a deletion request guarantees is that we stop using your data from that point forward, and that it is excluded from everything we train after it.',
+      'One honest limit, stated because the alternative is a promise we could not keep: where your content has already been incorporated into a trained model or an aggregated dataset, it cannot always be extracted from it afterwards. What deletion guarantees is that we stop using your data from that point on, that it is excluded from everything trained after it, and that every copy we hold in our own systems is destroyed as described in section 7.',
     ],
   },
   {
     id: 'sharing',
     heading: '5. Who else touches your data',
     body: [
-      'Vera runs on other companies\' infrastructure. These are the ones that see your data today, and what each one gets:',
+      'Vera runs on other companies\' infrastructure. These are the ones that see your data, and exactly what each one gets. None of them pays us for access, and none of them is free to use your data for their own purposes.',
       [
         'Our authentication provider (Clerk) — your name, email and session data. It is how sign-in works.',
-        'Our model provider (Groq) — the contents of the request Vera is answering: your question plus the context Vera assembled for it. This is how an answer gets generated. We send the minimum the answer needs and no more, and their handling of it is governed by their own terms, which we review.',
-        'Our hosting and database providers — everything, at rest, because that is where the application and the Postgres database physically live.',
+        'Our model provider (Groq) — the contents of the request Vera is answering: your question plus the context Vera assembled for it. This is how an answer gets generated. We send the minimum the answer needs and no more.',
+        'Our hosting and database providers — everything, at rest, because that is where the application and the database physically live.',
         'Web search and page retrieval (DuckDuckGo, Jina Reader) — when a question needs current outside information, the search terms Vera constructs are sent out. Your identity is not attached to them.',
         'Providers you connect yourself (Google, Notion, Atlassian, Slack, Meta) — only the account you connected, only the scopes you granted, only while it stays connected.',
-        'Professional advisers, and an acquirer if the company is ever sold or reorganised — in which case this policy travels with the data, and we will tell you before anything changes.',
+        'Professional advisers, and an acquirer if the company is ever sold or reorganised — in which case this policy travels with the data and we will tell you before anything changes.',
         'Law enforcement or a court — only where we are legally required, and we will notify you unless we are prohibited from doing so.',
       ],
-      'Each of these is a processor acting on our instructions, not a party free to do as it likes with your data. None of them is paying us for access.',
+      'Each of these is a processor acting on our instructions under a contract, not a party free to do as it likes. If we add a new one, section 12 applies: we update this list, bump the policy version, and tell you.',
     ],
   },
   {
-    id: 'sale',
-    heading: '6. Selling and licensing data',
+    id: 'no-sale',
+    heading: '6. We do not sell your data',
     body: [
-      'We may, in future, sell or license data derived from use of Vera to third parties — for example aggregated benchmarks about how companies at a given stage actually operate. We are telling you this now rather than adding it quietly later.',
-      'What is true as of the date on this policy: no such sale or licence has happened, and no such arrangement is in place. We also do not yet know who those third parties would be, so we cannot honestly name them here. When we do, we will name them.',
-      'The limits below are commitments, not intentions. They bind any such arrangement:',
+      'We do not sell your personal data or your company data. We do not license it, rent it, trade it, or share it for anyone else\'s commercial benefit. We have never done so, and this policy does not reserve a right to start.',
+      'Specifically, and as binding commitments:',
       [
-        'We will give you at least 30 days\' notice, by email, before any sale or licensing of data begins.',
-        'Nothing that identifies you, your company, your staff or your customers will be sold without your separate, explicit consent. Default is aggregated and de-identified.',
-        'Your credentials, access tokens, uploaded files and raw message contents are never for sale, under any arrangement, at any price.',
-        'Any buyer is contractually bound to the same limits and may not resell onward without them.',
-        'Data will not be sold to people-search or background-check brokers, nor for use in targeting, harassment, discrimination, or anything intended to damage you or your company.',
-        `You can opt out of any sale of your data permanently, at any time, by emailing ${POLICY_META.contactEmail}. Opting out does not change your price or your access. If you are in a jurisdiction that gives you a statutory right to opt out of sale — California and several other US states do — this is that mechanism.`,
+        'No sale, licence, rental or barter of your data to any third party, in identified, pseudonymised or aggregated form.',
+        'No sharing with data brokers, people-search services, background-check services, or advertising networks.',
+        'No use of your data to target, profile or market to you on behalf of anyone else.',
+        'No disclosure to anyone outside the processors listed in section 5, except where section 5 already says so — a legal requirement, or a corporate transaction in which this policy travels with the data.',
       ],
+      'If that ever changed, it would be a change to the meaning of this policy, and section 12 governs it: you would be told in advance, and you would not be treated as having agreed by silence.',
     ],
   },
   {
-    id: 'retention',
-    heading: '7. How long we keep it, and how to get rid of it',
+    id: 'deletion',
+    heading: '7. Deletion — what goes, and when',
     body: [
-      'While your account is open, we keep your business context, message log, derived memory and uploads, because Vera\'s usefulness is a direct function of how much of your history it still has.',
+      'You can remove your data, and removal is real rather than a flag on a row. Two things do it:',
       [
-        'Delete a chat in the app and the chat and its goals are removed immediately.',
-        `Uploaded files and the permanent message log are not yet deletable from inside the app — that is being built. Until it exists, email ${POLICY_META.contactEmail} and we will delete them for you within 30 days.`,
-        'Disconnect a connector and its access token is revoked and deleted.',
-        'Close your account, or ask us to, and we delete your personal data and company data within 30 days, except where law requires us to keep something specific.',
-        'Backups roll off within 90 days, so a deleted item can persist in a backup for up to that long before it is gone everywhere.',
-        'Technical logs are kept for a short operational window and then discarded.',
+        'Delete a chat, and we delete that conversation\'s messages, the files you attached to it and the extracted text of those files, plus the goal, roadmap, decision cards and feedback that came from it. Vera loses that thread and everything it derived from it.',
+        'Close your account, and we delete everything: every chat and message, every uploaded file, your business profile and onboarding answers, the company facts and dossier that make up Vera\'s memory of you, your monthly reviews, your workflows, your settings, and our copy of any connected-account tokens. Nothing of yours is kept as a residual profile.',
       ],
-      'The limit described at the end of section 4 applies to deletion too: already-trained models and already-aggregated datasets cannot always be unwound.',
+      'Timing: both happen immediately when you ask, not on a queue. Encrypted backups are the one exception — they roll off within 30 days, so a deleted item can persist in a backup for up to that long before it is gone from every system we operate. We do not restore a backup to recover data you deleted.',
+      'Two limits, both stated because they are true and a policy that hid them would be the misleading part. First, the trained-model limit at the end of section 4. Second, disconnecting a connector deletes our copy of the access token but does not revoke it at Google, Notion, Slack or Meta — you should revoke access in that provider\'s own security settings as well, and we cannot do that for you.',
+      'While your account is open, we keep what section 2 describes, because Vera\'s usefulness is a direct function of how much of your history it still has. Technical logs are kept for a short operational window and then discarded.',
     ],
   },
   {
     id: 'security',
-    heading: '8. Security',
+    heading: '8. How we protect it',
     body: [
+      'Your data is the record of how your company actually runs, and it is treated that way.',
       [
-        'Traffic is encrypted in transit (TLS). The database is encrypted at rest by our provider.',
+        'Traffic is encrypted in transit (TLS). The database is encrypted at rest.',
         'Connected-account OAuth tokens are encrypted with AES-256-GCM before storage, separately from everything else.',
-        'Every data request is authenticated against a verified session and scoped to your user id on the server, not merely in the interface.',
-        'Uploads are stored under server-generated filenames, never a path derived from what you typed.',
-        'Internal access to production data is limited to people who need it to operate or debug the service.',
+        'Every data request is authenticated against a verified session and scoped to your own user id on the server, not merely in the interface. Uploaded files are not publicly served — they are reachable only through an authenticated request for a file you own.',
+        'Uploads are stored under server-generated filenames, never a path derived from anything you typed.',
+        'Internal access to production data is limited to the people who need it to operate or debug the service.',
       ],
-      'No system is perfectly secure, and we will not pretend otherwise. If a breach affects your data we will tell you and the relevant regulator without undue delay, within 72 hours of becoming aware where that applies to us, and we will tell you what we know rather than what sounds best.',
+      'What we will not claim: that any system is perfectly secure. Anyone who tells you their infrastructure cannot be breached is either mistaken or selling something, and a promise of absolute security is one we would be answerable for the day it failed. What we commit to instead is the measures above, and this: if a breach affects your data we will tell you and the relevant regulator without undue delay — within 72 hours of becoming aware, where that duty applies to us — and we will tell you what we actually know rather than what sounds best.',
     ],
   },
   {
     id: 'rights',
-    heading: '9. Your choices',
+    heading: '9. Your choices and your rights',
     body: [
-      `One address for all of it: ${POLICY_META.contactEmail}. We answer within 30 days and will not make you use a form.`,
+      `One address for all of it: ${POLICY_META.contactEmail}. We answer within 30 days and will not make you fill in a form to exercise a right.`,
       [
         'Get a copy of what we hold about you, in a portable format.',
         'Correct anything that is wrong.',
-        'Delete your data, or your whole account.',
-        'Opt out of training (section 4).',
-        'Opt out of any sale or licensing of your data (section 6).',
-        'Object to or restrict a particular use, and withdraw a consent you gave earlier.',
+        'Delete a chat, or your entire account and everything in it (section 7).',
+        'Disconnect any connected account at any time.',
+        'Opt out of anything that is not required for Vera to function — product email, and any future processing that section 12 introduces.',
+        'Object to or restrict a particular use, and withdraw any consent you gave separately from this policy.',
         'Complain to your local data protection authority. You do not have to come to us first, though we would rather you did.',
       ],
-      `Depending on where you live, some of these are statutory rights — under the GDPR in the UK and EEA, the DPDP Act in India, and state privacy laws in the US. We apply them to everyone regardless of where they live, because operating two standards is how the lower one becomes the real one.`,
+      'The one thing you cannot switch off while continuing to use Vera is the storing of and training on your content, for the reason given in section 4: it is not a feature layered on top of Vera, it is how Vera works. Your control over it is the control described in section 7 — delete the chat, or close the account and take everything with you.',
     ],
   },
   {
     id: 'transfers',
     heading: '10. Where your data goes',
     body: [
-      `We are based in ${POLICY_META.jurisdiction}, and the providers in section 5 operate in the United States and the European Union. Using Vera means your data crosses borders. Where it leaves a jurisdiction with transfer restrictions, we rely on the standard contractual protections our providers offer.`,
+      `We operate from ${POLICY_META.jurisdiction}, and the providers in section 5 operate in the United States and the European Union. Using Vera means your data crosses borders. Where it leaves a jurisdiction that restricts transfers, we rely on the standard contractual protections our providers offer, and we do not transfer data to a provider that offers none.`,
+    ],
+  },
+  {
+    id: 'compliance',
+    heading: '11. The law we hold ourselves to',
+    body: [
+      'We comply with the data protection law that applies to you, not only the law where we happen to be sitting. That includes the GDPR in the UK and EEA, the Digital Personal Data Protection Act in India, and the state privacy laws in the United States, as each applies.',
+      'Where those regimes differ, we apply the standard most protective of you, and we extend the rights in section 9 to everyone regardless of where they live — running two standards is how the lower one quietly becomes the real one.',
+      'Our commitment underneath all of it is simpler than the statutes: your data is used to run Vera and to make Vera better for you. It is not misused, not sold, not repurposed for something you would not expect, and not treated as an asset separate from the service you came here for.',
     ],
   },
   {
     id: 'changes',
-    heading: '11. Changes to this policy',
+    heading: '12. If this policy changes',
     body: [
-      'This policy is versioned. If we change what we actually do with your data, we will bump the version, email you, and ask you to read and accept the new wording the next time you open Vera. Small clarifications that do not change meaning we will simply date.',
+      'This policy is versioned. If we change what we actually do with your data, then before the change takes effect we will bump the version, email you, and ask you to read and accept the new wording the next time you open Vera. Small clarifications that do not change meaning we will simply date.',
+      'You will not be treated as having agreed to a material change by silence, by continuing to use Vera, or by not reading an email. And where a change introduces processing that is not necessary for Vera to function, you will be able to decline that part specifically and keep using Vera without it. Only what section 4 describes is non-optional.',
       'We will not use a silent edit to acquire a permission you did not give.',
     ],
   },
   {
     id: 'contact',
-    heading: '12. Contact',
+    heading: '13. Contact',
     body: [
       `Questions, requests, or something in here that turns out to be wrong: ${POLICY_META.contactEmail}. If you tell us this policy does not match what the product does, we will treat it as a bug in the product or a bug in the policy, and fix whichever one is broken.`,
     ],
@@ -250,12 +262,12 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
 /* ---------------------------------------------------------------- ownership */
 
 /**
- * Ownership and IP. Strictly speaking this is terms-of-use material, not
- * privacy material, and it will eventually want its own document — but it is
- * shown on the same first-run screen and rendered under its own labelled
- * heading, for one reason: the first-run screen is the only moment where you
- * can be certain a person saw something before they used the product. An IP
- * clause nobody was shown is an IP clause that is hard to enforce.
+ * Ownership, warranties and liability. Strictly speaking this is terms-of-use
+ * material and will eventually want its own document — but it is shown on the
+ * same first-run screen and rendered under its own labelled heading, for one
+ * reason: the first-run screen is the only moment where you can be certain a
+ * person saw something before they used the product. A liability limit nobody
+ * was shown is a liability limit that is hard to rely on.
  *
  * Kept separate from POLICY_SECTIONS rather than appended to it so the split
  * stays visible in code, and so pulling this into a real /terms document later
@@ -264,7 +276,7 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
 export const OWNERSHIP_SECTIONS: readonly PolicySection[] = [
   {
     id: 'ownership',
-    heading: '13. Vera is our property',
+    heading: '14. Vera is our property',
     body: [
       `Vera — the name, the mark, the software, the interface, the prompts and system instructions, the memory and dossier architecture, the model configuration, the documentation, and every part of how it works — is owned by ${OWNER_NAME} and protected by copyright, trademark, database and trade-secret law. Nothing in this document transfers any of it to you.`,
       'What you get instead is a licence: a limited, non-exclusive, non-transferable, revocable right to use Vera as a customer, for your own business, for as long as your account is in good standing. That is the whole of the grant.',
@@ -282,19 +294,62 @@ export const OWNERSHIP_SECTIONS: readonly PolicySection[] = [
   },
   {
     id: 'your-content',
-    heading: '14. Your content stays yours',
+    heading: '15. Your content stays yours',
     body: [
       'The reciprocal half, and it matters as much: your business data, your files and what you write to Vera remain yours. We claim no ownership of them.',
-      `What you grant us is a licence to process that content for the purposes set out in this policy — running Vera for you, and improving it, including training as described in section 4, which you can opt out of. Nothing more. If you close your account, that licence ends with it, subject to the deletion terms in section 7.`,
-      'What Vera writes back to you — analyses, drafts, reviews, recommendations — is yours to use in your business freely, including commercially. We ask only that you do not present Vera itself as your own product, which is the line drawn in section 13.',
+      'What you grant us is a licence to store and process that content for the purposes set out in this policy — running Vera for you, and training and improving it as described in section 4. Nothing more. If you close your account, that licence ends with it and the content is deleted under section 7.',
+      'What Vera writes back to you — analyses, drafts, reviews, recommendations — is yours to use in your business freely, including commercially, subject only to section 14: do not present Vera itself as your own product.',
     ],
   },
   {
     id: 'no-advice',
-    heading: '15. Vera is not your lawyer, accountant or doctor',
+    heading: '16. No warranty, no advice, and no guarantee of accuracy',
     body: [
-      'Vera produces analysis and recommendations, generated by a model, from the information available to it. It can be confidently wrong. It is not legal, financial, tax, medical or professional advice, and it is not a substitute for someone qualified and accountable.',
-      'Decisions you make remain yours. Check anything consequential — particularly anything with a number, a legal consequence, or someone\'s wellbeing attached to it — against a qualified human before you act on it.',
+      'Read this section properly. It is the one that describes what Vera is not.',
+      'Vera produces analysis and recommendations generated by a language model from the information available to it. It can be wrong, and it can be wrong while sounding certain. It can misread a number, miss context you did not give it, rely on outdated information, or reason from a false premise. Accuracy is what we build towards; it is not something we can guarantee, and nothing in the product or our marketing should be read as guaranteeing it.',
+      'That includes our marketing language. Phrases used to describe Vera — including "the cause behind every decision" and any similar claim on our website, in advertising, or in the product — describe what Vera is designed to do and what it aims at. They are positioning, not a warranty. Vera does not and cannot guarantee that it has identified the true cause of anything, that a recommendation is correct, or that following it will produce a particular result.',
+      'Vera is not professional advice of any kind, and using it creates no professional or fiduciary relationship between us. It is not legal, financial, investment, tax, accounting, regulatory, employment, insurance, engineering, medical, psychological or safety advice, and it is not a substitute for a qualified, accountable, licensed human being. Specifically:',
+      [
+        'Every output is information for you to evaluate, not an instruction to follow and not a decision made on your behalf.',
+        'Every decision you make after reading a Vera output remains entirely your decision, made on your own judgement and at your own risk.',
+        'Anything consequential — a number, a contract, a filing, a hire, a firing, a price change, a legal or regulatory question, anything affecting someone\'s money, employment, health or safety — must be independently verified with a qualified professional before you act on it.',
+        'Vera has no way to know your full circumstances, and its outputs are not tailored advice even when they read as though they are.',
+      ],
+      'To the fullest extent the law allows, Vera is provided "as is" and "as available", with no warranties of any kind, whether express, implied or statutory. We specifically disclaim any implied warranty of merchantability, fitness for a particular purpose, accuracy, completeness, reliability, non-infringement, and uninterrupted or error-free operation. We do not warrant that Vera will be available at any given time, that it will be free of bugs or defects, that any defect will be fixed, that data will never be lost, or that outputs will be consistent between one request and the next.',
+    ],
+  },
+  {
+    id: 'liability',
+    heading: '17. Limits on our liability',
+    body: [
+      'Because Vera makes suggestions and you make decisions, the risk of acting on a suggestion sits with you. This section says so in the terms the law uses.',
+      'To the fullest extent permitted by applicable law, and except where this section says otherwise:',
+      [
+        'We are not liable for any loss or damage arising from your use of Vera or your reliance on anything it produces — including any decision you took, did not take, or delayed because of an output.',
+        'We are not liable for indirect, incidental, special, consequential, exemplary or punitive damages; nor for loss of profits, revenue, business, contracts, opportunity, anticipated savings, goodwill, reputation, or data; nor for business interruption or the cost of substitute services — whether or not such losses were foreseeable and whether or not we were told they were possible.',
+        'We are not liable for the accuracy, completeness or usefulness of any output, for any act or omission of a third-party provider listed in section 5, for anything caused by your own act, omission, configuration or misuse, or for any event beyond our reasonable control (including outages, network failures, provider failures, changes in third-party services, and force majeure).',
+        'Our total aggregate liability for all claims, however arising and whether in contract, tort (including negligence), statute or otherwise, is limited to the greater of the total fees you actually paid us for Vera in the twelve months before the claim arose, or one hundred United States dollars (US$100).',
+        'Any claim must be brought within one year of the event giving rise to it, or as soon after that as applicable law requires it to be permitted.',
+      ],
+      'WHAT THIS DOES NOT EXCLUDE, because no drafting can and pretending otherwise would put the whole section at risk: nothing here limits our liability for death or personal injury caused by our negligence, for fraud or fraudulent misrepresentation, for gross negligence or wilful misconduct, or for anything else that applicable law does not permit to be limited or excluded — including any non-waivable statutory or consumer right you have. If you are a consumer under the law of your country, your statutory rights are unaffected by anything in this document.',
+      'If any part of this section, or of section 16, is held unenforceable in a particular jurisdiction, that part is to be read as narrowed to the minimum extent needed to make it enforceable, and every other part stays in force. The rest of this document survives the removal of any single clause.',
+      `These terms are governed by the law of ${POLICY_META.jurisdiction}, without prejudice to any mandatory protection available to you under the law of the country in which you live.`,
+    ],
+  },
+  {
+    id: 'your-duties',
+    heading: '18. Your side of it',
+    body: [
+      'In exchange for the above, a short list of things that are yours to get right:',
+      [
+        'Use Vera lawfully, and do not use it to break the law, infringe anyone\'s rights, or harm anyone.',
+        'Only put data into Vera that you are entitled to share. If you paste someone else\'s personal data — a customer list, an employee\'s details, a third party\'s confidential information — you are confirming you have the right to, and you are responsible for that.',
+        'Keep your credentials secure, and tell us promptly if you think your account has been compromised.',
+        'Do not attempt to break, overload, probe or circumvent the service or its security, and do not use it to build a competing product (section 14).',
+        'You are responsible for verifying outputs before acting on them (section 16), and for your own backups of anything you cannot afford to lose.',
+      ],
+      'You agree to indemnify us against third-party claims, losses and reasonable costs arising from your breach of this section — including any claim brought by someone whose data you put into Vera without the right to do so. This does not apply to anything caused by our own breach, negligence or wrongdoing.',
+      'We may suspend or close an account that breaches these terms. Where the circumstances allow it, we will tell you first and give you a chance to put it right; where a breach is causing harm or is unlawful, we may act immediately. Closing an account under this section does not affect your deletion rights in section 7.',
     ],
   },
 ];

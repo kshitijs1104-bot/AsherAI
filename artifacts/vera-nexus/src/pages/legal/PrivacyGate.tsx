@@ -129,12 +129,14 @@ export function PrivacyGate() {
               sixth summary line ("what you write is yours, Vera is ours") sat
               just under the fold. It is the line most worth having above it. */}
           <div style={{ display: 'grid', gap: 16 }}>
-            {/* The two clauses someone might actually refuse, reachable without
-                a scroll — and ABOVE the summary rather than below it, because
+            {/* The clauses someone might actually refuse, reachable without a
+                scroll — and ABOVE the summary rather than below it, because
                 below it they landed a few pixels under the fold at a 720px
-                window, which is the one place they needed to be visible. If
-                either clause loses you a signup, that is the system working:
-                better here than in a complaint later. */}
+                window, which is the one place they needed to be visible.
+                Training because it is compulsory; liability because it is where
+                the risk of acting on an output is allocated. If either loses you
+                a signup, that is the system working: better here than in a
+                complaint later. */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px]">
               <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--dim)]">
                 Read first
@@ -144,14 +146,21 @@ export function PrivacyGate() {
                 onClick={() => jumpTo('training')}
                 className="text-[var(--mint)] underline underline-offset-2 hover:opacity-80"
               >
-                4. Training on your content
+                4. Storing and training on your data
               </button>
               <button
                 type="button"
-                onClick={() => jumpTo('sale')}
+                onClick={() => jumpTo('no-advice')}
                 className="text-[var(--mint)] underline underline-offset-2 hover:opacity-80"
               >
-                6. Selling and licensing data
+                16. No guarantee of accuracy
+              </button>
+              <button
+                type="button"
+                onClick={() => jumpTo('liability')}
+                className="text-[var(--mint)] underline underline-offset-2 hover:opacity-80"
+              >
+                17. Limits on our liability
               </button>
             </div>
 
@@ -201,16 +210,22 @@ export function PrivacyGate() {
               onChange={(e) => setAgreed(e.target.checked)}
               className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--indigo)] cursor-pointer"
             />
+            {/* Names the three things a person is most likely to say they were
+                never told: that training is compulsory, that outputs are not
+                guaranteed, and that liability is capped. A checkbox whose label
+                says only "I agree to the terms" is the one a court is most
+                willing to read narrowly. */}
             <span className="text-[13px] leading-relaxed text-[var(--text)]">
-              I have read and agree to the Privacy Policy and the terms of use above — including that
-              my content may be used to train and improve Vera, and that data may in future be sold
-              or licensed subject to the limits in section 6.
+              I have read and agree to the Privacy Policy and the terms above — including that Vera
+              stores and trains on my content and that this is not optional (section 4), that its
+              recommendations are not guaranteed to be accurate and acting on them is my own risk
+              (section 16), and the limits on liability in section 17.
             </span>
           </label>
 
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <span className="text-[11px] font-mono text-[var(--dim)]">
-              You can opt out of either, later, by email.
+              Delete a chat, or your account, any time — section 7.
             </span>
             <button
               type="button"

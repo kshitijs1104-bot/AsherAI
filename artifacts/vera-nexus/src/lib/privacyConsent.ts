@@ -13,7 +13,13 @@
 
 import { useSyncExternalStore } from 'react';
 
-export const PRIVACY_POLICY_VERSION = '2026-08-15';
+// Bumped from '2026-08-15' when the policy was revised: training became
+// explicitly non-optional, the possible-future-sale clause was removed and
+// replaced with a commitment not to sell, deletion promises were tightened to
+// match the cascade in the API, and the warranty/liability sections were added.
+// Every one of those changes the meaning of what someone agreed to, so the
+// earlier acceptance no longer covers it and everyone is asked again.
+export const PRIVACY_POLICY_VERSION = '2026-08-15-r2';
 
 const KEY = 've_privacy_consent';
 

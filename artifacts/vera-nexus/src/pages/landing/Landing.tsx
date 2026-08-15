@@ -488,12 +488,41 @@ function Footer() {
             <a href="#command-centre">Command centre</a>
             <a href="#how">How it works</a>
             <a href="#review">Monthly review</a>
-            {/* A wouter <Link>, not an anchor, because this one leaves the page
-                — the four above are in-page jumps. */}
-            <Link href="/privacy">Privacy</Link>
+            {/* Wouter <Link>s, not anchors, because these leave the page — the
+                four above are in-page jumps.
+
+                The footer is where a regulator, an app store reviewer or a
+                payment processor looks to check that a privacy policy exists at
+                all, so it is spelled out twice rather than hidden behind one
+                word: the policy itself, and the terms, which live in the same
+                document at sections 14-18. Both resolve to /privacy. */}
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/privacy#liability">Terms</Link>
           </div>
           <span className="lp-small">© {new Date().getFullYear()} Vera</span>
         </div>
+
+        {/* Point 10 of the brief, and it belongs on the marketing page rather
+            than only in the policy: "The cause behind every decision" is the
+            headline at the top of this page, and read literally it is a promise
+            that Vera identifies true causes. It cannot guarantee that. Saying so
+            here, in the same place the claim is made, is what stops the headline
+            from being the misrepresentation — a disclaimer that only exists in a
+            document behind a link does not qualify the copy a visitor read.
+            Section 16 carries the full version. */}
+        <p
+          className="lp-small"
+          style={{ marginTop: 26, maxWidth: 760, lineHeight: 1.65, color: 'var(--lp-text-3)' }}
+        >
+          Vera generates analysis with a language model and can be wrong. "The cause behind every
+          decision" describes what Vera is built to do, not a guaranteed result — its outputs are
+          information for you to weigh, not professional advice, and decisions you take after reading
+          them remain yours. Verify anything consequential with a qualified professional. See{' '}
+          <Link href="/privacy#no-advice" style={{ color: 'var(--lp-text-2)' }}>
+            sections 16 and 17
+          </Link>{' '}
+          for the full terms.
+        </p>
       </div>
     </footer>
   );

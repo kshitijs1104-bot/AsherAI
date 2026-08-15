@@ -14,6 +14,7 @@ import workflowsRouter from "./workflows";
 import recapsRouter from "./recaps";
 import attachmentsRouter from "./attachments";
 import dossierRouter from "./dossier";
+import accountRouter from "./account";
 
 // ---- Every route registered here is reachable from the live product ----
 //
@@ -53,5 +54,9 @@ router.use(workflowsRouter);
 router.use(recapsRouter);
 router.use(attachmentsRouter);
 router.use(dossierRouter);
+// DELETE /account. Registered because the privacy policy grants a right to
+// erasure, and a granted right with no endpoint behind it is a promise that
+// depends on someone hand-writing SQL across fifteen tables.
+router.use(accountRouter);
 
 export default router;

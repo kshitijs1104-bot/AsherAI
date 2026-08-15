@@ -22,18 +22,17 @@ entity a user is agreeing *with* in section 1.
 
 Set the constant once and every mention updates. No other edit needed.
 
-## 2. Own the contact address — BLOCKING
+## 2. Watch the contact address
 
-**Where:** same file, `POLICY_META.contactEmail`, currently `privacy@vera.ai`.
+**Where:** same file, `POLICY_META.contactEmail`, now `kshitij.s1104@gmail.com`.
 
-Section 9 points people at this address for every right the policy grants:
-access, correction, deletion, opting out of training, opting out of sale. If it
-does not exist or nobody reads it, the policy grants rights that cannot be
-exercised, which is worse than not granting them.
+Section 9 and section 13 point people at this address for every right the policy
+grants: access, correction, deletion, objection, complaints. Someone has to
+actually read it, within the 30 days the policy commits to. Move it to a
+role-based address (not a personal one) before volume makes that unworkable.
 
-Also confirm `POLICY_META.jurisdiction` — currently `India`, which was assumed
-from context, not verified. It sets governing law and the transfer language in
-section 10.
+Also confirm `POLICY_META.jurisdiction` — currently `India`, which sets the
+governing law in section 17 and the transfer language in section 10.
 
 ## 3. Record consent server-side — BLOCKING
 
@@ -50,21 +49,53 @@ The fix: two columns on `settingsTable` (`policy_version`,
 pressed, with the local copy kept only to avoid a round trip on page load. A
 schema migration plus one route.
 
-## 4. Make deletion real, or keep the manual promise
+## 4. Deletion is built — but the account-deletion button is not
 
-**Where:** `artifacts/api-server/src/routes/attachments.ts` (no DELETE route),
-`artifacts/api-server/src/routes/chats.ts` (`DELETE /chats/:id` removes the chat
-and its goals, but leaves the permanent message log and attachment rows/files).
+**Done:** `artifacts/api-server/src/lib/dataDeletion.ts` now backs section 7 for
+real. `DELETE /chats/:id` cascades to the message log, attachment rows, the
+files on disk *and* their extracted-text sidecars, goals, roadmaps, decision
+cards and feedback. `DELETE /account` removes everything across all fifteen
+user-scoped tables and then deletes the Clerk account.
+`src/lib/dataDeletion.test.mjs` reads the schema directory and fails if a
+user-scoped or chat-scoped table is ever added without being wired into the
+cascade — which is what stops section 7 from quietly becoming false again.
 
-Section 7 of the policy is honest about this — it says uploads and the message
-log are not yet deletable in-app and that you will delete them on request within
-30 days. That is a promise a human has to keep, by hand, for every request, and
-there is currently no tooling to do it with.
+**Still open:** there is no UI for account deletion. The endpoint exists and is
+authenticated to the caller's own account, but nothing in Settings calls it, so
+today a deletion request means someone invoking the endpoint on the user's
+behalf. An irreversible destructive control deserves its own design pass
+(confirmation, typed confirmation, what the user is shown afterwards), which is
+why it was not bolted on.
 
-Either build the deletion path, or make sure someone is actually able to honour
-the manual one before a request arrives.
+Also unverified: whether the 30-day backup window in section 7 matches what the
+hosting provider actually does. The policy states 30 days. Confirm it.
 
-## 5. Re-read the policy against the product
+## 5. Get a lawyer to read sections 16, 17 and 18 — BLOCKING
+
+These are the warranty disclaimer, the liability limit and the indemnity. They
+are drafted to be as protective as honest drafting allows, and they include the
+things that make such clauses survive rather than get struck out wholesale: an
+express carve-out for what cannot be excluded (death or personal injury by
+negligence, fraud, gross negligence, non-waivable consumer rights) and a
+severability clause that narrows an over-broad term instead of voiding the
+section.
+
+What no drafting can do is make you unsuable. Anyone can file a claim; these
+clauses limit what succeeds and what it costs. Two specifics worth a
+professional eye:
+
+- **The liability cap** is "greater of fees paid in the last 12 months or
+  US$100". For a paid B2B product that is defensible. Check it against Indian
+  consumer law and against any jurisdiction you sell into.
+- **Mandatory training** (section 4) with no opt-out needs a lawful basis under
+  the GDPR that is *not* consent — legitimate interests or contractual
+  necessity — because consent must be freely given and revocable, and this is
+  neither. The policy is worded to say honouring an objection means closing the
+  account. A DPIA is likely required. This is the single most likely thing to
+  attract a regulator's attention, and it is a deliberate product decision, so
+  it should be a documented one.
+
+## 6. Re-read the policy against the product
 
 The policy was written against what the code did on 2026-08-15. Specifically
 checked and true as of then:
@@ -82,7 +113,7 @@ checked and true as of then:
 If you change what data goes where, the policy is now a document that can be
 wrong. Treat a mismatch as a bug in one or the other, as section 12 says.
 
-## 6. Do not restore the testimonials
+## 7. Do not restore the testimonials
 
 **Where:** `artifacts/vera-nexus/src/pages/landing/Sections.tsx`, section 8.
 
@@ -96,15 +127,44 @@ The monthly-review mockup still uses the invented "Northwind Labs" and is
 labelled "sample company" / "Example — not a customer's data". Keep the label if
 you edit that section.
 
-## 7. Still unaddressed from the original risk list
+## 8. Still unaddressed from the original risk list
 
-The list this work came from had ten items. The policy and the consent gate
-cover most of them. These two are untouched:
+The list this work came from had ten items. The policy, the terms and the consent
+gate cover most of them. These two are untouched:
 
 - **Subscription and cancellation flow** — cancelling must not be harder than
   signing up, and auto-renewal needs advance notice. There is a
   `/enterprise/plan` and `/enterprise/checkout` in the funnel; neither was
-  reviewed for this.
+  reviewed for this, and neither is mentioned in the policy because there is no
+  billing behaviour to describe yet. When there is, it needs its own section.
 - **Self-harm and crisis responses** — Vera has no defined behaviour for a user
-  in distress. Section 15 of the terms says Vera is not a substitute for a
-  qualified human, which is a disclaimer, not a safety response.
+  in distress. Section 16 of the terms now says explicitly that Vera is not
+  medical, psychological or safety advice and must not be relied on for anything
+  affecting someone's health or safety. That is a disclaimer, not a safety
+  response. A model that responds to a founder in crisis with a growth tactic is
+  a product problem a disclaimer does not solve.
+
+---
+
+# What is deliberately NOT claimed anywhere
+
+Recorded so nobody "helpfully" strengthens these later. Each one was considered
+and rejected because it would be false, and a false reassurance is the thing
+that turns a complaint into a claim.
+
+- **Not** "your data is never used for training" — it is, and that line was
+  removed from the landing page for contradicting the policy.
+- **Not** "we will never sell your data under any circumstances, ever" — section
+  6 commits to not selling and does not reserve a right to start, but section 12
+  governs any future change with advance notice rather than pretending the
+  document can bind the company forever in silence.
+- **Not** "your data is completely secure" or "cannot be breached" — section 8
+  describes real measures and explicitly refuses to promise absolute security,
+  because that promise becomes a misrepresentation the day it fails.
+- **Not** "Vera's recommendations are accurate/reliable/verified" — section 16
+  disclaims accuracy, including for the marketing phrase "the cause behind every
+  decision", which is also disclaimed in the landing page footer where the claim
+  is actually made.
+- **Not** "deleted immediately and everywhere" — deletion is immediate in the
+  live systems, and section 7 admits the 30-day backup window and the fact that
+  content already absorbed into a trained model cannot be extracted back out.

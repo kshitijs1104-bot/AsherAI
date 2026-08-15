@@ -11,6 +11,7 @@
    pick inside the product once.
 --------------------------------------------------------------------------- */
 
+import { useEffect } from 'react';
 import { Link } from 'wouter';
 import { ArrowLeft } from 'lucide-react';
 import { VeraMark } from '../../components/VeraMark';
@@ -23,6 +24,25 @@ import {
 import '../landing/landing.css';
 
 export function PrivacyPolicyPage() {
+  // The landing footer links to /privacy#no-advice and /privacy#liability so a
+  // visitor can go straight to the accuracy and liability terms. Those are
+  // client-side navigations: wouter pushes the path and the browser does NOT
+  // perform its own hash scroll, because there was never a document load to
+  // scroll after. Without this the deep links land at the top of a very long
+  // page and the disclaimer they were meant to reach is thousands of pixels
+  // away, which makes the footer's promise to show you the terms hollow.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    // Deferred a frame: the sections below have not been laid out at the time
+    // this effect first runs, so measuring immediately scrolls to the wrong
+    // offset (usually 0).
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ block: 'start' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   return (
     <div className="lp">
       <div className="lp-grain" />

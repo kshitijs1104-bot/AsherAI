@@ -10,6 +10,7 @@ import {
 import { requireAuth, requireUserId } from "../middlewares/auth";
 import { evidenceScoreToPosition, assessGoalRisk } from "../lib/goalEvidence";
 import { getRecentMessages } from "../lib/messageLog";
+import { deleteChatData } from "../lib/dataDeletion";
 
 const router = Router();
 
@@ -147,9 +148,18 @@ router.delete("/chats/:id", requireAuth, async (req, res) => {
       .limit(1);
     if (!owned) return res.status(404).json({ error: "Chat not found" });
 
-    await db.delete(goalsTable).where(eq(goalsTable.chatId, id));
+    // Used to be two statements: delete the goal, delete the chat. That left
+    // the permanent message log, every attachment row, every uploaded FILE on
+    // disk plus its cached extraction, the roadmap, the decision cards and the
+    // feedback rows — so "delete chat" removed the chat from the list and kept
+    // the conversation. Section 7 of the privacy policy now tells founders that
+    // deleting a chat deletes its transcript, its files and what Vera derived
+    // from them, so it has to actually do that. See lib/dataDeletion.ts.
+    const report = await deleteChatData(userId, id);
     await db.delete(chatsTable).where(eq(chatsTable.id, id));
-    return res.json({ deleted: true });
+
+    req.log.info({ chatId: id, ...report }, "Deleted a chat and everything derived from it");
+    return res.json({ deleted: true, removed: report });
   } catch (err) {
     req.log.error(err);
     return res.status(500).json({ error: "Failed to delete chat" });
