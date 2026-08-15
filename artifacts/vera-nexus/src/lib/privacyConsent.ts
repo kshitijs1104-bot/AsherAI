@@ -19,7 +19,13 @@ import { useSyncExternalStore } from 'react';
 // match the cascade in the API, and the warranty/liability sections were added.
 // Every one of those changes the meaning of what someone agreed to, so the
 // earlier acceptance no longer covers it and everyone is asked again.
-export const PRIVACY_POLICY_VERSION = '2026-08-15-r2';
+//
+// Bumped again, -r2 to -r3: section 17 no longer states a fixed liability cap
+// (previously "greater of 12 months' fees or US$100"). It now disclaims
+// liability generally and leaves the existence and amount of any liability, if
+// one is ever found, to a court applying the governing law — a materially
+// different term from a pre-agreed number, so it re-prompts too.
+export const PRIVACY_POLICY_VERSION = '2026-08-15-r3';
 
 const KEY = 've_privacy_consent';
 

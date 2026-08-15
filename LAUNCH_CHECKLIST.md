@@ -84,9 +84,17 @@ What no drafting can do is make you unsuable. Anyone can file a claim; these
 clauses limit what succeeds and what it costs. Two specifics worth a
 professional eye:
 
-- **The liability cap** is "greater of fees paid in the last 12 months or
-  US$100". For a paid B2B product that is defensible. Check it against Indian
-  consumer law and against any jurisdiction you sell into.
+- **Section 17 states no fixed liability cap.** An earlier draft capped total
+  liability at "greater of 12 months' fees or US$100"; on the user's
+  instruction that was removed, on the basis that a court should set the
+  figure if it ever comes to that rather than the document pre-naming one.
+  What remains is the general disclaimer plus the categorical exclusions
+  (indirect/consequential damages, third-party acts, etc.). Worth knowing:
+  this is not obviously *more* protective — a stated cap is a hard ceiling a
+  court usually respects if reasonable, while "no cap, decided case by case"
+  leaves the tail risk on direct damages technically open-ended, bounded only
+  by the exclusions above it. Have the lawyer weigh in on whether to reinstate
+  a cap once real usage numbers make picking one less arbitrary.
 - **Mandatory training** (section 4) with no opt-out needs a lawful basis under
   the GDPR that is *not* consent — legitimate interests or contractual
   necessity — because consent must be freely given and revocable, and this is
