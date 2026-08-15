@@ -60,12 +60,23 @@ user-scoped tables and then deletes the Clerk account.
 user-scoped or chat-scoped table is ever added without being wired into the
 cascade — which is what stops section 7 from quietly becoming false again.
 
-**Still open:** there is no UI for account deletion. The endpoint exists and is
-authenticated to the caller's own account, but nothing in Settings calls it, so
-today a deletion request means someone invoking the endpoint on the user's
-behalf. An irreversible destructive control deserves its own design pass
-(confirmation, typed confirmation, what the user is shown afterwards), which is
-why it was not bolted on.
+**UI built:** the General tab of VeraSettingsModal (`pages/GeneralSettings.tsx`,
+reachable from the Settings button in the sidebar) has a "Delete account"
+control. It requires typing "DELETE" (case-sensitive) before the confirm
+button enables, shows what gets deleted before you commit, surfaces the
+server's error message inline if deletion partially fails (data gone, Clerk
+account still open — see account.ts's belt-and-braces branch), and signs the
+browser out and redirects to `/` on success. Not yet tested against a real
+database — `useDeleteAccount` in `venusApi.ts` and the confirmation flow were
+verified in the browser against a stubbed/unreachable backend (the error path
+renders correctly; the success path was not exercised end-to-end).
+
+Note for later: the standalone `/settings` page (`pages/Settings.tsx`) is
+**not linked from anywhere live** — its only linker was the archived Topbar.
+A "Privacy & Terms" link was mistakenly added there first and a live user
+could not find it. It has a comment now saying so; do not add anything there
+expecting a founder to see it without also linking the page from somewhere
+real.
 
 Also unverified: whether the 30-day backup window in section 7 matches what the
 hosting provider actually does. The policy states 30 days. Confirm it.

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Plug, Palette, X } from 'lucide-react';
+import { Plug, Palette, SlidersHorizontal, X } from 'lucide-react';
 import { ConnectorPicker } from './ConnectorPicker';
 import { SkinChoiceList } from './SkinPicker';
+import { GeneralSettings } from './GeneralSettings';
 import type { VenusTheme } from '../lib/venusTheme';
 
-type Tab = 'connectors' | 'appearance';
+type Tab = 'general' | 'connectors' | 'appearance';
 
 /**
  * Vera's sidebar Settings button used to expand an inline panel at the
@@ -17,7 +18,13 @@ type Tab = 'connectors' | 'appearance';
  * A centered popup sidesteps that entirely: it isn't laid out inside the
  * sidebar's column at all, and its own body scrolls independently of
  * anything else on screen, so it can never be pushed off-frame by how much
- * content either tab holds.
+ * content any tab holds.
+ *
+ * This is THE settings surface reachable from inside the product — the
+ * standalone /settings route (pages/Settings.tsx) is not linked from
+ * anywhere in the live router and is only reachable by typing the URL, so
+ * anything a signed-in founder needs to find (the Privacy Policy, account
+ * deletion) belongs here, in the General tab, not there.
  */
 export function VeraSettingsModal({
   open,
@@ -127,6 +134,7 @@ export function VeraSettingsModal({
         >
           {(
             [
+              { id: 'general' as const, label: 'General', icon: SlidersHorizontal },
               { id: 'connectors' as const, label: 'Connectors', icon: Plug },
               { id: 'appearance' as const, label: 'Appearance', icon: Palette },
             ]
@@ -164,16 +172,12 @@ export function VeraSettingsModal({
           })}
         </div>
 
-        {/* The one part of this dialog that scrolls. Whatever either tab
+        {/* The one part of this dialog that scrolls. Whatever any tab
             holds — more connectors added later, a fourth skin — stays
             reachable by scrolling the popup, never by scrolling or zooming
             the page behind it. */}
         <div style={{ overflowY: 'auto', padding: '0 20px 20px' }}>
-          {tab === 'connectors' ? (
-            <ConnectorPicker />
-          ) : (
-            <SkinChoiceList />
-          )}
+          {tab === 'general' ? <GeneralSettings /> : tab === 'connectors' ? <ConnectorPicker /> : <SkinChoiceList />}
         </div>
       </div>
     </div>

@@ -599,3 +599,22 @@ export function useUploadAttachment() {
     },
   });
 }
+
+// ---- Account ----
+
+export interface DeleteAccountResult {
+  dataDeleted: boolean;
+  accountClosed: boolean;
+}
+
+// Backs the "Delete account" control in the General tab of VeraSettingsModal.
+// Mirrors api-server/src/routes/account.ts's own two-outcome shape rather than
+// collapsing it to a boolean: dataDeleted can be true while accountClosed is
+// false (Clerk deletion failed after the data was already gone — see that
+// route's comment on why data is deleted before the account), and the caller
+// needs to tell those two apart to show the right message.
+export function useDeleteAccount() {
+  return useMutation({
+    mutationFn: () => apiFetch<DeleteAccountResult>('/api/account', { method: 'DELETE' }),
+  });
+}

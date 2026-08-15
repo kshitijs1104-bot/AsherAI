@@ -13,6 +13,17 @@ import { useCompanyFacts } from '../lib/venusApi';
 // This page used to render inside the Nexus <Layout>. That chrome is archived
 // (src/_archive) and this page is not: everything on it is Vera's. It now
 // renders standalone, so it carries its own way back.
+//
+// NOT LINKED FROM ANYWHERE LIVE. The /settings route this page renders at is
+// only reachable by typing the URL — the one thing that used to link to it
+// (Topbar.tsx) is itself archived. Confirmed the hard way: the "Privacy &
+// Terms" section below was added here first, and a founder using the actual
+// product could not find it, because nothing in the live UI points here.
+// THE settings surface reachable from inside Vera is VeraSettingsModal
+// (opened from the sidebar's Settings button in Venus.tsx) — its General tab
+// (pages/GeneralSettings.tsx) is where the Privacy Policy link and account
+// deletion actually live now. What's below is kept working in case this page
+// gets wired back in, but it is not where anyone finds these today.
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
