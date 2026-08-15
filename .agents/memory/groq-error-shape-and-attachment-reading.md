@@ -53,8 +53,53 @@ field. `/ai/analyze` passes `"summary"`.
   `company_facts` with `sourceType: "document"`, which every later prompt
   reads back through `getActiveCompanyFacts`.
 
-**The vision model id is resolved at runtime** from `groq.models.list()`
-(override with `GROQ_VISION_MODEL`), never hardcoded — see
-`groq-scout-deprecation-2026-07.md` for why a pinned id is a time bomb in this
-codebase specifically. If no vision model is available the code degrades to
-the honest "I can't read that" branch, never to a guess.
+## You cannot infer vision support from a model name
+
+Groq's current vision model is **`qwen/qwen3.6-27b`** (verified against
+console.groq.com/docs/vision, 2026-08-15). The llama-4 models are gone.
+
+The first version of `visionExtract.ts` resolved the model by matching
+`/vision|llama-4|vl|omni/` against the account's model list — which matches
+`qwen/qwen3.6-27b` **not at all**, so it shipped, every image resolved to "no
+vision model available", and the symptom was indistinguishable from the
+feature never having been built. `/models` returns only
+`{ id, created, object, owned_by }` — there is **no capability field** — so a
+maintained `KNOWN_VISION_MODELS` list is the only thing that can be correct.
+Name-matching survives only as a logged last-resort guess.
+
+Qwen is a thinking model: pass `reasoning_effort: "none"` (Groq's documented
+off switch) or it burns the token budget reasoning about a transcription task
+and returns nothing, which looks exactly like an unreadable image.
+
+## The free tier cannot fit a document and the strategy prompt
+
+Measured, not estimated:
+
+| | tokens |
+|---|---|
+| Free-tier TPM ceiling (both models) | 8,000 (200K/day) |
+| Usable after the 0.85 safety margin | 6,800 |
+| `buildVenusPrompt({mode:"strategy"})` | **5,849** |
+| `buildVenusPrompt({mode:"document"})` (core+cards) | ~1,750 |
+
+So a document-bearing request in strategy mode has **negative** room for the
+document. The original fixed 4,000/8,000-char attachment budget put those
+requests ~8,700 tokens against an 8,000 ceiling: over on attempt 1, still over
+after `createWithRetry`'s shrink passes (which protect the static prompt), and
+out the other side as the generic "Vera couldn't answer that right now". The
+constants were harmless *before* files were genuinely readable, because the
+budget was never actually spent — making reading work is what turned a latent
+overspend into a live one.
+
+Two mechanisms now prevent it, both in `ai.ts`:
+- `fileBudgetFor()` sizes the attachment block from the **measured** remaining
+  headroom (`buildAttachmentBlock` takes a `charBudget`), so the ceiling can't
+  be blown. Under the floor it says "read it, no room to include it" —
+  a different, honest message from "couldn't read it".
+- When the file won't fit at all, the prompt drops to `mode: "document"`
+  (core+cards) and the freed ~4,100 tokens go to the file: ~5,600 characters
+  fit on the free tier. **This never fires once `GROQ_PAID_TIER=true`** —
+  the paid tier has room for both, with no code change.
+
+**If attachments regress, read `[attachmentBudget]` and `[promptMode]` in the
+server logs first** — they print the file budget, the chosen mode and the tier.

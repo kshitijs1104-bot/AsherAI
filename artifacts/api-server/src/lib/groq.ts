@@ -136,7 +136,18 @@ const VENUS_SYSTEM_PROMPT = VENUS_PROMPT_SECTIONS.map((s) => s.text).join("\n\n"
 export const VENUS_PROMPT_END_MARKER = VENUS_PROMPT_SECTIONS[VENUS_PROMPT_SECTIONS.length - 1].text;
 
 /** Which apparatus this request actually needs. Defaults to the full stack. */
-export type VenusResponseMode = "strategy" | "drafting" | "capability" | "open_ended";
+//
+// "document" is not chosen by the classifier — it is chosen by the BUDGET.
+// See ai.ts's attachmentCharBudget: on Groq's free tier (8,000 TPM, ~6,800
+// usable) the strategy stack alone is ~5,849 tokens, so a request carrying a
+// real document has literally zero room for the document. The founder's own
+// P&L is better evidence than the reasoning scaffold used to interrogate it,
+// so when the two cannot both fit, the file wins and the scaffold drops to
+// core+cards (~1,750 tokens, leaving ~9,500 characters for the file).
+//
+// This is a free-tier compromise, not a preference: once GROQ_PAID_TIER is
+// true there is room for both and ai.ts never selects this mode.
+export type VenusResponseMode = "strategy" | "drafting" | "capability" | "open_ended" | "document";
 
 export interface VenusPromptOptions {
   mode?: VenusResponseMode;
@@ -155,6 +166,11 @@ export interface VenusPromptOptions {
 export function buildVenusPrompt(options: VenusPromptOptions = {}): string {
   const { mode = "strategy", includeDrafting = false, hasOwnHistory = false, hasOpenSession = false } = options;
 
+  // "document" deliberately adds nothing beyond core (+ cards below): it is
+  // the mode that exists to be small, so that the founder's actual file fits
+  // in the prompt at all. Everything it needs to answer well — what the file
+  // says, and how to use it — is in the attachment block itself, which is
+  // real evidence rather than instructions about how to reason without any.
   const wanted = new Set<VenusPromptTag>(["core"]);
   if (mode === "strategy") wanted.add("strategy");
   if (mode === "drafting" || includeDrafting) wanted.add("drafting");

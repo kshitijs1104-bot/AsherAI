@@ -3,7 +3,7 @@ import { db, settingsTable, venusDecisionsTable, goalsTable, type VenusDecision,
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { VenusAnalyzeBody, IdeaReviewBody } from "@workspace/api-zod";
-import { getGroqClient, VENUS_PROMPT, buildVenusPrompt, buildFallbackVenusResponse, buildTransientErrorResponse, callGroqJSON, isContentPolicyRefusal, isQuotaExhaustedError, quotaRetryAfterMs, MODERATE_TIER_PRECEDENT_NOTE, EXTRACTED_FACTS_INSTRUCTION, EVIDENCE_CONVERGENCE_INSTRUCTION, sanitizeVenusResponse, estimateTokens, tpmLimitForModel, TPM_SAFETY_MARGIN, MIN_USABLE_MAX_TOKENS, buildGroundingInstructions } from "../lib/groq";
+import { getGroqClient, VENUS_PROMPT, buildVenusPrompt, type VenusResponseMode, buildFallbackVenusResponse, buildTransientErrorResponse, callGroqJSON, isContentPolicyRefusal, isQuotaExhaustedError, quotaRetryAfterMs, MODERATE_TIER_PRECEDENT_NOTE, EXTRACTED_FACTS_INSTRUCTION, EVIDENCE_CONVERGENCE_INSTRUCTION, sanitizeVenusResponse, estimateTokens, tpmLimitForModel, TPM_SAFETY_MARGIN, MIN_USABLE_MAX_TOKENS, buildGroundingInstructions } from "../lib/groq";
 import { retrievePrecedents, formatPrecedentsForPrompt, retrieveOwnResolvedDecisions, formatOwnDecisionsForPrompt, retrieveOpenSessionDecisions, formatOpenSessionDecisionsForPrompt, type RetrievalResult } from "../lib/retrieval";
 import { computeConfidence } from "../lib/confidence";
 import { detectFactConflicts, type ExtractedFact } from "../lib/factConflicts";
@@ -19,7 +19,7 @@ import { materializeRoadmapFromCard } from "../lib/roadmap";
 import { addCompanyFact, getActiveCompanyFacts, getActivePreferenceFacts, formatCompanyFactsForPrompt, formatPreferenceFactsForPrompt, findPotentialContradiction, supersedeFact, mergeContextBlob } from "../lib/companyMemory";
 import { getOrCreateActiveProfile, findMatchingProfile, createProfile, setActiveProfile, updateProfileContext } from "../lib/businessProfiles";
 import { logMessage, getRelevantMessages, getRecentMessages } from "../lib/messageLog";
-import { buildAttachmentBlock } from "../lib/attachmentContext";
+import { buildAttachmentBlock, parseAttachmentMarkers } from "../lib/attachmentContext";
 import { getDossier, formatDossierForPrompt } from "../lib/dossier";
 import {
   looksLikeCorrection,
@@ -34,6 +34,13 @@ import { looksLikeReplyToPriorTurn, buildCorrectionInstruction, type ReplyDetect
 import { recordCorrection, getRecentCorrections, formatCorrectionsForPrompt } from "../lib/responseFeedback";
 
 const router = Router();
+
+// The model every Venus reasoning call in this file runs on. Was four
+// separate string literals, which is precisely the drift hazard this repo
+// has already been bitten by twice (see groq.ts's migration comments) — and
+// one of those literals fed tpmLimitForModel, so a partial rename would have
+// silently budgeted against a model the request wasn't using.
+const ANALYZE_MODEL = "openai/gpt-oss-120b";
 
 // Shared by every route's outer catch block: classifies a caught Groq
 // error into the "kind"/"retryAfterMs" pair buildTransientErrorResponse
@@ -1679,13 +1686,11 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
 
     const memoryBlock =`${companyFactsBlock ? `\n\n${companyFactsBlock}` : ""}${preferenceFactsBlock ? `\n\n${preferenceFactsBlock}` : ""}${correctionHistoryBlock ? `\n\n${correctionHistoryBlock}` : ""}${goalHistoryBlock ? `\n\n${goalHistoryBlock}` : ""}`;
 
-    // Attached files. NEVER gated by isNarrowScope, and deliberately placed
-    // at the front of the dynamic tail below rather than in memoryBlock: if
-    // this is ever dropped by a shrink retry, the model is back to seeing a
-    // bare "[Attached file: x.png]" marker with nothing telling it the file
-    // is unreadable — which is precisely the state that produced confident
-    // analysis of never-opened files. See lib/attachmentContext.ts.
-    const attachmentBlock = await buildAttachmentBlock(sessionId, body.data.chatId, body.data.message);
+    // Whether this turn carries files at all — cheap, synchronous, and needed
+    // BEFORE the web search decision below. The block itself is built much
+    // further down, once the prompt's real size is known (see
+    // attachmentCharBudget).
+    const hasAttachment = parseAttachmentMarkers(body.data.message).length > 0;
 
     const isModerate = retrieval.tier === "moderate";
     const isNone = retrieval.tier === "none";
@@ -1735,7 +1740,13 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // facts. Precedents are startup case studies; they can never be the
     // source for "what real schools exist in Mumbai", so a precedent match is
     // irrelevant to whether a factual question needs grounding.
-    const webResult = (isFactualExternal || (isNone && !isNarrowScope))
+    // Skipped outright when the founder attached a file. The evidence for
+    // "what does my P&L say" is the P&L, not DuckDuckGo — and on the free
+    // tier the search block is hundreds of tokens taken directly out of the
+    // room the document needs (see attachmentCharBudget below). This is the
+    // one case where suppressing the search costs nothing in grounding:
+    // there is a better, first-party source already in the prompt.
+    const webResult = (!hasAttachment && (isFactualExternal || (isNone && !isNarrowScope)))
       ? await webSearch(body.data.message)
       : null;
     const webSearchBlock = webResult ? formatWebSearchForPrompt(webResult) : "";
@@ -1838,20 +1849,118 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     const looksLikeDrafting =
       /\b(draft|rewrite|caption|script|tweet|newsletter|blurb|talking points)\b/i.test(body.data.message) ||
       /\bwrite\s+(me|a|an|up|the)\b/i.test(body.data.message);
-    const responseMode = classification.responseMode;
-    const venusPromptBase = buildVenusPrompt({
-      mode: responseMode,
-      includeDrafting: looksLikeDrafting,
-      // A rule explaining how to read a block is dead weight when the block
-      // itself isn't in the prompt — and these two are absent far more often
-      // than they're present.
-      hasOwnHistory: Boolean(ownHistoryBlock),
-      hasOpenSession: Boolean(openSessionBlock),
-    });
+    const buildPromptFor = (mode: VenusResponseMode) =>
+      buildVenusPrompt({
+        mode,
+        includeDrafting: looksLikeDrafting,
+        // A rule explaining how to read a block is dead weight when the block
+        // itself isn't in the prompt — and these two are absent far more often
+        // than they're present.
+        hasOwnHistory: Boolean(ownHistoryBlock),
+        hasOpenSession: Boolean(openSessionBlock),
+      });
+
+    // Typed as the PROMPT's mode union, not the classifier's — "document" is
+    // a budget decision made below, and is deliberately not something the
+    // classifier can choose.
+    let responseMode: VenusResponseMode = classification.responseMode;
+    let venusPromptBase = buildPromptFor(responseMode);
+    let venusPromptForTier = (isModerate ? `${venusPromptBase}${MODERATE_TIER_PRECEDENT_NOTE}` : venusPromptBase) + correctionInstruction;
+
+    // ---- How much room this request actually has for file contents ----
+    //
+    // Built HERE, not up with the other context blocks, because this is the
+    // first point where the prompt's real size is known. A fixed 8,000-char
+    // attachment budget (what this used to be) is ~2,000 tokens on a free
+    // tier whose entire usable budget is 6,800 and whose strategy prompt
+    // alone is ~5,849 — so every request carrying a readable document went
+    // over the ceiling, exhausted createWithRetry's shrink passes and came
+    // back as the generic "Vera couldn't answer that right now". Measuring
+    // instead of guessing is the difference between a thin answer and no
+    // answer.
+    //
+    // Everything countable at this point is counted. The blocks assembled
+    // after this (grounding guard, follow-up/routing/no-precedent
+    // instructions) are covered by a flat reserve rather than being moved
+    // around, and MIN_USABLE_MAX_TOKENS reserves room for the ANSWER — the
+    // thing most easily forgotten, since Groq charges TPM on prompt plus the
+    // requested completion.
+    const LATE_INSTRUCTION_RESERVE_TOKENS = 700;
+    const historyTokenEstimate = (effectiveSessionHistory ?? [])
+      .slice(-(isNarrowScope ? 2 : 10))
+      .reduce((sum: number, h: { content?: string }) => sum + estimateTokens(h.content ?? ""), 0);
+    const tpmBudgetTokens = Math.floor(tpmLimitForModel(ANALYZE_MODEL) * TPM_SAFETY_MARGIN);
+    const fileBudgetFor = (promptText: string) =>
+      tpmBudgetTokens -
+      (estimateTokens(promptText) +
+        estimateTokens(webSearchBlock) +
+        estimateTokens(isNone ? "" : precedentBlock) +
+        estimateTokens(dossierBlock) +
+        estimateTokens(effectiveBusinessContext ?? "") +
+        estimateTokens(ownHistoryBlock) +
+        estimateTokens(openSessionBlock) +
+        estimateTokens(goalBlock) +
+        estimateTokens(memoryBlock) +
+        estimateTokens(shadowModeInstructions) +
+        estimateTokens(body.data.message) +
+        historyTokenEstimate) -
+      LATE_INSTRUCTION_RESERVE_TOKENS -
+      MIN_USABLE_MAX_TOKENS;
+
+    let attachmentTokenBudget = fileBudgetFor(venusPromptForTier);
+
+    // ---- When the file and the reasoning stack can't both fit, the file wins
+    //
+    // On the free tier this is not a close call: strategy mode is ~5,849
+    // tokens of a ~6,800-token budget, so a document-bearing request has
+    // NEGATIVE room for the document. The old behaviour was to send it
+    // anyway, blow the ceiling, exhaust the shrink retries and return "Vera
+    // couldn't answer that right now" — the founder lost both the reasoning
+    // AND the file.
+    //
+    // Reading the founder's actual P&L is worth more than the scaffold used
+    // to interrogate a P&L you cannot see, so below the threshold the prompt
+    // drops to core+cards and the freed ~4,100 tokens go to the file. Applies
+    // ONLY to turns that carry a file, and only when the budget forces it —
+    // on the paid tier there is room for both and this never fires, with no
+    // code change needed.
+    const MIN_WORTHWHILE_FILE_TOKENS = 500;
+    if (hasAttachment && attachmentTokenBudget < MIN_WORTHWHILE_FILE_TOKENS && responseMode !== "drafting") {
+      const documentPrompt = buildPromptFor("document");
+      const documentModeBudget = fileBudgetFor(documentPrompt);
+      // Only swap if it actually buys enough room to be worth the trade —
+      // giving up the reasoning stack and STILL not fitting the file would be
+      // the worst of both.
+      if (documentModeBudget >= MIN_WORTHWHILE_FILE_TOKENS) {
+        console.error(
+          `[promptMode] session=${sessionId} switching ${responseMode} -> document: file budget ${attachmentTokenBudget}t -> ${documentModeBudget}t (free-tier TPM; set GROQ_PAID_TIER=true to keep the full stack)`,
+        );
+        responseMode = "document";
+        venusPromptBase = documentPrompt;
+        venusPromptForTier = (isModerate ? `${venusPromptBase}${MODERATE_TIER_PRECEDENT_NOTE}` : venusPromptBase) + correctionInstruction;
+        attachmentTokenBudget = documentModeBudget;
+      }
+    }
+
     console.error(
       `[promptMode] session=${sessionId} mode=${responseMode} drafting=${looksLikeDrafting} classifierFailed=${classification.failed} promptTokens~${estimateTokens(venusPromptBase)}`,
     );
-    const venusPromptForTier = (isModerate ? `${venusPromptBase}${MODERATE_TIER_PRECEDENT_NOTE}` : venusPromptBase) + correctionInstruction;
+    const attachmentCharBudget = Math.max(0, attachmentTokenBudget * 4);
+
+    // Attached files. NEVER gated by isNarrowScope, and deliberately placed
+    // at the front of the dynamic tail below rather than in memoryBlock: if
+    // this is ever dropped by a shrink retry, the model is back to seeing a
+    // bare "[Attached file: x.png]" marker with nothing telling it the file
+    // is unreadable — which is precisely the state that produced confident
+    // analysis of never-opened files. See lib/attachmentContext.ts.
+    const attachmentBlock = hasAttachment
+      ? await buildAttachmentBlock(sessionId, body.data.chatId, body.data.message, attachmentCharBudget)
+      : "";
+    if (hasAttachment) {
+      console.error(
+        `[attachmentBudget] session=${sessionId} fileBudget=${attachmentCharBudget}chars (~${attachmentTokenBudget}t) mode=${responseMode} paidTier=${process.env.GROQ_PAID_TIER === "true"}`,
+      );
+    }
     // REMOVED: historyContext, which rendered the last 8 turns as a text blob
     // inside the system prompt. The SAME turns are already sent as real,
     // role-tagged chat messages further down (see messageHistoryTurnCount's
@@ -2000,7 +2109,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // clamping/retrying becomes the rare exception again instead of the
     // normal path on every broad query.
     const estimatedPromptTokens = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-    const tpmBudget = Math.floor(tpmLimitForModel("openai/gpt-oss-120b") * TPM_SAFETY_MARGIN);
+    const tpmBudget = Math.floor(tpmLimitForModel(ANALYZE_MODEL) * TPM_SAFETY_MARGIN);
     const realisticCeiling = Math.max(MIN_USABLE_MAX_TOKENS, tpmBudget - estimatedPromptTokens);
     // Still respect the narrow/broad intent — a narrow follow-up genuinely
     // doesn't need a huge response even when the budget could technically
@@ -2051,7 +2160,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       // callGroqJSON's reasoning_effort default). Narrow queries request
       // less (see requestedMaxTokens above) since they don't need it.
       {
-        model: "openai/gpt-oss-120b",
+        model: ANALYZE_MODEL,
         messages,
         temperature: 0.4,
         max_tokens: requestedMaxTokens,
@@ -2229,7 +2338,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           ];
           const revision = await callGroqJSON(
             groq,
-            { model: "openai/gpt-oss-120b", messages: revisionMessages, temperature: 0.4, max_tokens: requestedMaxTokens },
+            { model: ANALYZE_MODEL, messages: revisionMessages, temperature: 0.4, max_tokens: requestedMaxTokens },
             `ai/analyze (length-constraint revision ${attempt})`,
           );
           if (!revision.parsed) break; // couldn't get a usable revision — ship the best attempt so far, flagged below
@@ -2465,7 +2574,7 @@ router.post("/ai/decisions/:id/outcome", requireAuth, async (req, res) => {
       const { parsed } = await callGroqJSON(
         groq,
         {
-          model: "openai/gpt-oss-120b",
+          model: ANALYZE_MODEL,
           messages: [
             {
               role: "system",

@@ -41,12 +41,16 @@ export interface VisionResult {
   model?: string;
 }
 
-// Groq accepts base64 images up to 4MB. Uploads are capped at 10MB (see
-// routes/attachments.ts), so a large photo can legitimately land here and
-// must be refused with a sentence the founder can act on rather than a 400
-// from the provider. Base64 inflates by 4/3, so this is the pre-encode
-// ceiling with a little room for the data: URI prefix.
-const MAX_IMAGE_BYTES = 2_900_000;
+// Groq's documented ceiling is 20MB for a request carrying an image. Base64
+// inflates by 4/3, so 10MB of raw image encodes to ~13.4MB and still fits —
+// and 10MB is already the upload cap (see routes/attachments.ts), so in
+// practice nothing that reaches this function can exceed it. Kept as an
+// explicit guard anyway: if the upload cap is ever raised, the failure should
+// be a sentence the founder can act on, not a provider 400.
+//
+// (This was 2.9MB in the first version, from a half-remembered 4MB base64
+// limit — which would have refused ordinary phone photos outright.)
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 // Enough for a dense table or a full page of transcribed text; a transcript
 // longer than this is truncated by the char budget in attachmentContext
@@ -83,23 +87,38 @@ Rules:
  * Model resolution
  * ---------------------------------------------------------------------- */
 
-// Tried in this order when present on the account. Preference, not
-// requirement — anything absent is skipped rather than failing the call.
-const PREFERRED_VISION_MODELS = [
+// ---- YOU CANNOT INFER VISION SUPPORT FROM A MODEL NAME ----
+//
+// The first version of this file tried, matching /vision|llama-4|vl|omni/
+// against the account's model list. It shipped and every image still came
+// back unreadable, because Groq's CURRENT vision model is
+// `qwen/qwen3.6-27b` — a name containing no vision-ish token whatsoever.
+// The llama-4 models the pattern was written for are gone (same deprecation
+// wave documented in groq.ts). The `/models` endpoint returns only
+// { id, created, object, owned_by } — there is no capability field to read —
+// so an explicit, maintained list is the only thing that can be correct.
+//
+// Ordered by preference, filtered by what the account actually has. Verified
+// against console.groq.com/docs/vision on 2026-08-15.
+const KNOWN_VISION_MODELS = [
+  "qwen/qwen3.6-27b", // current documented Groq vision model: 131K context, JSON mode, image input
+  // Legacy, kept only so an account that still has them isn't left with
+  // nothing. Both were deprecated by Groq in 2026 (see
+  // .agents/memory/groq-scout-deprecation-2026-07.md).
   "meta-llama/llama-4-maverick-17b-128e-instruct",
   "meta-llama/llama-4-scout-17b-16e-instruct",
 ];
 
 // Models that are definitively NOT chat-with-images, matched before the
-// permissive patterns below so a speech or safety model can never be picked
+// last-resort pattern below so a speech or safety model can never be picked
 // as "vision-capable" on a name coincidence.
 const NEVER_VISION = /whisper|tts|guard|embed|moderation|rerank/i;
 
-// Name patterns for families that take image input. Broad on purpose: the
-// point of resolving at runtime is to survive models this file has never
-// heard of, and a wrong pick degrades to a failed call and the honest
-// unreadable branch, not to a fabricated answer.
-const VISION_NAME_HINTS = /vision|llama-4|[-_]vl\b|vl-|maverick|scout|omni/i;
+// LAST RESORT ONLY, for a future model this file hasn't been taught about
+// whose name does say "vision". Deliberately narrow now: the broad version
+// of this pattern is what created false confidence that name-matching works
+// at all. When this fires it is a guess, and it is logged as one.
+const VISION_NAME_HINTS = /vision|[-_]vl\b|vl-/i;
 
 export function isLikelyVisionModel(id: string): boolean {
   if (NEVER_VISION.test(id)) return false;
@@ -108,14 +127,39 @@ export function isLikelyVisionModel(id: string): boolean {
 
 /**
  * Picks a vision model from the ids an account actually has. Exported for
- * tests — the selection rule is the part most likely to silently rot as
- * Groq's catalog changes, so it's testable without a network call.
+ * tests — this is the part most likely to silently rot as Groq's catalog
+ * changes, and its failure mode (returning null, so every image is declared
+ * unreadable) looks exactly like "the feature was never built".
  */
 export function pickVisionModel(availableIds: string[]): string | null {
-  for (const preferred of PREFERRED_VISION_MODELS) {
-    if (availableIds.includes(preferred)) return preferred;
+  for (const known of KNOWN_VISION_MODELS) {
+    if (availableIds.includes(known)) return known;
   }
-  return availableIds.find(isLikelyVisionModel) ?? null;
+  const guess = availableIds.find(isLikelyVisionModel) ?? null;
+  if (guess) {
+    console.error(`[visionExtract] no KNOWN vision model on this account; guessing "${guess}" from its name — add it to KNOWN_VISION_MODELS if it works`);
+  }
+  return guess;
+}
+
+// Qwen is a thinking model. Left at its default it spends the token budget
+// reasoning about a transcription task that needs no reasoning, and the
+// visible content comes back short or empty — which would look identical to
+// "the image was unreadable" and send us straight back to the bug this file
+// exists to fix. Groq documents "none" as the way to switch thinking off,
+// and reasoning_effort is only accepted by models that support it (passing
+// it to one that doesn't is a hard 400 — the exact failure that broke every
+// /ai/analyze call after the 2026-07-10 migration), so this is gated on the
+// model family rather than sent blindly.
+function reasoningControlsFor(model: string): Record<string, unknown> {
+  return model.startsWith("qwen/") ? { reasoning_effort: "none", reasoning_format: "hidden" } : {};
+}
+
+// Belt and braces for the same failure: if a thinking model ever does emit
+// its reasoning inline (reasoning_format "raw"), the <think> block is not
+// part of the transcript and must never be stored as if it were file content.
+function stripThinking(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/^[\s\S]*?<\/think>/i, "").trim();
 }
 
 interface ModelCache {
@@ -197,6 +241,7 @@ export async function readImage(buf: Buffer, mimeType: string, fileName: string)
       model,
       temperature: 0,
       max_tokens: VISION_MAX_TOKENS,
+      ...reasoningControlsFor(model),
       messages: [
         {
           role: "user",
@@ -208,7 +253,7 @@ export async function readImage(buf: Buffer, mimeType: string, fileName: string)
       ],
     } as any);
 
-    const raw = String(completion?.choices?.[0]?.message?.content ?? "").trim();
+    const raw = stripThinking(String(completion?.choices?.[0]?.message?.content ?? ""));
     if (!raw || raw.includes(NOTHING_READABLE)) {
       return {
         kind: "text",

@@ -22,6 +22,26 @@ const { isJsonValidateFailedError, extractFailedGeneration, callGroqJSON } = awa
 
 /* ---- vision model resolution ---------------------------------------- */
 
+test('picks Groq\'s actual vision model, whose name says nothing about vision', () => {
+  // THE REGRESSION THIS LOCKS DOWN. The first version matched model names
+  // against /vision|llama-4|vl|omni/. Groq's current vision model is
+  // "qwen/qwen3.6-27b" — no vision-ish token anywhere in it — so every image
+  // resolved to "no vision model available" and came back unreadable, which
+  // is indistinguishable from the feature never having been built.
+  const realGroqCatalog = [
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'whisper-large-v3',
+    'qwen/qwen3.6-27b',
+  ];
+  assert.equal(pickVisionModel(realGroqCatalog), 'qwen/qwen3.6-27b');
+  // And it must win over the deprecated llama-4 models if both are present.
+  assert.equal(
+    pickVisionModel(['meta-llama/llama-4-maverick-17b-128e-instruct', 'qwen/qwen3.6-27b']),
+    'qwen/qwen3.6-27b',
+  );
+});
+
 test('prefers a known-good vision model when the account has one', () => {
   const available = [
     'openai/gpt-oss-120b',
