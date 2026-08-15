@@ -84,17 +84,44 @@ What no drafting can do is make you unsuable. Anyone can file a claim; these
 clauses limit what succeeds and what it costs. Two specifics worth a
 professional eye:
 
-- **Section 17 states no fixed liability cap.** An earlier draft capped total
-  liability at "greater of 12 months' fees or US$100"; on the user's
-  instruction that was removed, on the basis that a court should set the
-  figure if it ever comes to that rather than the document pre-naming one.
-  What remains is the general disclaimer plus the categorical exclusions
-  (indirect/consequential damages, third-party acts, etc.). Worth knowing:
-  this is not obviously *more* protective — a stated cap is a hard ceiling a
-  court usually respects if reasonable, while "no cap, decided case by case"
-  leaves the tail risk on direct damages technically open-ended, bounded only
-  by the exclusions above it. Have the lawyer weigh in on whether to reinstate
-  a cap once real usage numbers make picking one less arbitrary.
+- **Section 17 states no fixed liability cap, no claim-window, and no
+  "a court decides the amount" language.** All three were removed on the
+  user's explicit instruction, in two rounds — first the dollar figure
+  (US$100/12-months), then the sentence that replaced it (a court decides) and
+  the one-year limitation period, on the basis that the document should not
+  put the mechanics of suing in front of a customer at all. What remains is
+  the disclaimer plus the categorical exclusions (indirect/consequential
+  damages, third-party acts, misuse, force majeure) and the mandatory
+  carve-out for non-waivable liability (death/injury by negligence, fraud,
+  gross negligence — kept because removing it risks the whole section being
+  struck down, not because it was unflagged). Worth knowing: each removal
+  trades a defined position for silence, and silence is not obviously safer —
+  no stated cap means the tail risk on direct damages is open-ended rather
+  than bounded, and no stated limitation period means the ordinary statutory
+  one applies by default (which may be *longer* than a year, depending on
+  jurisdiction). Have the lawyer weigh in on whether either is worth
+  reinstating once real usage numbers exist.
+- **Section 14's ownership claim was narrowed to match what each IP right
+  actually covers**, per the user's read that Vera-the-system isn't something
+  you copyright: trademark on the name/mark, copyright specifically on the
+  page designs (landing page, chat interface, dossier, etc.), and trade secret
+  / confidential-information + licence-restriction for the software, prompts,
+  architecture and model configuration. This is more accurate than the
+  original blanket "protected by copyright" claim over all of it — copyright
+  doesn't reach an abstract system or method, only fixed expression — so a
+  lawyer reviewing this should find it easier to defend, not harder.
+- **Section 8 now states plainly that data is not shared with outside
+  companies, advertisers or data brokers.** True as written — it names the
+  processors in section 5 as the only exception and they're bound by
+  contract — but keep it in sync if the vendor list in section 5 ever grows to
+  include something that reads more like a third party than infrastructure.
+- **The "in plain terms" summary and the "Read first" jump links are gone**
+  from both the consent screen and the public page, on the user's instruction
+  to let people read the actual document rather than a paraphrase. The
+  practical effect: the reading pane now opens straight into section 1, with
+  nothing shortcut to the surprising clauses (training, accuracy, liability).
+  That is intentional, not a regression — flagging only so nobody "fixes" it
+  back in without knowing it was deliberate.
 - **Mandatory training** (section 4) with no opt-out needs a lawful basis under
   the GDPR that is *not* consent — legitimate interests or contractual
   necessity — because consent must be freely given and revocable, and this is
@@ -151,6 +178,33 @@ gate cover most of them. These two are untouched:
   affecting someone's health or safety. That is a disclaimer, not a safety
   response. A model that responds to a founder in crisis with a growth tactic is
   a product problem a disclaimer does not solve.
+
+## 9. Proposed, not built: a personalization opt-out toggle
+
+The user raised this while reviewing the policy: since training/storage is
+compulsory (section 4), should there be a Settings toggle that turns off the
+personalized/learning behaviour and runs Vera as a plainer, non-personalized
+assistant instead — off by default, i.e. **on** once you accept the policy, with
+an off switch in Settings?
+
+**This is buildable, and here is what "training" actually is under the hood** —
+checked before answering, so the recommendation is grounded rather than a
+guess: there is no literal model fine-tuning per user. Groq is an inference API;
+what makes Vera "learn" is retrieval — `company_facts`, the dossier, the decision
+memory and the message log get written to on most turns
+(`artifacts/api-server/src/routes/ai.ts`, the `addCompanyFact` calls) and read
+back into the prompt on the next one (`memoryBlock` in the same file). A toggle
+would realistically mean: stop writing to those tables, and stop injecting
+`memoryBlock` into the prompt, while the base chat still works.
+
+**Not built, because it is a real feature, not a copy edit** — a schema column,
+a settings endpoint, changes to the read/write paths in `ai.ts`, and a Settings
+UI control, plus follow-up edits to sections 4, 9 and 12 of the policy once it
+exists (the "not optional" framing would need to change to describe the actual
+opt-out mechanism). Building the toggle without touching those sections would
+repeat the exact mistake this whole effort was fixing — a policy promising
+something the code doesn't do, just in the opposite direction. Scope it as its
+own piece of work before starting it.
 
 ---
 

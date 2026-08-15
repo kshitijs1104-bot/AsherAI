@@ -15,12 +15,7 @@ import { useEffect } from 'react';
 import { Link } from 'wouter';
 import { ArrowLeft } from 'lucide-react';
 import { VeraMark } from '../../components/VeraMark';
-import {
-  OWNERSHIP_SECTIONS,
-  POLICY_META,
-  PolicyProse,
-  PolicySummary,
-} from './privacyPolicy';
+import { OWNERSHIP_SECTIONS, POLICY_META, PolicyProse } from './privacyPolicy';
 import '../landing/landing.css';
 
 export function PrivacyPolicyPage() {
@@ -67,7 +62,6 @@ export function PrivacyPolicyPage() {
           </p>
 
           <div style={{ marginTop: 34, display: 'grid', gap: 30 }}>
-            <PolicySummary tone="landing" />
             <PolicyProse tone="landing" />
 
             <div style={{ borderTop: '1px solid var(--lp-line)', paddingTop: 26, display: 'grid', gap: 26 }}>

@@ -54,30 +54,6 @@ export const POLICY_META = {
 /** How the owner is referred to in prose until POLICY_META.parentEntity is set. */
 export const OWNER_NAME = POLICY_META.parentEntity || "Vera's parent company";
 
-/**
- * The short version, shown above the full text on both surfaces.
- *
- * Kept to six lines that each fit on two, because this block has a job the rest
- * of the document does not: it is the part that has to be READ, not merely
- * shown, so it has to fit in the consent screen's reading pane at a 720px-tall
- * window. Measured — it is within ~320px. Adding a seventh line, or letting one
- * of these run to three, pushes the last one below the fold and quietly turns
- * the summary back into something people scroll past.
- */
-export const POLICY_SUMMARY: readonly string[] = [
-  // Lines 1, 3 and 6 are kept under ~70 characters so they set on ONE line at
-  // the consent screen's width. That is not stylistic: at two lines each the
-  // block ran 44px past the reading pane and pushed the last point below the
-  // fold. Lines 2, 4 and 5 are allowed to run to two because they carry the
-  // three things someone would later claim they were never told.
-  'Vera remembers your business: what you type, upload, and connect.',
-  'Vera stores that content and trains on it. That is how it becomes a better consultant for you, and it is not optional.',
-  'We never sell your data. It is encrypted and used only to run Vera.',
-  'Delete a chat and its messages, files and derived notes are gone. Close your account and everything is gone.',
-  'Vera can be confidently wrong. Acting on what it tells you is your risk and your decision, not a guarantee from us.',
-  "What you write is yours. Vera's software, prompts and design are ours.",
-];
-
 type Block = string | readonly string[];
 
 export interface PolicySection {
@@ -131,11 +107,11 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
   },
   {
     id: 'training',
-    heading: '4. Vera stores your data and trains on it — and that is not optional',
+    heading: '4. How Vera stores and learns from your data',
     body: [
-      'This is the mechanism of the product, so it is stated plainly rather than buried. Vera has to store what you tell it, and it learns from what it stores. That is the difference between Vera and a chat window that forgets you: the reason it can account for a decision you made in March is that the March conversation is still there, and the reason its judgement improves is that it is trained on real founder problems rather than generic text.',
-      'What that covers: your messages and Vera\'s replies, the facts and decisions Vera derived from them, the extracted content of files you uploaded, and any feedback you gave on a response.',
-      'Because storage and training are how Vera works, they are not features you can switch off while continuing to use it. Signing up means agreeing to them. If you do not want your content stored and learned from, the honest answer is that Vera is not usable on those terms, and closing your account (section 7) deletes everything we hold. Where the law of your country gives you a right to object to this specific processing, section 9 tells you how to raise it — we will consider any objection properly, but in most cases honouring it means closing the account, because there is no version of Vera that runs without memory.',
+      'Vera works by remembering your business. It stores what you tell it and learns from it, which is what lets it pick up a decision you made months ago instead of asking you to explain your company over again, and what lets its judgement keep improving the more it works with you — a colleague who remembers your last conversation is more useful than one who does not.',
+      'What that covers: your messages and Vera\'s replies, the facts and decisions Vera derives from them, the extracted content of files you upload, and any feedback you give on a response.',
+      'Storing and learning from your content is built into how Vera works, not a separate feature layered on top of it, so it is part of using Vera rather than a switch you set independently of the rest of the product. If you would rather your content were not stored or learned from, closing your account (section 7) removes everything we hold, and where the law of your country gives you a right to object to this specific processing, section 9 explains how to raise it.',
       'What we limit, and hold ourselves to:',
       [
         'We aggregate and strip identifiers wherever the work does not require them — which is most of the time, because what we are usually trying to learn is a pattern, not a company.',
@@ -197,7 +173,7 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
     id: 'security',
     heading: '8. How we protect it',
     body: [
-      'Your data is the record of how your company actually runs, and it is treated that way.',
+      'Your data is the record of how your company actually runs, and it is treated that way: encrypted, access-controlled, and used to power your experience with Vera — not handed to outside companies. We do not share it with advertisers, data brokers, or anyone outside the small set of infrastructure and connector providers named in section 5, each of which is contractually bound to use it only to help run Vera for you.',
       [
         'Traffic is encrypted in transit (TLS). The database is encrypted at rest.',
         'Connected-account OAuth tokens are encrypted with AES-256-GCM before storage, separately from everything else.',
@@ -278,7 +254,7 @@ export const OWNERSHIP_SECTIONS: readonly PolicySection[] = [
     id: 'ownership',
     heading: '14. Vera is our property',
     body: [
-      `Vera — the name, the mark, the software, the interface, the prompts and system instructions, the memory and dossier architecture, the model configuration, the documentation, and every part of how it works — is owned by ${OWNER_NAME} and protected by copyright, trademark, database and trade-secret law. Nothing in this document transfers any of it to you.`,
+      `${OWNER_NAME} owns Vera. The name and mark are our trademark. The exact design, layout and visual presentation of our screens — the landing page, the chat interface, the dossier, and every other page — is our copyrighted work. The software, our prompts and system instructions, the memory and dossier architecture, our model configuration and our documentation are our confidential and proprietary information, held as trade secrets and protected by the licence terms below. Nothing in this document transfers any of it to you.`,
       'What you get instead is a licence: a limited, non-exclusive, non-transferable, revocable right to use Vera as a customer, for your own business, for as long as your account is in good standing. That is the whole of the grant.',
       'Without our written permission, you may not:',
       [
@@ -328,8 +304,6 @@ export const OWNERSHIP_SECTIONS: readonly PolicySection[] = [
         'We disclaim liability for any loss, damage, cost or expense arising out of or in connection with your use of, or reliance upon, Vera or any output it produces — including any decision you took, did not take, or delayed as a result.',
         'We disclaim liability for indirect, incidental, special, consequential, exemplary or punitive damages, and for loss of profits, revenue, business, contracts, anticipated savings, goodwill, reputation or data, whether arising in contract, tort (including negligence), statute or otherwise, and whether or not such loss was foreseeable.',
         'We disclaim liability for the accuracy, completeness, reliability or suitability of any output, for any act or omission of a third-party provider listed in section 5, for anything arising from your own configuration, misuse or breach of these terms, or for any event beyond our reasonable control.',
-        'This document does not fix, quantify or admit any sum as the extent of our liability. Where liability is not validly excluded by the above, its existence and amount are to be determined by a court or tribunal of competent jurisdiction applying the law that governs this agreement, not by any figure stated here.',
-        'Any claim must be brought within one year of the event giving rise to it, or as soon after that as applicable law requires it to be permitted.',
       ],
       'This section does not exclude or limit liability for death or personal injury caused by negligence, for fraud or fraudulent misrepresentation, for gross negligence or wilful misconduct, or for anything else that applicable law does not permit to be limited or excluded, including any non-waivable statutory or consumer right. If you are a consumer under the law of your country, your statutory rights are unaffected by this document.',
       'If any part of this section, or of section 16, is held unenforceable in a particular jurisdiction, that part is to be read as narrowed to the minimum extent needed to make it enforceable, and every other part stays in force. The rest of this document survives the removal of any single clause.',
@@ -367,55 +341,20 @@ const TONE = {
     heading: 'var(--text)',
     body: 'var(--muted)',
     strong: 'var(--text)',
-    rule: 'var(--border)',
-    marker: 'var(--mint)',
   },
   landing: {
     heading: 'var(--lp-text)',
     body: 'var(--lp-text-2)',
     strong: 'var(--lp-text)',
-    rule: 'var(--lp-line)',
-    marker: 'var(--lp-teal)',
   },
 } as const;
 
 export type PolicyTone = keyof typeof TONE;
 
-/** The plain-terms summary block. Rendered above the sections on both surfaces. */
-export function PolicySummary({ tone = 'app' }: { tone?: PolicyTone }) {
-  const c = TONE[tone];
-
-  return (
-    <div
-      style={{
-        border: `1px solid ${c.rule}`,
-        borderRadius: 12,
-        padding: '18px 20px',
-        display: 'grid',
-        gap: 10,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          color: c.marker,
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        }}
-      >
-        In plain terms
-      </div>
-      <ul style={{ display: 'grid', gap: 8, margin: 0, paddingLeft: 18 }}>
-        {POLICY_SUMMARY.map((line) => (
-          <li key={line} style={{ fontSize: 13.5, lineHeight: 1.6, color: c.body }}>
-            {line}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+// There used to be a PolicySummary component here — a short "in plain terms"
+// bullet list rendered above the full text on both surfaces. Removed on
+// instruction: read the actual document, not a paraphrase of it. Both
+// PrivacyGate.tsx and PrivacyPolicyPage.tsx now render PolicyProse directly.
 
 /**
  * The policy body. Defaults to the privacy sections; pass OWNERSHIP_SECTIONS to

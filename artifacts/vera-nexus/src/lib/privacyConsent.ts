@@ -25,7 +25,17 @@ import { useSyncExternalStore } from 'react';
 // liability generally and leaves the existence and amount of any liability, if
 // one is ever found, to a court applying the governing law — a materially
 // different term from a pre-agreed number, so it re-prompts too.
-export const PRIVACY_POLICY_VERSION = '2026-08-15-r3';
+//
+// Bumped again, -r3 to -r4: section 14's ownership claim was narrowed to what
+// each right actually covers (trademark on the name/mark, copyright on the
+// page designs, trade secret on the software/prompts/architecture, rather than
+// one blanket copyright claim over all of it); section 17 dropped two more
+// sentences (the "a court decides the amount" line and the one-year claim
+// window); section 8 added an explicit no-third-party-sharing commitment; and
+// the "in plain terms" summary + jump-link shortcut were removed from the
+// consent screen and the public page in favour of the actual document. Every
+// one of those is a real change to what the text says, so it re-prompts too.
+export const PRIVACY_POLICY_VERSION = '2026-08-15-r4';
 
 const KEY = 've_privacy_consent';
 

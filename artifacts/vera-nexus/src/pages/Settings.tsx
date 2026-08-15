@@ -169,6 +169,24 @@ export function SettingsPage() {
           </ul>
         </section>
       )}
+
+      {/* Kept as a plain link to /privacy rather than an inline copy of the
+          text — PolicyProse already renders that page, and a second render
+          site here would be a second place for it to go stale relative to the
+          one everyone actually agreed to at signup (see the note atop
+          privacyPolicy.tsx on why there is exactly one source of truth). */}
+      <section className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8">
+        <h2 className="text-lg font-syne font-bold text-white mb-1">Privacy &amp; Terms</h2>
+        <p className="text-xs text-[var(--muted)] mb-4">
+          What Vera stores, how it's protected, and the terms you agreed to when you signed up.
+        </p>
+        <Link
+          href="/privacy"
+          className="inline-flex items-center gap-2 text-sm text-[var(--muted)] hover:text-white transition-colors underline underline-offset-2"
+        >
+          Read the Privacy Policy
+        </Link>
+      </section>
       </div>
     </div>
   );
