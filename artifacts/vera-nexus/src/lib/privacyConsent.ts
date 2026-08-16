@@ -78,7 +78,17 @@ import { useSyncExternalStore } from 'react';
 // the codebase behind lib/cookieConsent.ts's CONSENT_REQUIRED — if that is
 // ever flipped on, section 19 has to change back in the same commit and this
 // version bumps again.
-export const PRIVACY_POLICY_VERSION = '2026-08-15-r7';
+//
+// Bumped again, -r7 to -r8: section 1 gained a paragraph stating Vera accounts
+// are individual today, with no shared or organisation-level account, and
+// committing that a future shared-account feature would get its own policy
+// update and re-acceptance before shipping — added after an audit confirmed
+// no org/team/invite-code model exists anywhere in the schema (every table is
+// scoped to one Clerk userId) even though the surrounding text could be read
+// as implying multi-user sharing already existed. Section 25's "Account"
+// definition cross-references the same commitment. Both are new statements a
+// reader has not seen before, so it re-prompts.
+export const PRIVACY_POLICY_VERSION = '2026-08-15-r8';
 
 const KEY = 've_privacy_consent';
 

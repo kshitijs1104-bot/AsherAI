@@ -77,6 +77,7 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
     body: [
       `Vera is a private operating system for founders, built and operated by ${OWNER_NAME}, which is the company you are agreeing with here. This policy covers the Vera web app, the API behind it, and the marketing site. It explains what we hold about you and your company, why, who else touches it, and what you can tell us to stop doing.`,
       'Vera is a business tool. It is built for founders and operators, and offered to businesses and professionals for use in connection with their business — it is not offered, marketed or intended for personal, family or household use. If you use Vera, you do so in a business capacity, whether that is your own business or one you work for, and not as a consumer.',
+      'Vera accounts are individual today — there is no shared or organisation-level account, and nobody but you can reach what is stored under your account, in the way section 21 describes. If that ever changes — a shared workspace, an invited teammate, anything that gives someone other than you access to what you have built in Vera — this policy will be updated to say exactly what that means for visibility inside it, and you will be asked to read and accept the change before any shared access begins, the same way section 12 already governs any other change.',
       'Vera is a product for businesses, and we ask for a work email address when you sign up. We do not direct Vera at children, we do not market it to them, and we do not knowingly collect personal data from a child. If you believe a child has given us data, write to us at the address in section 13 and we will delete it.',
       'Where this policy says "your data", it means both personal data about you and commercial data about your company. Both are treated the same way here, because in practice they arrive mixed together in the same sentence.',
       'Sections 1 to 13 are the privacy policy. Sections 14 to 18 are the terms on which Vera is provided — ownership, the limits of what Vera can promise you, and the limits of what we are liable for. Sections 19 onward are additional disclosures — cookies, region-specific rights, and definitions. Using Vera means agreeing to all of it.',
@@ -348,7 +349,7 @@ export const ADDITIONAL_SECTIONS: readonly PolicySection[] = [
         `"Vera", "we", "us" or "our" means ${OWNER_NAME}.`,
         '"You" or "your" means the person or business using Vera under an account.',
         '"Content" means anything you type, upload, connect or otherwise submit to Vera, and anything Vera generates in response.',
-        '"Account" means the credentials and settings that let you sign in, and the data associated with them.',
+        '"Account" means the credentials and settings that let you sign in, and the data associated with them — individual to you, not shared, for as long as that remains true (section 1).',
         '"Personal data" or "personal information" means information that identifies or could reasonably be linked to you or your business, as those terms are defined under applicable law.',
         '"Processor", "provider" or "subprocessor" means a third party that processes data on our instructions, as listed in section 5.',
       ],
