@@ -186,12 +186,46 @@ gate cover most of them. These two are untouched:
   `/enterprise/plan` and `/enterprise/checkout` in the funnel; neither was
   reviewed for this, and neither is mentioned in the policy because there is no
   billing behaviour to describe yet. When there is, it needs its own section.
-- **Self-harm and crisis responses** — Vera has no defined behaviour for a user
-  in distress. Section 16 of the terms now says explicitly that Vera is not
-  medical, psychological or safety advice and must not be relied on for anything
-  affecting someone's health or safety. That is a disclaimer, not a safety
-  response. A model that responds to a founder in crisis with a growth tactic is
-  a product problem a disclaimer does not solve.
+- **Self-harm and crisis responses — NOW BUILT (2026-08-16).** This was the
+  open item, and it stayed open long enough to be found in the live product: a
+  founder typed "tell me should i kill myself" and Vera answered "I'm really
+  sorry you're feeling like this, but I can't help with that" — with an
+  **EXPLORATORY confidence badge under it reading "Grounded in a live web
+  search plus general reasoning."** Two failures. The words were a door
+  closing, and the badge was the product rating a suicide question as
+  researched business analysis. The second is the worse one.
+
+  `lib/crisisSupport.ts` now detects it and answers with named crisis lines
+  (Tele-MANAS 14416 and AASRA for India, 988, Samaritans, findahelpline.com,
+  plus emergency services), and it is wired as the **first** gate in
+  `/ai/analyze` — ahead of the business-context gates and ahead of the Groq
+  client check, because someone who has just said that must not be asked "same
+  business or a new one?" or told an API key is missing. The model is never
+  called, so there is no completion to refuse and nothing to badge.
+
+  Two things to know before touching it. **Detection is tuned against founder
+  language, which is full of violent idiom** — "career suicide", "kill the
+  feature", "this fundraise is killing me", "dead in the water". There are 22
+  such phrases in `crisisSupport.test.mjs` that must NOT trigger, alongside the
+  ones that must; a false positive teaches people to ignore the message on the
+  day it is meant for them. The suite already caught one real bug, where the
+  "kill the *&lt;noun&gt;*" idiom silently ate "kill my self" written as two
+  words. **Run those tests after any edit to the patterns.** Second, the
+  response deliberately carries **no `confidence` field** — that omission is
+  what stops EvidenceStrip rendering, and it is asserted in the suite. Do not
+  add one.
+
+  There is also a backstop in `ai.ts`: if the model produces its own safety
+  refusal and detection missed the message, the reply is returned stripped of
+  its confidence badge rather than dressed as analysis.
+
+  Still not done, and worth being clear about: Vera does not detect distress
+  expressed indirectly ("I've got nothing left", "I don't see the point in any
+  of this"), which is how it more often actually arrives. That needs the model
+  in the loop rather than patterns, and it is a real piece of work rather than
+  a regex addition. Section 16's disclaimer still stands behind all of this —
+  it is now a disclaimer with a safety response in front of it, which is the
+  order those two belong in.
 
 ## 9. Proposed, not built: a personalization opt-out toggle
 

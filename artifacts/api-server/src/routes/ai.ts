@@ -3,6 +3,7 @@ import { db, settingsTable, venusDecisionsTable, goalsTable, type VenusDecision,
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { VenusAnalyzeBody, IdeaReviewBody } from "@workspace/api-zod";
+import { needsCrisisResponse, buildCrisisResponse, looksLikeModelSafetyRefusal } from "../lib/crisisSupport";
 import { getGroqClient, VENUS_PROMPT, buildVenusPrompt, type VenusResponseMode, buildFallbackVenusResponse, buildTransientErrorResponse, callGroqJSON, isContentPolicyRefusal, isQuotaExhaustedError, quotaRetryAfterMs, MODERATE_TIER_PRECEDENT_NOTE, EXTRACTED_FACTS_INSTRUCTION, EVIDENCE_CONVERGENCE_INSTRUCTION, sanitizeVenusResponse, estimateTokens, tpmLimitForModel, TPM_SAFETY_MARGIN, MIN_USABLE_MAX_TOKENS, buildGroundingInstructions } from "../lib/groq";
 import { retrievePrecedents, formatPrecedentsForPrompt, retrieveOwnResolvedDecisions, formatOwnDecisionsForPrompt, retrieveOpenSessionDecisions, formatOpenSessionDecisionsForPrompt, type RetrievalResult } from "../lib/retrieval";
 import { computeConfidence } from "../lib/confidence";
@@ -1134,6 +1135,31 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       return res.json(payload);
     };
 
+    // ---- Crisis check. FIRST, ahead of every other gate, and ahead of the
+    // Groq client check below ----
+    //
+    // Position is the whole design here. Every gate under this one is about
+    // the BUSINESS — which profile is active, is this the same company, is
+    // there enough context to answer. Someone who has just said they want to
+    // hurt themselves must not be asked "is this the same business or a new
+    // one?", must not be told Vera needs more context about their company,
+    // and must not be told the API key is missing. Any of those is the
+    // product continuing its script over the top of a person, and each one is
+    // reachable if this check sits even one gate lower.
+    //
+    // It also runs before the model is called at all, which is what fixes the
+    // observed failure rather than papering over it: there is no completion to
+    // refuse, and nothing for the confidence layer to badge as "EXPLORATORY —
+    // grounded in a live web search". See lib/crisisSupport.ts.
+    //
+    // Routed through respondGated so the turn is still logged on both sides —
+    // this is the last thing that should silently vanish from a person's
+    // history, whether they come back to it or someone else ever has to.
+    if (needsCrisisResponse(body.data.message)) {
+      req.log.warn({ userId: sessionId }, "Crisis response served — model bypassed");
+      return respondGated(buildCrisisResponse());
+    }
+
     if (!groq) {
       // Not routed through respondGated: with no Groq client this turn never
       // became part of a conversation at all, and logging a configuration
@@ -2175,6 +2201,29 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
       // salvageProse in groq.ts.
       { salvageProseAs: "summary" },
     );
+
+    // ---- Backstop: never badge the model's own safety refusal as analysis ----
+    //
+    // needsCrisisResponse above is the real control and catches this on the
+    // way in. This catches it on the way OUT, for the phrasings that control
+    // misses — because the observed failure was not only that the reply was
+    // cold, it was that "I'm really sorry you're feeling like this, but I
+    // can't help with that" was rendered with an EXPLORATORY badge reading
+    // "Grounded in a live web search plus general reasoning". A refusal is not
+    // a researched finding, and dressing one as the other is the product
+    // asserting rigour it did not apply.
+    //
+    // Returns before the confidence block below rather than deleting fields
+    // after it, so there is no ordering left to get wrong later. The summary
+    // is the model's own words — deliberately not rewritten here, since this
+    // branch exists for cases the crisis detector did not recognise and
+    // substituting a crisis script for an unknown refusal would be guessing.
+    if (parsed && typeof parsed.summary === "string" && looksLikeModelSafetyRefusal(parsed.summary)) {
+      req.log.warn({ userId: sessionId }, "Model returned a safety refusal — stripping confidence badge");
+      logMessage({ userId: sessionId, chatId: body.data.chatId, role: "user", content: body.data.message }).catch(() => {});
+      logMessage({ userId: sessionId, chatId: body.data.chatId, role: "assistant", content: parsed.summary }).catch(() => {});
+      return res.json({ summary: parsed.summary, cards: [] });
+    }
 
     if (parsed) {
       // Confidence is computed from the actual evidence assembled for this
