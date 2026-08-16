@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Target, X, TrendingUp, AlertTriangle, CheckCircle2, ThumbsUp, ThumbsDown, Minus, RotateCcw } from 'lucide-react';
+import { prefStorage } from '../lib/cookieConsent';
 import {
   useGetChat,
   useSetChatGoal,
@@ -140,20 +141,14 @@ function hasOpenSubTasks(goal: GoalWithProgress): boolean {
 }
 
 function isReminderDismissedToday(goalId: number): boolean {
-  try {
-    return localStorage.getItem(`${REMINDER_STORAGE_PREFIX}${goalId}`) === todayKey();
-  } catch {
-    return false;
-  }
+  return prefStorage.getItem(`${REMINDER_STORAGE_PREFIX}${goalId}`) === todayKey();
 }
 
+// Best-effort — a private-browsing tab, or a founder who declined optional
+// storage in the cookie banner (this prefix is registered there), just means
+// the reminder can show again next render, which is harmless.
 function dismissReminderForToday(goalId: number) {
-  try {
-    localStorage.setItem(`${REMINDER_STORAGE_PREFIX}${goalId}`, todayKey());
-  } catch {
-    // Best-effort — a private-browsing tab with no localStorage just means
-    // the reminder can show again next render, which is harmless.
-  }
+  prefStorage.setItem(`${REMINDER_STORAGE_PREFIX}${goalId}`, todayKey());
 }
 
 // Non-intrusive nudge to close the loop on an open sub-task. A reported

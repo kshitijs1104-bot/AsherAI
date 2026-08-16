@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useClerk } from '@clerk/clerk-react';
 import { useLocation } from 'wouter';
-import { FileText, Trash2, ExternalLink } from 'lucide-react';
+import { FileText, Trash2, ExternalLink, Cookie } from 'lucide-react';
 import { useDeleteAccount } from '../lib/venusApi';
+import { acceptAllCookies, acceptEssentialCookiesOnly, usePreferenceStorageAllowed } from '../lib/cookieConsent';
 
 /* ---------------------------------------------------------------------------
    The "General" tab of VeraSettingsModal.
@@ -35,6 +36,50 @@ function PrivacyLinkRow() {
       <span className="flex-1">Privacy Policy &amp; Terms</span>
       <ExternalLink className="w-3 h-3 shrink-0" style={{ color: 'var(--v7-text-mute)' }} />
     </a>
+  );
+}
+
+// ---- The opt-out for preference storage ----
+//
+// There is no cookie banner (see CONSENT_REQUIRED in lib/cookieConsent.ts —
+// nothing Vera stores requires consent), so this row is not the back-door to a
+// banner decision. It is the whole control, and that is why it stays: "we
+// don't have to ask" is a reason to skip the interruption, not a reason to
+// leave someone with no way to say no. Section 19 of the policy points here.
+//
+// Storage is ON by default in this mode. Switching it off DELETES what was
+// stored rather than just recording the change — acceptEssentialCookiesOnly
+// purges. Switching it back on only permits future writes; it cannot restore
+// what was already cleared, which is why the copy says "from now on" rather
+// than implying anything comes back.
+function CookieChoiceRow() {
+  const allowed = usePreferenceStorageAllowed();
+
+  return (
+    <div
+      className="px-3 py-2.5 rounded-lg"
+      style={{ background: 'var(--v7-bg-raised-2)' }}
+    >
+      <div className="flex items-center gap-2.5">
+        <Cookie className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--v7-text-mute)' }} />
+        <span className="flex-1 text-[13px] font-medium" style={{ color: 'var(--v7-text-dim)' }}>
+          Store preferences on this device
+        </span>
+        <button
+          type="button"
+          onClick={allowed ? acceptEssentialCookiesOnly : acceptAllCookies}
+          className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md shrink-0"
+          style={{ background: 'var(--v7-bg-raised-3, rgba(255,255,255,0.06))', color: 'var(--v7-text)' }}
+        >
+          {allowed ? 'Turn off' : 'Turn on'}
+        </button>
+      </div>
+      <p className="text-[11.5px] leading-relaxed mt-1.5" style={{ color: 'var(--v7-text-mute)' }}>
+        {allowed
+          ? 'Your theme, panel layout and dismissed cards are remembered between visits. Turning this off deletes them now and stops Vera saving them again.'
+          : 'Vera is not saving your theme, panel layout or dismissed cards, so it starts from defaults each visit. Turning this on saves them from now on. Your chats and saved analyses are unaffected either way.'}
+      </p>
+    </div>
   );
 }
 
@@ -156,6 +201,7 @@ export function GeneralSettings() {
   return (
     <div className="flex flex-col gap-2">
       <PrivacyLinkRow />
+      <CookieChoiceRow />
       <div style={{ height: 1, background: 'var(--v7-border)', margin: '4px 0' }} />
       <div
         className="text-[10px] font-mono uppercase tracking-wider mb-0.5"

@@ -97,7 +97,27 @@ router.get("/connectors/:type/auth", requireAuth, async (req, res) => {
   // an attacker could feed a victim's browser a callback URL carrying the
   // attacker's own authorization code and link the attacker's account into
   // the victim's session.
-  res.cookie(OAUTH_STATE_COOKIE, state, { httpOnly: true, sameSite: "lax", maxAge: 10 * 60 * 1000 });
+  //
+  // `secure` was missing, and it is the flag that decides whether this value
+  // can travel in clear. Without it the browser will send the state cookie
+  // over plain http:// — so anyone able to observe or inject on the network
+  // path (shared wifi, a hostile hop, a downgraded first request) can read the
+  // one secret this guard compares, and once they can read it they can forge a
+  // matching callback and defeat the check entirely. It is set from NODE_ENV
+  // rather than unconditionally because local development is served over
+  // http://localhost, where an always-on `secure` would mean the cookie is
+  // never stored and every connector fails to link — which is how this flag
+  // tends to get deleted rather than fixed.
+  //
+  // `path` scopes it to the connector routes: it is read at exactly one
+  // callback and has no business riding along on every other API request.
+  res.cookie(OAUTH_STATE_COOKIE, state, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/api/connectors",
+    maxAge: 10 * 60 * 1000,
+  });
   return res.redirect(adapter.getAuthUrl(redirectUri, state));
 });
 
@@ -109,7 +129,16 @@ router.get("/connectors/:type/callback", requireAuth, async (req, res) => {
   const code = typeof req.query.code === "string" ? req.query.code : undefined;
   const state = typeof req.query.state === "string" ? req.query.state : undefined;
   const cookieState = req.cookies?.[OAUTH_STATE_COOKIE];
-  res.clearCookie(OAUTH_STATE_COOKIE);
+  // The clear must repeat the attributes the cookie was SET with — a browser
+  // matches a deletion by name+path+domain, so clearing without the same
+  // `path` leaves the original cookie in place and a single-use state value
+  // becomes replayable for its full ten minutes.
+  res.clearCookie(OAUTH_STATE_COOKIE, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/api/connectors",
+  });
 
   if (!code || !state || !cookieState || state !== cookieState) {
     return res.status(400).json({ error: "OAuth state mismatch — please try connecting again" });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { prefStorage } from './cookieConsent';
 
 // Vera-local theme preference — deliberately separate from the app-wide
 // dark mode (Layout.tsx hardcodes `dark` unconditionally for the rest of
@@ -10,20 +11,16 @@ const KEY = 've_theme';
 export type VenusTheme = 'dark' | 'light';
 
 function readTheme(): VenusTheme {
-  try {
-    return localStorage.getItem(KEY) === 'light' ? 'light' : 'dark';
-  } catch {
-    return 'dark';
-  }
+  return prefStorage.getItem(KEY) === 'light' ? 'light' : 'dark';
 }
 
+// Via prefStorage, not localStorage directly: the theme is an optional
+// preference under the cookie banner, so this write is a no-op for anyone who
+// chose "essential only". The in-memory value below still changes, so the
+// toggle works for the session — it just doesn't persist, which is the same
+// behaviour this function already had in a private-browsing tab.
 function writeTheme(theme: VenusTheme) {
-  try {
-    localStorage.setItem(KEY, theme);
-  } catch {
-    // Best-effort — a private-browsing tab with no localStorage just means
-    // the preference resets next visit, which is harmless.
-  }
+  prefStorage.setItem(KEY, theme);
 }
 
 // Previously each caller held its own useState seeded from localStorage, so

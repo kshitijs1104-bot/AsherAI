@@ -60,7 +60,25 @@ import { useSyncExternalStore } from 'react';
 // version — this is new obligation a reader is taking on, not a
 // clarification, so it gets its own bump rather than riding along with
 // something else. Definitions renumbered 24 -> 25 to make room for it.
-export const PRIVACY_POLICY_VERSION = '2026-08-15-r6';
+// Bumped again, -r6 to -r7: section 19 (cookies) was rewritten because it did
+// not match the code. It described a sidebar cookie the live app never sets
+// (components/ui/sidebar.tsx has no importers — the real setting is in local
+// storage under a different name), and it disclosed only cookies while the app
+// keeps a dozen items in local storage it never mentioned. The section now
+// lists what is actually stored, splits it into required and preferences,
+// points at the Settings control that switches the preferences off, and says
+// plainly that IP addresses are NOT stored — checked against the code rather
+// than assumed, since claiming to hold data you do not hold is its own kind of
+// inaccurate notice.
+//
+// It also now explains why there is no cookie banner, which is a change of
+// position from "none of these need one" to a stated reason. A banner was
+// built and then deliberately not shown: nothing here is tracking, advertising
+// or analytics, so nothing here requires consent. The machinery is still in
+// the codebase behind lib/cookieConsent.ts's CONSENT_REQUIRED — if that is
+// ever flipped on, section 19 has to change back in the same commit and this
+// version bumps again.
+export const PRIVACY_POLICY_VERSION = '2026-08-15-r7';
 
 const KEY = 've_privacy_consent';
 

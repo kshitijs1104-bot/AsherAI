@@ -78,8 +78,11 @@ could not find it. It has a comment now saying so; do not add anything there
 expecting a founder to see it without also linking the page from somewhere
 real.
 
-Also unverified: whether the 30-day backup window in section 7 matches what the
-hosting provider actually does. The policy states 30 days. Confirm it.
+Also unverified: whether the 30-day backup window in section 7, and the
+90-day log-retention figure in the same section, match what the hosting
+provider actually does. Both are stated as policy commitments, not read off
+an infra config — confirm both, the same way you'd confirm any other number
+in this document against reality.
 
 ## 5. Get a lawyer to read sections 16, 17 and 18 — BLOCKING
 
@@ -133,13 +136,13 @@ professional eye:
   nothing shortcut to the surprising clauses (training, accuracy, liability).
   That is intentional, not a regression — flagging only so nobody "fixes" it
   back in without knowing it was deliberate.
-- **Mandatory training** (section 4) with no opt-out needs a lawful basis under
-  the GDPR that is *not* consent — legitimate interests or contractual
-  necessity — because consent must be freely given and revocable, and this is
-  neither. The policy is worded to say honouring an objection means closing the
-  account. A DPIA is likely required. This is the single most likely thing to
-  attract a regulator's attention, and it is a deliberate product decision, so
-  it should be a documented one.
+- **Mandatory training's GDPR basis is now named** (section 4): performance of
+  contract (Art. 6(1)(b)) for the core store-and-retrieve behaviour, legitimate
+  interests (Art. 6(1)(f)) for broader model improvement, with the Art. 21
+  right to object mapped onto account closure. Naming it is not the same as it
+  surviving scrutiny — a legitimate-interests basis needs an actual balancing
+  test/DPIA behind it, which a lawyer should do, not this document. This is
+  still the single most likely thing to attract a regulator's attention.
 
 ## 6. Re-read the policy against the product
 
@@ -216,6 +219,258 @@ opt-out mechanism). Building the toggle without touching those sections would
 repeat the exact mistake this whole effort was fixing — a policy promising
 something the code doesn't do, just in the opposite direction. Scope it as its
 own piece of work before starting it.
+
+## 10. A structural legal review came in — most of it is applied, one part is held for your confirmation
+
+The user pasted a detailed outside review (not run by this assistant, and not
+independently verified against current regulatory status — see the DPDPA
+dates below) and asked for it to be implemented. Six new sections were added
+(19-24, `ADDITIONAL_SECTIONS` in `privacyPolicy.tsx` — a new third array,
+appended rather than inserted into the numbered flow, specifically so no
+existing cross-reference like "section 5" or "section 16" had to be
+renumbered) plus edits to sections 1, 2, 4, 7, 9, 10 and 13. `PRIVACY_POLICY_VERSION`
+bumped to `-r5`.
+
+**Applied:**
+
+- Section 1: Vera stated explicitly as a business tool, not offered to
+  consumers — the review's point that this single sentence is what keeps
+  individual-consumer-protection statutes from attaching to a business user.
+- Section 2: the excluded-sensitive-data list extended to GDPR Art. 9/10
+  special categories (political opinion, religion, trade union membership,
+  sexual orientation, criminal record) alongside the existing health/biometric/
+  government-ID list.
+- Section 4: GDPR Art. 6 lawful basis named directly (contract necessity for
+  core storage/retrieval, legitimate interests for broader improvement), with
+  the Art. 21 right to object mapped onto the existing account-closure
+  mechanism. This is the fix for the review's flagged GDPR exposure — see
+  item 5 above for what still needs a lawyer's judgement on top of it.
+- Section 7: log retention given an actual number (90 days) instead of "a
+  short operational window" — unverified against real infra, see item 4.
+- Section 9: CCPA appeal right (45-day response) and non-discrimination
+  commitment added; the CCPA-defined terms "sold" and "shared" used explicitly
+  rather than relying on the colloquial "we don't sell."
+- Section 10: international-transfer mechanism named specifically (EU
+  Standard Contractual Clauses, UK IDTA) instead of "standard contractual
+  protections."
+- Section 13: the contact address given an explicit DPDPA Grievance Officer
+  role and a stated response window (7-day acknowledgement, 30-day
+  resolution) — cheap now, per the review, expensive to retrofit once DPDPA
+  enforcement phases in.
+- New section 19 (Cookies): audited against the actual codebase before
+  writing a word of it — there is no analytics or advertising tracking
+  anywhere in this app (checked `package.json` and the source tree). The only
+  cookies are Clerk's session cookie, a first-party sidebar-state preference
+  cookie, and a transient OAuth-state cookie during connector setup. All
+  three are within the ePrivacy "strictly necessary" exemption, so the
+  section states this plainly rather than adding a consent banner nothing
+  requires. If analytics is ever added, this section — and a real banner —
+  need to change with it.
+- New section 20 (California privacy rights): a categories-of-information
+  table in the format CCPA/CPRA expects, plus the appeal and
+  non-discrimination language cross-referenced from section 9.
+- New section 21 (IP notice-and-takedown): included for completeness and
+  worded honestly about the fact that it barely applies today — uploaded
+  files are never shared between users, so the situation a DMCA-style process
+  exists for doesn't really arise yet. If dossier-sharing or any multi-user
+  visibility of uploaded content is ever built, this section stops being
+  mostly theoretical and the process it describes needs to be real (a
+  monitored inbox, at minimum).
+- New sections 22-24: survival clause (which sections outlive account
+  closure), assignment clause (mirrors the acquisition scenario already in
+  section 5), and a short definitions section.
+
+**Resolved — you confirmed after seeing the conflict, both are now applied.**
+Section 17 states a liability cap again (greater of 12 months' fees or
+US$100 — the same figure that was removed in `-r3`; reinstated on your
+explicit instruction, not silently). New section 24, "Dispute resolution",
+adds binding individual arbitration seated in India under the Arbitration and
+Conciliation Act 1996, a class-action waiver, carve-outs for injunctive
+relief (IP/confidentiality) and small-claims matters, and a fallback court
+venue for anything not arbitrated. `PRIVACY_POLICY_VERSION` bumped to `-r6`.
+This is a real reversal of an earlier explicit instruction ("don't give
+people ideas to do shit"), made consciously after the direct conflict was
+put in front of you — recorded here so it reads as a decision, not drift.
+
+Two things from the same cluster were **not** part of what you confirmed and
+are still open:
+
+- **Arbitration seat has no named city** — the clause says "seated in India"
+  (reading `POLICY_META.jurisdiction`) without a specific city, which is
+  legally workable but crisper with one named. Add a city once you have one,
+  the same way `POLICY_META.parentEntity` is a fill-in-later placeholder.
+- **The one-year claim-filing window and the mutual IP indemnity** (Vera
+  indemnifying you, not just you indemnifying Vera) were both flagged in the
+  original review alongside the cap/arbitration items, but neither was in the
+  option you actually picked — only "the cap + arbitration/venue/class-waiver"
+  was. Both are still out. Say explicitly if you want either added; don't
+  assume this round covered them.
+
+**Not independently verified — the review's own claims, not this assistant's
+research:** the DPDPA implementation timeline it cites (Rules notified
+November 2025, Consent Manager registration opening November 2026, Phase 3
+operational obligations from 13 May 2027) is stated as fact in the pasted
+review but was not confirmed against a live regulatory source here. It reads
+as plausible and the response taken — designate a Grievance Officer now,
+cheaply, ahead of enforcement — is sound regardless of whether the exact dates
+are right. Have the lawyer confirm the dates before relying on "we have more
+runway than we thought" as a reason to deprioritise anything.
+
+---
+
+# 10. Application security pass (2026-08-16)
+
+Worked through a 20-item pre-launch hardening list. Most of it was already
+done by the earlier CORS/auth/rate-limit work. What follows is only what
+changed, and what could not be changed from code.
+
+## Fixed in this pass
+
+- **The checkout page was collecting card numbers.**
+  `pages/enterprise/Checkout.tsx` rendered cardholder name, PAN, expiry and
+  CVC under the heading "Secure checkout" with a $299/mo price, then ran a
+  1.8-second `setTimeout` and unlocked the app. Nothing was sent anywhere; the
+  only disclosure was 11px grey text *below* the submit button. Three separate
+  problems — cardholder data on an origin with no processor and no PCI scope,
+  a user reasonably believing they had subscribed when no charge and no record
+  existed, and a page shaped exactly like a phishing form. The form is gone
+  and the screen now says plainly that billing isn't live and no card is
+  needed. **When billing is real it must be Stripe Checkout or Elements, so
+  the PAN never enters this app's DOM, and the amount must come from a
+  server-resolved price ID — never a number in the client bundle.** Read the
+  header comment in that file before touching it.
+- **CSRF.** Auth here is a cookie, and CORS does not stop a cross-site write —
+  it only stops the attacker reading the reply. The only thing standing in the
+  way was Clerk's SameSite=Lax default, which is a third party's dashboard
+  setting, not a control in this repo. `middlewares/csrf.ts` now requires
+  every POST/PUT/PATCH/DELETE to carry either an allowed `Origin` or an
+  `Authorization: Bearer` header. `express.urlencoded` was removed at the same
+  time (nothing used it) since it was one of the two no-preflight paths in.
+- **Daily cap on model calls.** The 30/min limiter allowed 43,200 model calls
+  per user per day. Groq bills against an org-wide daily quota, so one looping
+  account could exhaust everyone's. Now **250 per user, then a five-hour
+  cooldown**, on `/ai` + `/actions` — see `middlewares/usageLimit.ts`.
+  Deliberately not `express-rate-limit`: its fixed window starts at the first
+  request of the window, so an exhausted user could be free again minutes
+  later. The cooldown is timed from the moment the budget runs out, which is
+  the whole point of calling it one.
+
+  Two things to know before changing the numbers. **The cooldown is what
+  refills the budget**, so somebody deliberately maxing out gets 250 every five
+  hours — around 1,200 in a day, not 250. That is the arithmetic of "cap then
+  cooldown", it is still ~36x tighter than what it replaced, and if a hard
+  250-per-24h is wanted instead, set `COOLDOWN_MS` to `BUDGET_WINDOW_MS`.
+  Second, **`budgetFor(req)` is the seam for paid plans** — when Pro and
+  Enterprise get real numbers, read the plan there and return its budget rather
+  than threading a tier through the middleware.
+- **OAuth state cookie had no `secure` flag** — the one secret the connector
+  CSRF guard compares was allowed to travel in clear. Also now scoped to
+  `/api/connectors`, with `clearCookie` given matching attributes so the
+  single-use value is actually deleted rather than left replayable.
+- **Frontend served no security headers at all.** The API had helmet; the
+  pages founders actually log into had nothing. `vite.config.ts` now sets
+  HSTS, `frame-ancestors 'none'` + `X-Frame-Options: DENY` (there is a
+  one-click "Delete account" behind auth — prime clickjacking bait), nosniff,
+  `Referrer-Policy` and `Permissions-Policy`.
+- **Security-event logging.** Rate-limit trips, blocked cross-origin writes,
+  rejected uploads and attachment-ownership misses now log at warn with the
+  key/origin, never the body. Previously they were invisible — a 429 or 404
+  with nothing recorded server-side.
+- **Cookie/local-storage handling — built, audited, and deliberately NOT shown
+  as a banner.** `lib/cookieConsent.ts` + `pages/legal/CookieBanner.tsx`.
+
+  The audit split what Vera keeps on a device into required (session cookie,
+  OAuth state, the consent records, signup progress, and your own chat index)
+  and preferences (theme, skin, panel layout, dismissals, one refetchable
+  cache). The conclusion was that **none of it requires consent**: there is no
+  analytics, advertising, third-party tag or cross-site tracking, and no IP
+  storage, which leaves user-interface customisation the founder set by
+  clicking something — the textbook consent-exempt case. So the banner is not
+  displayed. A consent request for a dark-mode setting is theatre, and it
+  trains people to click past the notice that will matter later.
+
+  The machinery is retained and wired, behind one boolean: `CONSENT_REQUIRED`
+  in `lib/cookieConsent.ts`. Flip it to `true` and the banner mounts,
+  preference storage becomes opt-in, and declining purges. **Verified both
+  ways in the browser, not assumed** — off: no banner, preferences persist;
+  on: banner renders with both buttons. That switch's comment lists exactly
+  what obliges you to flip it (any analytics/telemetry SDK, any pixel, any
+  third-party embed with its own storage, storing IPs or fingerprints,
+  profiling). Section 19 must change in the same commit if you do.
+
+  What ships today instead of a banner: preference storage is on by default,
+  with a real off switch in Settings → General that also deletes what was
+  stored. The one behaviour to know if you touch `isPreferenceStorageAllowed`
+  is that its default INVERTS with the switch — under consent it must default
+  to off, without consent it must default to on, or removing the banner
+  silently stops every preference from persisting with nothing on screen to
+  explain why.
+- **Clerk telemetry disabled.** It ships on by default and was running — which
+  is how `clerk_telemetry_throttler` appeared in local storage during the audit
+  — while section 19 said there is no analytics on the site. Now
+  `telemetry={{ disabled: true }}` on ClerkProvider, so the sentence is simply
+  true. Change one and you must change the other.
+- **Policy section 19 rewritten, and version bumped to `-r7`.** The old text
+  described a sidebar *cookie* the live app never sets
+  (`components/ui/sidebar.tsx` has no importers — the real setting is local
+  storage under a different name), and disclosed only cookies while the app
+  keeps a dozen items in local storage it never mentioned. It now lists what is
+  actually there, splits it into required and preferences, points at the
+  Settings control, and explains why there is no banner rather than leaving it
+  unaddressed.
+
+  It also says plainly that **IP addresses are not stored** — checked against
+  the code, not assumed: `req.ip` is a transient in-memory rate-limit key for
+  unauthenticated requests, and the pino serializer records only method and
+  path. This was asked for as a disclosure and is deliberately written the
+  other way round, because Vera does not hold IPs and saying it does would be a
+  false statement in a privacy notice. Over-claiming is not the safe direction;
+  it is just inaccurate in the opposite one, and it invites the question "where
+  is it, then?", which has no answer. **If IP logging is ever added, this
+  sentence is the thing that becomes false** — change it in the same commit,
+  bump the version, and give the processing a lawful basis in section 4.
+
+## Already covered before this pass — do not "fix" again
+
+CORS allowlist with a fatal-on-unset production check; 256kb JSON body ceiling
+and 10MB upload ceiling; upload type allowlist by extension with a
+server-generated random filename; no `express.static` anywhere (so no
+directory listing, and uploads are only reachable through the authenticated
+`GET /attachments/:id`); dead admin/debug routers deleted rather than guarded;
+5xx error messages replaced with a fixed string so table names and paths don't
+leak; prompt-injection fencing on every untrusted-text path into the model
+(web search, attachments, dossier extraction, connector-sourced drafts).
+Passwords, reset links, session invalidation on password change, login
+lockout, and user-enumeration defences are all Clerk's — this codebase never
+sees a password.
+
+## Not fixable from code — these are yours
+
+1. **Database permissions.** `lib/db/src/index.ts` connects with whatever
+   `DATABASE_URL` grants, which on a provisioned Postgres is usually the owner
+   role. The app needs SELECT/INSERT/UPDATE/DELETE on its own tables and
+   nothing else — not CREATE, not DROP, not superuser. Make a restricted role,
+   run migrations as the owner separately, and point `DATABASE_URL` at the
+   restricted one.
+2. **Confirm Clerk's session cookie is still SameSite=Lax** and that lockout
+   and reset-rate-limiting are enabled in the Clerk dashboard. The CSRF
+   middleware means Vera no longer *depends* on the first one, but it should
+   not be silently relaxed either.
+3. **A real document CSP** (`script-src`/`connect-src`). Deliberately not
+   guessed at — this app loads Clerk and Google Fonts from third-party
+   origins, and a CSP written blind either allows everything or breaks sign-in
+   in production only. Write it against the deployed origin list and test the
+   auth flow.
+4. **The usage cap counts per process.** In-memory, so on autoscale the real
+   ceiling is 250 × instances and a redeploy clears every cooldown. Worth
+   moving to a shared store or a `usage_daily` row once there's a paid Groq
+   tier and a bill worth the difference — and note this becomes load-bearing
+   the moment plans are priced on usage, because at that point the counter is
+   billing data, not just an abuse control.
+5. **The plan tiers on `/enterprise/plan` are not enforced anywhere.** Free,
+   Pro and Max advertise different limits; the server applies none of them.
+   Not a security hole today (nobody is paying), but it becomes a false
+   advertising problem the day someone does.
 
 ---
 

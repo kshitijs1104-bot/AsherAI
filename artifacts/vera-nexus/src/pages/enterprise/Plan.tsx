@@ -46,6 +46,11 @@ export function PlanGate() {
           </div>
           <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Choose Your Plan</h1>
           <p className="text-sm text-[var(--muted)]">All plans start with Vera's full intelligence engine. Limits apply based on tier.</p>
+          {/* Paid plans are not chargeable yet — /enterprise/checkout says so in
+              full and takes no payment details. This line exists so the price
+              is never read as a live charge on the screen that shows it, rather
+              than only on the screen after it. Remove it when billing is real. */}
+          <p className="text-xs text-[var(--dim)] mt-3">Prices are indicative — billing isn't live yet, and no card is required to continue.</p>
         </div>
 
         {/* Tier selector cards */}

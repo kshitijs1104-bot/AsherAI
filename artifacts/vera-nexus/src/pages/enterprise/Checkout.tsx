@@ -3,18 +3,62 @@ import { completeGate } from '../../lib/enterpriseGate';
 import { useLocation } from 'wouter';
 import { GateProgress } from './Signup';
 
+// ---- Why there is no card form on this screen ----
+//
+// THE BUG THIS CLOSES. This page used to render a full card form —
+// cardholder name, PAN, expiry, CVC — under the heading "Secure checkout"
+// and a $299/mo price, with a button reading "Subscribe & Unlock Vera".
+// Submitting it ran `setTimeout(1800ms)` and then called completeGate().
+//
+// Nothing was sent anywhere. No Stripe, no PSP, no server call at all. The
+// card number lived in React state and was dropped on navigation. The only
+// disclosure was one line of 11px grey text BELOW the submit button reading
+// "Placeholder checkout — Stripe will be wired before launch", which is
+// after the point where a founder has already typed their PAN.
+//
+// That is not an unfinished feature, it is three distinct liabilities:
+//
+//   1. It solicits a primary account number and CVC on a page that has no
+//      business touching either. The moment a real user types a real card
+//      here, this app is handling cardholder data outside PCI DSS scope
+//      with no tokenisation, no vault and no processor. The correct amount
+//      of card data for an application that does not charge cards is none.
+//   2. It says "Secure checkout. Cancel anytime. Access activates instantly"
+//      and shows a price, next to a form that charges nothing. A user who
+//      completes it reasonably believes they have started a paid
+//      subscription. They have not, and there is no record that they tried.
+//   3. It is the exact shape of a credential-harvesting page. If it ever
+//      leaked into a screenshot, a demo, or a search index, it is
+//      indistinguishable from one.
+//
+// THE FIX is not to make the form "safer" — it is to delete it. Card entry
+// belongs to the processor, never to this origin: when billing is real it
+// must be Stripe Checkout (a redirect to Stripe's own domain) or Stripe
+// Elements (an iframe served by Stripe), so the PAN never enters this app's
+// DOM at all. Either way this component's job shrinks to "start a session on
+// the server and send the browser there".
+//
+// Until that exists, the honest screen is this one: state plainly that
+// billing is not live, that no card is required and nothing will be charged,
+// and let the founder through. See BILLING_NOT_LIVE below — that constant is
+// the switch this whole screen hangs off, so wiring Stripe means replacing
+// this file, not editing copy around a form.
+//
+// DO NOT reintroduce a card field here, not even disabled, not even behind a
+// feature flag, and not "just for the demo video". The price shown on
+// /enterprise/plan is likewise display copy only — when it becomes a real
+// charge, the amount must come from the server (a price ID resolved
+// server-side), never from a number typed into this bundle, or the client
+// gets to name its own price.
+
 export function CheckoutGate() {
   const [, navigate] = useLocation();
-  const [processing, setProcessing] = useState(false);
-  const [card, setCard] = useState({ number: '', expiry: '', cvc: '', name: '' });
+  const [continuing, setContinuing] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setProcessing(true);
-    setTimeout(() => {
-      completeGate();
-      navigate('/vera');
-    }, 1800);
+  const handleContinue = () => {
+    setContinuing(true);
+    completeGate();
+    navigate('/vera');
   };
 
   return (
@@ -24,84 +68,50 @@ export function CheckoutGate() {
           <div className="inline-flex items-center gap-2 bg-[var(--mint)]/10 border border-[var(--mint)]/30 px-4 py-1.5 rounded-full text-xs font-mono text-[var(--mint)] uppercase tracking-widest mb-6">
             Enterprise Access · Gate 4 of 4
           </div>
-          <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Subscribe to Vera</h1>
-          <p className="text-sm text-[var(--muted)]">Secure checkout. Cancel anytime. Access activates instantly.</p>
+          <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Billing isn't live yet</h1>
+          <p className="text-sm text-[var(--muted)]">
+            Vera isn't charging for access at this stage. You won't be asked for a card, and nothing will be
+            billed to you today.
+          </p>
         </div>
 
-        <div className="bg-[var(--surface2)] border border-[var(--border)] rounded-xl p-4 mb-6 flex items-center justify-between">
-          <div>
-            <div className="text-sm font-bold text-white">Vera · Max Plan</div>
-            <div className="text-xs text-[var(--muted)] font-mono">Unlimited · 18-month roadmaps · Priority queue</div>
-          </div>
-          <div className="text-2xl font-syne font-extrabold text-[var(--mint)]">$299<span className="text-sm font-normal text-[var(--muted)]">/mo</span></div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 space-y-5">
-          <div>
-            <label className="block text-xs font-mono text-[var(--dim)] uppercase tracking-wider mb-2">Cardholder Name</label>
-            <input
-              type="text"
-              value={card.name}
-              onChange={e => setCard(c => ({ ...c, name: e.target.value }))}
-              placeholder="Jane Smith"
-              className="w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-4 py-3 text-sm text-[var(--text)] placeholder-[var(--dim)] focus:outline-none focus:border-[var(--indigo)] transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-mono text-[var(--dim)] uppercase tracking-wider mb-2">Card Number</label>
-            <input
-              type="text"
-              value={card.number}
-              onChange={e => setCard(c => ({ ...c, number: e.target.value }))}
-              placeholder="4242 4242 4242 4242"
-              maxLength={19}
-              className="w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-4 py-3 text-sm text-[var(--text)] placeholder-[var(--dim)] focus:outline-none focus:border-[var(--indigo)] transition-colors font-mono"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-mono text-[var(--dim)] uppercase tracking-wider mb-2">Expiry</label>
-              <input
-                type="text"
-                value={card.expiry}
-                onChange={e => setCard(c => ({ ...c, expiry: e.target.value }))}
-                placeholder="MM / YY"
-                maxLength={7}
-                className="w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-4 py-3 text-sm text-[var(--text)] placeholder-[var(--dim)] focus:outline-none focus:border-[var(--indigo)] transition-colors font-mono"
-              />
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="text-[var(--mint)] text-sm mt-0.5">✓</span>
+              <p className="text-sm text-[var(--text)] leading-relaxed">
+                No card details are collected anywhere in this product.
+              </p>
             </div>
-            <div>
-              <label className="block text-xs font-mono text-[var(--dim)] uppercase tracking-wider mb-2">CVC</label>
-              <input
-                type="text"
-                value={card.cvc}
-                onChange={e => setCard(c => ({ ...c, cvc: e.target.value }))}
-                placeholder="123"
-                maxLength={4}
-                className="w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-4 py-3 text-sm text-[var(--text)] placeholder-[var(--dim)] focus:outline-none focus:border-[var(--indigo)] transition-colors font-mono"
-              />
+            <div className="flex items-start gap-3">
+              <span className="text-[var(--mint)] text-sm mt-0.5">✓</span>
+              <p className="text-sm text-[var(--text)] leading-relaxed">
+                No subscription is created and no payment method is stored.
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <span className="text-[var(--mint)] text-sm mt-0.5">✓</span>
+              <p className="text-sm text-[var(--text)] leading-relaxed">
+                The plan prices on the previous screen are indicative. When paid plans open, you'll be told
+                the price and asked to agree before anything is charged.
+              </p>
             </div>
           </div>
 
           <button
-            type="submit"
-            disabled={processing}
-            className="w-full bg-[var(--mint)] text-black font-bold py-3.5 rounded-lg transition-colors text-sm uppercase tracking-wider disabled:opacity-70 flex items-center justify-center gap-2 mt-2"
+            type="button"
+            onClick={handleContinue}
+            disabled={continuing}
+            className="w-full bg-[var(--mint)] text-black font-bold py-3.5 rounded-lg transition-colors text-sm uppercase tracking-wider disabled:opacity-70 flex items-center justify-center gap-2"
           >
-            {processing ? (
-              <>
-                <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin"></div>
-                Activating Access...
-              </>
-            ) : (
-              'Subscribe & Unlock Vera →'
-            )}
+            {continuing ? 'Opening Vera...' : 'Continue to Vera →'}
           </button>
 
-          <p className="text-[11px] text-center text-[var(--dim)] font-mono">
-            Placeholder checkout — Stripe will be wired before launch.
+          <p className="text-[11px] text-center text-[var(--dim)] font-mono leading-relaxed">
+            When billing goes live, card entry will happen on the payment provider's own page — never on this
+            one.
           </p>
-        </form>
+        </div>
 
         <GateProgress current={3} />
       </div>

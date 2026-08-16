@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { prefStorage } from './cookieConsent';
 
 // Which visual identity Vera renders in. Three of them, and every one is a
 // designed system rather than a colourway — each ships its own light and dark
@@ -53,14 +54,11 @@ function isSkin(value: unknown): value is VeraSkin {
 
 /** The stored choice, or null when the founder has never been asked. */
 export function readStoredSkin(): VeraSkin | null {
-  try {
-    const raw = localStorage.getItem(SKIN_KEY);
-    return isSkin(raw) ? raw : null;
-  } catch {
-    // Private-browsing tabs with no localStorage fall through to the default
-    // and simply get asked again next visit, which is harmless.
-    return null;
-  }
+  // Private-browsing tabs with no localStorage — and anyone who chose
+  // "essential only" in the cookie banner — fall through to the default and
+  // are simply asked again next visit, which is harmless.
+  const raw = prefStorage.getItem(SKIN_KEY);
+  return isSkin(raw) ? raw : null;
 }
 
 // A tab with no usable localStorage (private browsing, storage disabled)
@@ -103,11 +101,9 @@ export function getSkin(): VeraSkin {
 export function setSkin(skin: VeraSkin) {
   current = skin;
   answeredThisSession = true;
-  try {
-    localStorage.setItem(SKIN_KEY, skin);
-  } catch {
-    // Preference won't survive the session; the applied skin below still does.
-  }
+  // A no-op for anyone who declined optional storage — the skin below is still
+  // applied, so the choice holds for this session and simply doesn't persist.
+  prefStorage.setItem(SKIN_KEY, skin);
   applySkin(skin);
   listeners.forEach((fn) => fn(skin));
 }

@@ -22,6 +22,7 @@ import { VeraSettingsModal } from './VeraSettingsModal';
 import { AttachmentPreviewModal, type PreviewableAttachment } from './AttachmentPreviewModal';
 import { useVenusTheme } from '../lib/venusTheme';
 import { useVeraSkin } from '../lib/veraSkin';
+import { prefStorage } from '../lib/cookieConsent';
 import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
 
 // One consistent compact row shape for everything below New Chat — replaces
@@ -137,9 +138,13 @@ function normalizeCompanyKey(companyName: string) {
   return companyName.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+// Both go through prefStorage, not localStorage: this cache is registered as
+// optional in lib/cookieConsent.ts, so the write is a no-op for anyone who
+// chose "essential only". Nothing is lost by that — every entry here is
+// re-fetchable, which is exactly why it qualified as optional.
 function loadCompanyReportCache(): Record<string, CompanyReportState> {
   try {
-    const raw = localStorage.getItem('ve_company_reports');
+    const raw = prefStorage.getItem('ve_company_reports');
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -147,9 +152,7 @@ function loadCompanyReportCache(): Record<string, CompanyReportState> {
 }
 
 function persistCompanyReportCache(cache: Record<string, CompanyReportState>) {
-  try {
-    localStorage.setItem('ve_company_reports', JSON.stringify(cache));
-  } catch {}
+  prefStorage.setItem('ve_company_reports', JSON.stringify(cache));
 }
 
 // Whether the Goal/Roadmap panels show above the chat thread at all — a
@@ -213,21 +216,15 @@ function useAutoGrow(value: string, maxHeight = 200) {
 }
 
 function loadPanelPref(key: string, defaultValue = true): boolean {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw === null ? defaultValue : raw === 'true';
-  } catch {
-    return defaultValue;
-  }
+  const raw = prefStorage.getItem(key);
+  return raw === null ? defaultValue : raw === 'true';
 }
 
+// Best-effort by design: a private-browsing tab, or a founder who declined
+// optional storage, just means the panel layout resets next visit. The panel
+// still opens and closes normally for the rest of the session.
 function savePanelPref(key: string, value: boolean) {
-  try {
-    localStorage.setItem(key, String(value));
-  } catch {
-    // Best-effort — a private-browsing tab with no localStorage just means
-    // the preference resets next visit, which is harmless.
-  }
+  prefStorage.setItem(key, String(value));
 }
 
 

@@ -8,6 +8,8 @@ import { getAuth } from "@clerk/express";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { clerkMiddleware } from "./middlewares/auth";
+import { sameOriginOnly } from "./middlewares/csrf";
+import { dailyUsageLimit } from "./middlewares/usageLimit";
 
 if (!process.env["CLERK_SECRET_KEY"]) {
   throw new Error(
@@ -134,7 +136,16 @@ app.use(
 // inherited one. Uploads do not pass through here — multer streams them to
 // disk with its own 10MB limit (see routes/attachments.ts).
 app.use(express.json({ limit: "256kb" }));
-app.use(express.urlencoded({ extended: true, limit: "256kb" }));
+
+// `express.urlencoded` was removed rather than tightened. No route reads a
+// form-encoded body — every handler either zod-parses JSON (all of them, see
+// the `safeParse(req.body)` calls) or takes multipart via multer. What
+// mounting it DID do was accept `application/x-www-form-urlencoded`, which is
+// one of the three "simple" content types a cross-origin <form> can post
+// without a CORS preflight. Since auth here is a cookie, that was the cheapest
+// available CSRF surface, kept open by a parser nothing used. Removing it
+// costs nothing and closes one of the two simple-request paths; the other
+// (multipart, needed by /attachments) is covered by sameOriginOnly below.
 
 // ---- cookie-parser: this was missing, and it silently broke OAuth ----
 //
@@ -157,6 +168,16 @@ app.use(cookieParser());
 // routes that must be signed-in use requireAuth from ./middlewares/auth.
 app.use(clerkMiddleware());
 
+// ---- CSRF ----
+//
+// Must come after cors() (so real preflights are already answered) and after
+// clerkMiddleware (so a blocked request is still logged with whatever
+// identity it had). Applies only to POST/PUT/PATCH/DELETE — see
+// middlewares/csrf.ts for why an Origin check rather than a token, and why
+// CORS alone was not protecting these routes. Given the same origin list as
+// cors() so the two can never drift.
+app.use(sameOriginOnly(corsOrigins));
+
 // ---- Rate limiting ----
 //
 // There was none anywhere in this server. Every limiter below keys on the
@@ -172,6 +193,18 @@ function userOrIpKey(req: express.Request): string {
   return userId ? `u:${userId}` : `ip:${ipKeyGenerator(req.ip ?? "")}`;
 }
 
+// Every limiter below logs when it trips. A single 429 is a founder typing
+// fast; a stream of them against one key is either a runaway client or
+// someone walking the endpoints, and neither is visible if the limiter
+// silently returns a status. This is the security-event log for abuse — it
+// records WHICH limiter and WHICH key, never the request body.
+function loggingHandler(limiterName: string, body: { error: string }) {
+  return function handler(req: express.Request, res: express.Response) {
+    logger.warn({ limiter: limiterName, key: userOrIpKey(req), path: req.path, method: req.method }, "Rate limit exceeded");
+    res.status(429).json(body);
+  };
+}
+
 // Applies to everything. Sized to be invisible to real use of the product and
 // still cap automated hammering.
 const globalLimiter = rateLimit({
@@ -180,7 +213,7 @@ const globalLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   keyGenerator: userOrIpKey,
-  message: { error: "Too many requests — slow down and try again shortly." },
+  handler: loggingHandler("global", { error: "Too many requests — slow down and try again shortly." }),
 });
 
 // Tighter budget for the routes that cost real money per call. /ai/* and
@@ -193,11 +226,32 @@ const expensiveLimiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
   keyGenerator: userOrIpKey,
-  message: { error: "You're sending requests faster than Vera can think — give it a moment." },
+  handler: loggingHandler("expensive", { error: "You're sending requests faster than Vera can think — give it a moment." }),
 });
+
+// ---- Daily ceiling on model calls, which the per-minute limiter is not ----
+//
+// THE GAP THIS CLOSES. `expensiveLimiter` caps the RATE (30/min) but not the
+// TOTAL. Sustained at the limit that is 43,200 model calls per user per day —
+// so "rate limited" and "unbounded" were the same thing over any window
+// longer than a minute. What makes that concrete rather than theoretical here
+// is that Groq bills against an ORG-WIDE daily token quota (routes/ai.ts
+// already handles the 429 for hitting it, and the comments there record a day
+// when the org's 200,000/day was exhausted). One account looping overnight
+// therefore doesn't just run up its own bill — it spends everyone else's
+// quota, and every other founder's next question fails. A per-user daily cap
+// is what turns that from an outage into one noisy account hitting its own
+// wall.
+//
+// The budget itself (250 calls, then a five-hour cooldown) and why it isn't
+// another express-rate-limit block live in middlewares/usageLimit.ts. Given
+// the SAME key function as the limiters above on purpose — two limiters that
+// disagree about who a caller is are two limiters with different ceilings.
+const dailyModelCallLimiter = dailyUsageLimit(userOrIpKey);
 
 app.use("/api", globalLimiter);
 app.use(["/api/ai", "/api/actions", "/api/attachments"], expensiveLimiter);
+app.use(["/api/ai", "/api/actions"], dailyModelCallLimiter);
 
 app.use("/api", router);
 

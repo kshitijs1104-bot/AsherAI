@@ -128,6 +128,11 @@ router.post("/attachments", requireAuth, async (req, res) => {
   const uploadError = await runUpload(req, res);
   if (uploadError) {
     const tooLarge = (uploadError as { code?: string }).code === "LIMIT_FILE_SIZE";
+    // Logged as a security event, not just a UX one. A founder sending a .zip
+    // once is noise; a run of rejected uploads from one account is someone
+    // testing what the type gate accepts, and that is the signal that matters
+    // — it is invisible if a rejection only ever becomes a 415 in the browser.
+    req.log.warn({ reason: tooLarge ? "size" : "type" }, "Upload rejected by the attachment gate");
     return res.status(tooLarge ? 413 : 415).json({
       error: tooLarge ? "That file is over the 10MB limit — send a smaller one, or paste the relevant part." : uploadError.message,
     });
@@ -185,7 +190,16 @@ router.get("/attachments/:id", requireAuth, async (req, res) => {
       .from(attachmentsTable)
       .where(and(eq(attachmentsTable.id, id), eq(attachmentsTable.userId, userId)))
       .limit(1);
-    if (!attachment) return res.status(404).json({ error: "Attachment not found" });
+    if (!attachment) {
+      // The query filters on userId as well as id, so this branch is BOTH
+      // "no such attachment" and "someone else's attachment" — they return
+      // the same 404 on purpose, because distinguishing them would confirm
+      // which ids exist. The log is where the distinction is kept: an
+      // authenticated user walking ids is worth seeing, and only the server
+      // should be able to see it.
+      req.log.warn({ attachmentId: id, userId }, "Attachment fetch missed — unknown id or not owned by this user");
+      return res.status(404).json({ error: "Attachment not found" });
+    }
 
     const filePath = path.join(UPLOADS_DIR, attachment.storagePath);
     res.setHeader("Content-Type", attachment.mimeType);

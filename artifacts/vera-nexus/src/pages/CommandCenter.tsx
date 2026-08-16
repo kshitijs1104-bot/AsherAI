@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useLocation } from 'wouter';
+import { prefStorage } from '../lib/cookieConsent';
 import {
   ArrowLeft, ArrowRight, Flame, X, Send, PlugZap, Check,
   Mail, MessageSquare, FileSpreadsheet, NotebookText, Ticket, Linkedin, Plug,
@@ -118,19 +119,18 @@ const HIDDEN_KEY = 've_cc_hidden';
 
 function readHidden(): Set<number> {
   try {
-    const raw = localStorage.getItem(HIDDEN_KEY);
+    const raw = prefStorage.getItem(HIDDEN_KEY);
     return new Set(raw ? (JSON.parse(raw) as number[]) : []);
   } catch {
     return new Set();
   }
 }
 
+// Best-effort: the row simply reappears next reload if this doesn't persist —
+// which is the case in a private-browsing tab, and for anyone who declined
+// optional storage in the cookie banner (this key is registered there).
 function writeHidden(ids: Set<number>) {
-  try {
-    localStorage.setItem(HIDDEN_KEY, JSON.stringify([...ids]));
-  } catch {
-    // Best-effort: the row simply reappears next reload.
-  }
+  prefStorage.setItem(HIDDEN_KEY, JSON.stringify([...ids]));
 }
 
 type Category = 'drafts' | 'decisions' | 'workflows' | 'notes';

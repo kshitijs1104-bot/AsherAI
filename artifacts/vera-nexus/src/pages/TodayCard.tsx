@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useLocation } from 'wouter';
+import { prefStorage } from '../lib/cookieConsent';
 import { Sunrise, Sun, MoonStar, ChevronUp, ChevronDown, ChevronRight, ThumbsUp, ThumbsDown, Minus, X, Check } from 'lucide-react';
 import {
   useGoals,
@@ -80,20 +81,14 @@ function todayKey(): string {
 }
 
 function isDismissedToday(): boolean {
-  try {
-    return localStorage.getItem(DISMISS_KEY) === todayKey();
-  } catch {
-    return false;
-  }
+  return prefStorage.getItem(DISMISS_KEY) === todayKey();
 }
 
+// Best-effort — a private-browsing tab, or a founder who declined optional
+// storage in the cookie banner (this key is registered there), just means the
+// card can reappear next reload, which is harmless.
 function dismissToday() {
-  try {
-    localStorage.setItem(DISMISS_KEY, todayKey());
-  } catch {
-    // Best-effort — a private-browsing tab with no localStorage just means
-    // the card can reappear next reload, which is harmless.
-  }
+  prefStorage.setItem(DISMISS_KEY, todayKey());
 }
 
 // Reads the device's own clock, not a server timestamp — this card can pop

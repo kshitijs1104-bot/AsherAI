@@ -267,13 +267,23 @@ export const ADDITIONAL_SECTIONS: readonly PolicySection[] = [
     id: 'cookies',
     heading: '19. Cookies and similar technologies',
     body: [
-      `Vera uses only the cookies needed to make the product work. There is no advertising or analytics tracking on this site, and no cookie set by anyone other than ${OWNER_NAME}.`,
+      `There is no advertising or analytics tracking on this site — no third-party tag, no pixel, and nothing that follows you to another website. Everything below is set by ${OWNER_NAME} or by the authentication provider named in section 5, and it falls into two groups: the part that is required, and the part you choose.`,
+      'Required, and not subject to a choice, because without them there is no working product. There is no consent banner for these, and none is needed — each one exists to deliver something you asked for:',
       [
-        'A session cookie from our authentication provider (section 5) — how you stay signed in. Strictly necessary: without it you would have to sign in again on every page.',
-        'A cookie that remembers whether you last left the sidebar open or collapsed. Stores that one setting and nothing else about you.',
+        'A session cookie from our authentication provider (section 5) — how you stay signed in. Without it you would have to sign in again on every page.',
         'A short-lived cookie used only for the few seconds it takes to connect a third-party account (Gmail, Notion, and the others in section 2), to verify the connection request came from you. Deleted immediately after.',
+        'A record, kept in your browser, of which version of this policy you accepted and what you chose about the optional storage below. Storing your refusal is what stops you being asked again on every page.',
+        'A record, kept in your browser, of where you are in signing up, and a local index of your own chats and saved analyses. The chat index is required rather than optional because it is what the sidebar lists your conversations from — clearing it would make your own history unreachable in the interface, so it is not something we treat as a preference you can decline.',
       ],
-      'None of these need the consent banner that non-essential tracking would, because none of them are non-essential tracking — each exists to make a feature you asked for work, and none of them follow you across other websites. If that ever changes — analytics or advertising technology being added — this section changes with it, section 12 governs how, and we will ask for consent where the law requires it before any such cookie is set.',
+      'Preferences, which you can switch off. These are settings and dismissals only — no content, nothing that identifies you, and nothing that leaves your device:',
+      [
+        'Your theme and visual identity choices, whether the sidebar and the goal and roadmap panels were left open, which cards you dismissed, and a cache of company reports already fetched so the same one is not requested twice.',
+      ],
+      'You are not shown a cookie consent banner, and that is a deliberate decision rather than an omission. A banner is required for tracking, advertising and analytics technology, and there is none of that here. What is left is the list directly above: settings you created by clicking something in the interface, kept so the product looks the way you left it. Storage of that kind, set as the result of your own explicit choice, does not require consent — and asking permission for a dark-mode setting would train you to click past the notice that will matter if that ever changes.',
+      'You can still turn it off. Settings → General has a control for it, and switching it off deletes what is already stored rather than merely recording that you objected. Vera stays fully functional either way; it simply starts from defaults each time. If tracking or analytics technology is ever introduced, a consent request will appear before any of it runs.',
+      'Most of the preference items above are stored using your browser\'s local storage rather than as cookies. That is a technical distinction and not a legal one: it is still information kept on your device, so it is disclosed here and covered by the same control.',
+      'We do not store your IP address. The server reads the connecting address transiently, in memory, to rate-limit requests that are not signed in and to protect the service from abuse; it is not written to our database, not linked to your account, and the request log records only the method and path of a request. If this ever changes, this section changes with it under section 12.',
+      'If advertising or analytics technology is ever added, this section changes with it, section 12 governs how, and consent will be asked for where the law requires it before any such technology is used.',
     ],
   },
   {

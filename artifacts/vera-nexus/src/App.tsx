@@ -42,6 +42,7 @@ import { PlanGate } from "@/pages/enterprise/Plan";
 import { CheckoutGate } from "@/pages/enterprise/Checkout";
 import { PrivacyGate } from "@/pages/legal/PrivacyGate";
 import { PrivacyPolicyPage } from "@/pages/legal/PrivacyPolicyPage";
+import { CookieBanner } from "@/pages/legal/CookieBanner";
 import { usePrivacyAccepted } from "@/lib/privacyConsent";
 
 const queryClient = new QueryClient();
@@ -175,6 +176,25 @@ function AfterConsent({ children }: { children: ReactNode }) {
   return usePrivacyAccepted() ? <>{children}</> : null;
 }
 
+// Shows the cookie banner everywhere EXCEPT underneath the privacy gate.
+//
+// `useAuth` rather than <SignedIn>/<SignedOut> because this needs all three
+// states distinguished, not two: signed out (show — a visitor on the landing
+// page can still set a preference), signed in and past the policy (show), and
+// signed in but still facing PrivacyGate (withhold, so the two consent
+// surfaces are never on screen together). While Clerk is still loading, the
+// answer is "not yet" — a banner that flashes in and out during boot reads as
+// a glitch, and one extra beat before asking costs nothing.
+function CookieBannerHost() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const privacyAccepted = usePrivacyAccepted();
+
+  if (!isLoaded) return null;
+  if (isSignedIn && !privacyAccepted) return null;
+
+  return <CookieBanner />;
+}
+
 // /enterprise/signup used to render a form that took a name and an email,
 // wrote them to localStorage, and moved the visitor to the next "gate". It
 // created no account. Anyone could walk the whole four-step funnel without
@@ -305,7 +325,17 @@ function Router() {
 
 function App() {
   return (
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>
+    // telemetry is off because the privacy policy says, in section 19, that
+    // there is no analytics on this site — and until this line existed that
+    // was not quite true. Clerk's SDK ships usage telemetry ON by default; it
+    // was running here, which is how `clerk_telemetry_throttler` turned up in
+    // local storage during the cookie audit. It reports SDK usage rather than
+    // anything about the founder, and it is not advertising, but it is still
+    // a third party receiving data from this page for a purpose that serves
+    // the user not at all — and a policy sentence that needs that much
+    // qualification to stay true is a sentence that should just be made true.
+    // Leave it disabled, or change section 19 in the same commit.
+    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} telemetry={{ disabled: true }}>
       <AuthTokenBridge />
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
@@ -327,6 +357,16 @@ function App() {
                 <SkinPicker />
               </AfterConsent>
             </SignedIn>
+            {/* The cookie banner mounts here — and renders nothing today,
+                because lib/cookieConsent.ts's CONSENT_REQUIRED is false and
+                Vera has no storage that needs consent. Deliberately left
+                mounted rather than deleted: flipping that one boolean is what
+                turns it on, and a component that is wired but inert stays
+                working, whereas one commented out here rots against every
+                refactor until it no longer compiles on the day it is needed.
+                CookieBannerHost also keeps it from ever stacking on top of
+                PrivacyGate. Read the switch's comment before changing it. */}
+            <CookieBannerHost />
             <Toaster />
           </>
         </TooltipProvider>
