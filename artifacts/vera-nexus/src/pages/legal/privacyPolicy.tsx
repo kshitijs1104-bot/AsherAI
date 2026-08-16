@@ -13,6 +13,13 @@
    what was agreed. So both surfaces render PolicyProse below, and the only
    thing that differs between them is which colour tokens they hand it.
 
+   THREE ARRAYS, RENDERED AS THREE BLOCKS: POLICY_SECTIONS (1-13, privacy),
+   OWNERSHIP_SECTIONS (14-18, terms of use), ADDITIONAL_SECTIONS (19-25,
+   cookies / region-specific rights / dispute resolution / definitions — see
+   the note above that array for why it's a third array instead of being
+   folded into one of the first two). Both surfaces must render all three, in
+   order.
+
    THIS IS A DRAFT WRITTEN AGAINST THE CODE, NOT LEGAL ADVICE. Every factual
    claim was checked against what the software actually does: the subprocessor
    list is the set of external services the server really calls, and the
@@ -69,9 +76,10 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
     heading: '1. Who this is and what it covers',
     body: [
       `Vera is a private operating system for founders, built and operated by ${OWNER_NAME}, which is the company you are agreeing with here. This policy covers the Vera web app, the API behind it, and the marketing site. It explains what we hold about you and your company, why, who else touches it, and what you can tell us to stop doing.`,
+      'Vera is a business tool. It is built for founders and operators, and offered to businesses and professionals for use in connection with their business — it is not offered, marketed or intended for personal, family or household use. If you use Vera, you do so in a business capacity, whether that is your own business or one you work for, and not as a consumer.',
       'Vera is a product for businesses, and we ask for a work email address when you sign up. We do not direct Vera at children, we do not market it to them, and we do not knowingly collect personal data from a child. If you believe a child has given us data, write to us at the address in section 13 and we will delete it.',
       'Where this policy says "your data", it means both personal data about you and commercial data about your company. Both are treated the same way here, because in practice they arrive mixed together in the same sentence.',
-      'Sections 1 to 13 are the privacy policy. Sections 14 to 18 are the terms on which Vera is provided — ownership, the limits of what Vera can promise you, and the limits of what we are liable for. Using Vera means agreeing to all of it.',
+      'Sections 1 to 13 are the privacy policy. Sections 14 to 18 are the terms on which Vera is provided — ownership, the limits of what Vera can promise you, and the limits of what we are liable for. Sections 19 onward are additional disclosures — cookies, region-specific rights, and definitions. Using Vera means agreeing to all of it.',
     ],
   },
   {
@@ -87,8 +95,9 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
         'Files you upload — images and documents you attach in the composer. The file is stored on our server, and its text or visual content is extracted once so Vera can read it without re-reading the file on every question.',
         'Connected accounts — if, and only if, you connect one: Gmail, Google Calendar, Google Sheets, Notion, Jira, Slack, LinkedIn or WhatsApp. We hold an encrypted access token plus the specific content the connector is scoped to read. Disconnecting deletes our copy of the token.',
         'Technical and usage data — IP address, browser and device information, request logs, timestamps and error traces. Kept to run the service, rate-limit abuse and debug failures.',
+        'Cookies — a small number of first-party, strictly-necessary cookies. No advertising or analytics tracking. Section 19 lists every one.',
       ],
-      'We do not ask for and do not want: payment card numbers (our payment provider handles those and we never see the full number), government identifiers, health data, biometric data, or your own customers\' personal data. Please do not paste any of those into a chat. If you do, you are responsible for having the right to share it, and section 18 applies.',
+      'We do not ask for and do not want: payment card numbers (our payment provider handles those and we never see the full number), government identifiers, health data, biometric data, genetic data, data revealing racial or ethnic origin, political opinions, religious or philosophical beliefs, trade union membership, sexual orientation or sex life, criminal records, or your own customers\' personal data. Please do not paste any of those into a chat. If you do, you are responsible for having the right to share it, and section 18 applies.',
     ],
   },
   {
@@ -112,6 +121,7 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
       'Vera works by remembering your business. It stores what you tell it and learns from it, which is what lets it pick up a decision you made months ago instead of asking you to explain your company over again, and what lets its judgement keep improving the more it works with you — a colleague who remembers your last conversation is more useful than one who does not.',
       'What that covers: your messages and Vera\'s replies, the facts and decisions Vera derives from them, the extracted content of files you upload, and any feedback you give on a response.',
       'Storing and learning from your content is built into how Vera works, not a separate feature layered on top of it, so it is part of using Vera rather than a switch you set independently of the rest of the product. If you would rather your content were not stored or learned from, closing your account (section 7) removes everything we hold, and where the law of your country gives you a right to object to this specific processing, section 9 explains how to raise it.',
+      'For readers in the UK or EEA, this is our lawful basis under the GDPR, named directly rather than left for you to infer. Storing your content and using it to answer you — the core function of the product — is necessary for the performance of our contract with you (Article 6(1)(b)). Using that content, usually aggregated and stripped of anything that identifies your company, to improve Vera\'s judgement more broadly is based on our legitimate interests in operating and developing the product (Article 6(1)(f)), weighed against your right to privacy — which is why section 4 limits what that involves, and why Article 21 gives you a right to object to it. Where you object, honouring that in practice means closing the account, for the reason already given: there is no version of Vera that runs without this.',
       'What we limit, and hold ourselves to:',
       [
         'We aggregate and strip identifiers wherever the work does not require them — which is most of the time, because what we are usually trying to learn is a pattern, not a company.',
@@ -166,7 +176,7 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
       ],
       'Timing: both happen immediately when you ask, not on a queue. Encrypted backups are the one exception — they roll off within 30 days, so a deleted item can persist in a backup for up to that long before it is gone from every system we operate. We do not restore a backup to recover data you deleted.',
       'Two limits, both stated because they are true and a policy that hid them would be the misleading part. First, the trained-model limit at the end of section 4. Second, disconnecting a connector deletes our copy of the access token but does not revoke it at Google, Notion, Slack or Meta — you should revoke access in that provider\'s own security settings as well, and we cannot do that for you.',
-      'While your account is open, we keep what section 2 describes, because Vera\'s usefulness is a direct function of how much of your history it still has. Technical logs are kept for a short operational window and then discarded.',
+      'While your account is open, we keep what section 2 describes, because Vera\'s usefulness is a direct function of how much of your history it still has. Technical and request logs are kept for up to 90 days and then discarded.',
     ],
   },
   {
@@ -197,15 +207,17 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
         'Opt out of anything that is not required for Vera to function — product email, and any future processing that section 12 introduces.',
         'Object to or restrict a particular use, and withdraw any consent you gave separately from this policy.',
         'Complain to your local data protection authority. You do not have to come to us first, though we would rather you did.',
+        'If you are in California and we deny a request, appeal it — write back and ask us to reconsider. We respond to appeals within 45 days.',
       ],
       'The one thing you cannot switch off while continuing to use Vera is the storing of and training on your content, for the reason given in section 4: it is not a feature layered on top of Vera, it is how Vera works. Your control over it is the control described in section 7 — delete the chat, or close the account and take everything with you.',
+      'We will not deny you goods or services, charge you a different price, or give you a different level of service because you exercised any right in this section. In the specific terms California\'s privacy law uses: we have not sold or shared — as the CCPA defines those words — your personal information in the preceding twelve months, and section 6 governs us if that ever changes. Section 20 restates the rights above in the format California law requires, with the categories of information involved.',
     ],
   },
   {
     id: 'transfers',
     heading: '10. Where your data goes',
     body: [
-      `We operate from ${POLICY_META.jurisdiction}, and the providers in section 5 operate in the United States and the European Union. Using Vera means your data crosses borders. Where it leaves a jurisdiction that restricts transfers, we rely on the standard contractual protections our providers offer, and we do not transfer data to a provider that offers none.`,
+      `We operate from ${POLICY_META.jurisdiction}, and the providers in section 5 operate in the United States and the European Union. Using Vera means your data crosses borders. Where it leaves a jurisdiction that restricts transfers, the mechanism we rely on is the European Commission's Standard Contractual Clauses — and, for transfers out of the UK, the UK's International Data Transfer Addendum to those clauses — incorporated into our contracts with the providers in section 5. We do not transfer data to a provider that has not signed one.`,
     ],
   },
   {
@@ -231,6 +243,105 @@ export const POLICY_SECTIONS: readonly PolicySection[] = [
     heading: '13. Contact',
     body: [
       `Questions, requests, or something in here that turns out to be wrong: ${POLICY_META.contactEmail}. If you tell us this policy does not match what the product does, we will treat it as a bug in the product or a bug in the policy, and fix whichever one is broken.`,
+      'For readers in India: the address above is also our Grievance Officer contact under the Digital Personal Data Protection Act. We acknowledge a grievance within 7 days and aim to resolve it within 30 — the same window every other request in section 9 gets.',
+    ],
+  },
+];
+
+/* ------------------------------------------------------ additional disclosures */
+
+/**
+ * Region-specific and structural clauses that don't belong inside the main
+ * numbered flow of POLICY_SECTIONS or OWNERSHIP_SECTIONS, so they are a third
+ * array rather than inserted into either — inserting them there would
+ * renumber every section after the insertion point, and this document is
+ * cross-referenced by number ("see section 5", "section 16", etc.) often
+ * enough that a renumbering pass is real risk for no real benefit. Appending
+ * a third block, continuing the numbering from 19, adds every one of these
+ * without touching a single existing cross-reference. Real contracts do this
+ * routinely — a jurisdiction-specific addendum at the end is normal, not a
+ * sign the document is disorganised.
+ */
+export const ADDITIONAL_SECTIONS: readonly PolicySection[] = [
+  {
+    id: 'cookies',
+    heading: '19. Cookies and similar technologies',
+    body: [
+      `Vera uses only the cookies needed to make the product work. There is no advertising or analytics tracking on this site, and no cookie set by anyone other than ${OWNER_NAME}.`,
+      [
+        'A session cookie from our authentication provider (section 5) — how you stay signed in. Strictly necessary: without it you would have to sign in again on every page.',
+        'A cookie that remembers whether you last left the sidebar open or collapsed. Stores that one setting and nothing else about you.',
+        'A short-lived cookie used only for the few seconds it takes to connect a third-party account (Gmail, Notion, and the others in section 2), to verify the connection request came from you. Deleted immediately after.',
+      ],
+      'None of these need the consent banner that non-essential tracking would, because none of them are non-essential tracking — each exists to make a feature you asked for work, and none of them follow you across other websites. If that ever changes — analytics or advertising technology being added — this section changes with it, section 12 governs how, and we will ask for consent where the law requires it before any such cookie is set.',
+    ],
+  },
+  {
+    id: 'california',
+    heading: '20. California privacy rights',
+    body: [
+      'This section restates rights already given in section 9, in the categories and format California\'s privacy law (the CCPA, as amended by the CPRA) asks for.',
+      'Categories of personal information collected about California residents in the preceding twelve months, and why:',
+      [
+        'Identifiers — name, email address, IP address, an internal account ID. To create and secure your account.',
+        'Internet or network activity — browser and device information, request logs. To run the service and prevent abuse.',
+        'Professional information — your role, your company\'s name, stage and industry. To calibrate Vera\'s advice to your business.',
+        'Inferences drawn from the above — the facts, decisions and patterns Vera derives from your activity (section 2). This is the memory layer the product is built on.',
+      ],
+      'We have not sold or shared — as the CCPA specifically defines those words — any of these categories to any third party, and section 6 governs us if that ever changes. We do not collect sensitive personal information as the CCPA defines it, so there is no use of sensitive personal information to limit.',
+      'Your rights: everything in section 9, plus the right to appeal a denial of a request (write to section 13\'s address and ask us to reconsider — we respond within 45 days) and the right not to be discriminated against for exercising any of them. An authorised agent may make a request on your behalf; we will ask for evidence you gave them permission to.',
+    ],
+  },
+  {
+    id: 'takedown',
+    heading: '21. Notice and takedown for intellectual property complaints',
+    body: [
+      'Files you upload in Vera are used by you, for you — nothing you upload is published or made visible to anyone outside your own account. Because of that, the situation this section exists for (someone claiming material visible to other users infringes their rights) does not really arise in how Vera works today. We are stating a process anyway, so a legitimate complaint always has somewhere to go, and so there is one if that ever changes.',
+      `If you believe something on Vera infringes your copyright or other intellectual property rights, write to the address in section 13 with: a description of the work you claim is infringed, the specific material you are complaining about and where it is, your contact details, and a good-faith statement that the use is not authorised. We will investigate and, where the complaint is valid, remove or disable access to the material and tell the account holder why.`,
+    ],
+  },
+  {
+    id: 'survival',
+    heading: '22. What survives closing your account',
+    body: [
+      'Closing your account ends this agreement, but not every part of it stops applying. Sections 14 (ownership), 15 (to the extent it describes what happens to your content afterward), 16 (no warranty), 17 (limits on our liability), 18 (your duties, including the indemnity), 21 (intellectual property complaints), 24 (dispute resolution) and 25 (definitions) continue to apply after your account is closed or this agreement otherwise ends. What happens to your data itself is a separate question, governed by section 7, not by this one.',
+    ],
+  },
+  {
+    id: 'assignment',
+    heading: '23. Assignment',
+    body: [
+      'You may not assign or transfer your rights or obligations under this agreement without our written consent. We may assign it, in whole, without needing yours, in connection with a merger, acquisition, reorganisation, or sale of substantially all of our assets — the same kind of transaction section 5 already tells you about. An assignment under this section does not reduce the protections this document gives you.',
+    ],
+  },
+  {
+    id: 'disputes',
+    heading: '24. Dispute resolution: arbitration, class waiver and venue',
+    body: [
+      'Most disagreements get resolved faster one-on-one than in a courtroom or as part of a group action. This section is about the disputes between you and us over these terms or your use of Vera — it does not limit your right to complain to a data protection authority or other regulator, which section 9 covers separately and which cannot be signed away.',
+      [
+        `You and ${OWNER_NAME} agree to resolve any dispute arising out of or relating to these terms or your use of Vera through binding arbitration on an individual basis, rather than in court, except where this section says otherwise. Choosing arbitration means both of us are giving up the right to a jury trial and to litigate this in court.`,
+        'Claims are brought only in an individual capacity — not as a plaintiff or class member in any class, collective, consolidated or representative proceeding, and not combined with anyone else\'s claim without every party\'s consent. An arbitrator has no authority to conduct a class or representative arbitration.',
+        `Arbitration is seated in ${POLICY_META.jurisdiction}, conducted in English under the Arbitration and Conciliation Act, 1996, before a single arbitrator. Each side bears its own costs unless the arbitrator decides otherwise.`,
+        'Carved out of arbitration entirely: either of us may go to a court of competent jurisdiction for injunctive or other equitable relief over actual or threatened infringement, misappropriation or misuse of intellectual property or confidential information (sections 14 and 15) — that kind of harm needs a court\'s power to stop it quickly, not an arbitrator\'s schedule. Either of us may also bring an individual claim in small claims court instead of arbitration, where that court has jurisdiction and the claim qualifies.',
+        `For anything this section sends to court rather than arbitration, the courts of ${POLICY_META.jurisdiction} have exclusive jurisdiction, and both of us consent to that.`,
+        'If the class-action waiver above is found unenforceable for a particular claim, that claim — and only that claim — may proceed in court instead of arbitration. Every other part of this section, and of this agreement, stays in force.',
+      ],
+    ],
+  },
+  {
+    id: 'definitions',
+    heading: '25. Definitions',
+    body: [
+      'A handful of words used throughout this document, defined once here rather than re-explained every time they appear:',
+      [
+        `"Vera", "we", "us" or "our" means ${OWNER_NAME}.`,
+        '"You" or "your" means the person or business using Vera under an account.',
+        '"Content" means anything you type, upload, connect or otherwise submit to Vera, and anything Vera generates in response.',
+        '"Account" means the credentials and settings that let you sign in, and the data associated with them.',
+        '"Personal data" or "personal information" means information that identifies or could reasonably be linked to you or your business, as those terms are defined under applicable law.',
+        '"Processor", "provider" or "subprocessor" means a third party that processes data on our instructions, as listed in section 5.',
+      ],
     ],
   },
 ];
@@ -304,10 +415,11 @@ export const OWNERSHIP_SECTIONS: readonly PolicySection[] = [
         'We disclaim liability for any loss, damage, cost or expense arising out of or in connection with your use of, or reliance upon, Vera or any output it produces — including any decision you took, did not take, or delayed as a result.',
         'We disclaim liability for indirect, incidental, special, consequential, exemplary or punitive damages, and for loss of profits, revenue, business, contracts, anticipated savings, goodwill, reputation or data, whether arising in contract, tort (including negligence), statute or otherwise, and whether or not such loss was foreseeable.',
         'We disclaim liability for the accuracy, completeness, reliability or suitability of any output, for any act or omission of a third-party provider listed in section 5, for anything arising from your own configuration, misuse or breach of these terms, or for any event beyond our reasonable control.',
+        'Our total aggregate liability for all claims arising out of or relating to Vera or these terms, however arising and whether in contract, tort (including negligence), statute or otherwise, is limited to the greater of the total fees you paid us for Vera in the twelve months before the claim arose, or one hundred United States dollars (US$100).',
       ],
       'This section does not exclude or limit liability for death or personal injury caused by negligence, for fraud or fraudulent misrepresentation, for gross negligence or wilful misconduct, or for anything else that applicable law does not permit to be limited or excluded, including any non-waivable statutory or consumer right. If you are a consumer under the law of your country, your statutory rights are unaffected by this document.',
       'If any part of this section, or of section 16, is held unenforceable in a particular jurisdiction, that part is to be read as narrowed to the minimum extent needed to make it enforceable, and every other part stays in force. The rest of this document survives the removal of any single clause.',
-      `These terms are governed by the law of ${POLICY_META.jurisdiction}, without prejudice to any mandatory protection available to you under the law of the country in which you live.`,
+      `These terms are governed by the law of ${POLICY_META.jurisdiction}, without prejudice to any mandatory protection available to you under the law of the country in which you live. Section 24 governs how a dispute is actually brought.`,
     ],
   },
   {

@@ -15,7 +15,7 @@ import { useEffect } from 'react';
 import { Link } from 'wouter';
 import { ArrowLeft } from 'lucide-react';
 import { VeraMark } from '../../components/VeraMark';
-import { OWNERSHIP_SECTIONS, POLICY_META, PolicyProse } from './privacyPolicy';
+import { ADDITIONAL_SECTIONS, OWNERSHIP_SECTIONS, POLICY_META, PolicyProse } from './privacyPolicy';
 import '../landing/landing.css';
 
 export function PrivacyPolicyPage() {
@@ -77,6 +77,18 @@ export function PrivacyPolicyPage() {
                 </p>
               </div>
               <PolicyProse tone="landing" sections={OWNERSHIP_SECTIONS} />
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--lp-line)', paddingTop: 26, display: 'grid', gap: 26 }}>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <div className="lp-eyebrow" style={{ color: 'var(--lp-teal)' }}>
+                  Additional disclosures
+                </div>
+                <p className="lp-small" style={{ margin: 0 }}>
+                  Cookies, region-specific rights, and a few definitions.
+                </p>
+              </div>
+              <PolicyProse tone="landing" sections={ADDITIONAL_SECTIONS} />
             </div>
           </div>
 

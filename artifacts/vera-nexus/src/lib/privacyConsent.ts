@@ -35,7 +35,32 @@ import { useSyncExternalStore } from 'react';
 // the "in plain terms" summary + jump-link shortcut were removed from the
 // consent screen and the public page in favour of the actual document. Every
 // one of those is a real change to what the text says, so it re-prompts too.
-export const PRIVACY_POLICY_VERSION = '2026-08-15-r4';
+//
+// Bumped again, -r4 to -r5, following a structural/substantive legal review:
+// section 1 now states Vera is a business tool, not offered to consumers;
+// section 2's excluded-data list now covers GDPR special categories; section
+// 4 names the GDPR Article 6 lawful basis for storage/training and the
+// Article 21 right to object, rather than leaving it implicit; section 7
+// gives an actual number (90 days) for log retention instead of "a short
+// window"; section 9 adds a CCPA appeal right and a non-discrimination
+// commitment; section 10 names Standard Contractual Clauses specifically
+// instead of "standard contractual protections"; section 13 designates the
+// contact as a DPDPA Grievance Officer with a stated response window. Six
+// entirely new sections were added (19-24, in the new ADDITIONAL_SECTIONS
+// array): cookies, California-specific rights with a categories table, an
+// IP notice-and-takedown process, a survival clause, an assignment clause,
+// and definitions. Every one of these is new information a reader has not
+// seen before, so it re-prompts everyone again.
+//
+// Bumped again, -r5 to -r6: section 17 states a liability cap again (greater
+// of 12 months' fees or US$100 — removed in -r3, reinstated here on explicit
+// instruction after being shown that it directly reversed that earlier
+// decision). New section 24, "Dispute resolution", adds binding individual
+// arbitration and a class-action waiver, which did not exist in any earlier
+// version — this is new obligation a reader is taking on, not a
+// clarification, so it gets its own bump rather than riding along with
+// something else. Definitions renumbered 24 -> 25 to make room for it.
+export const PRIVACY_POLICY_VERSION = '2026-08-15-r6';
 
 const KEY = 've_privacy_consent';
 

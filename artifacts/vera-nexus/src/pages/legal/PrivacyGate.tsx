@@ -27,7 +27,7 @@
 
 import { useState } from 'react';
 import { acceptPrivacy } from '../../lib/privacyConsent';
-import { OWNERSHIP_SECTIONS, POLICY_META, PolicyProse } from './privacyPolicy';
+import { ADDITIONAL_SECTIONS, OWNERSHIP_SECTIONS, POLICY_META, PolicyProse } from './privacyPolicy';
 
 // Takes no props and returns nothing: acceptPrivacy() writes the record and
 // notifies the store behind usePrivacyAccepted, so whoever is gating on that —
@@ -112,6 +112,38 @@ export function PrivacyGate() {
                 </p>
               </div>
               <PolicyProse tone="app" sections={OWNERSHIP_SECTIONS} />
+            </div>
+
+            {/* Cookies, region-specific rights (California, India), IP
+                complaints, and structural boilerplate (survival, assignment,
+                definitions). See the note on ADDITIONAL_SECTIONS for why this
+                is a third block instead of being folded into the numbering
+                above. */}
+            <div
+              style={{
+                borderTop: '1px solid var(--border)',
+                paddingTop: 22,
+                display: 'grid',
+                gap: 24,
+              }}
+            >
+              <div style={{ display: 'grid', gap: 6 }}>
+                <div
+                  className="font-mono"
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: '0.14em',
+                    textTransform: 'uppercase',
+                    color: 'var(--mint)',
+                  }}
+                >
+                  Additional disclosures
+                </div>
+                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, color: 'var(--dim)' }}>
+                  Cookies, region-specific rights, and a few definitions.
+                </p>
+              </div>
+              <PolicyProse tone="app" sections={ADDITIONAL_SECTIONS} />
             </div>
           </div>
         </div>
