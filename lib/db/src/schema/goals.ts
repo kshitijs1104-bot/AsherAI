@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, real, timestamp, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -23,7 +23,9 @@ import { z } from "zod/v4";
 // and a deadline is not reasoned about differently than an ordinary chat;
 // the API layer should enforce all three are present before a goal is
 // considered "set" rather than "draft."
-export const goalsTable = pgTable("goals", {
+export const goalsTable = pgTable(
+  "goals",
+  {
   id: serial("id").primaryKey(),
   chatId: integer("chat_id").notNull().unique(),
   userId: text("user_id").notNull(),
@@ -68,7 +70,12 @@ export const goalsTable = pgTable("goals", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   resolvedAt: timestamp("resolved_at"),
-});
+  },
+  // GET /goals lists every goal for one founder across all their chats, and
+  // filtered only on userId. chatId already has a unique index from the column
+  // definition above; this is the cross-chat read that had none.
+  (table) => [index("goals_user_id_idx").on(table.userId)],
+);
 
 export const insertGoalSchema = createInsertSchema(goalsTable).omit({
   id: true,

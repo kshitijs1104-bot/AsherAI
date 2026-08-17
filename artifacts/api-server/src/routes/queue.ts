@@ -3,6 +3,8 @@ import { db, queueItemsTable } from "@workspace/db";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, requireUserId } from "../middlewares/auth";
+import { describeDbError } from "../lib/dbErrors";
+import { isUserFacingError, messageForCaller } from "../lib/userFacingError";
 import { performQueueItemSendAction } from "../lib/connectors/sendAction";
 
 const router = Router();
@@ -142,7 +144,13 @@ router.post("/queue/:id/action", requireAuth, async (req, res) => {
     return res.json({ item: updated });
   } catch (err) {
     req.log.error(err);
-    return res.status(500).json({ error: err instanceof Error ? err.message : "Failed to update queue item" });
+    // performQueueItemSendAction throws UserFacingError for the reasons a
+    // founder can act on ("slack isn't connected", "this draft is missing its
+    // routing details"). Those are the whole value of the message here, since
+    // the item stays pending and they can retry after fixing it. Anything else
+    // is answered generically.
+    const status = isUserFacingError(err) ? err.status : 500;
+    return res.status(status).json({ error: messageForCaller(err, describeDbError(err)) });
   }
 });
 

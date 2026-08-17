@@ -3,6 +3,8 @@ import { z } from "zod/v4";
 import { db, workflowsTable, connectorsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { requireAuth, requireUserId } from "../middlewares/auth";
+import { describeDbError } from "../lib/dbErrors";
+import { isUserFacingError, messageForCaller } from "../lib/userFacingError";
 import { WORKFLOW_TEMPLATES, getWorkflowTemplate } from "../lib/workflows/templates";
 import { runWorkflow } from "../lib/workflows/runners";
 
@@ -33,7 +35,7 @@ router.get("/workflows/templates", requireAuth, async (req, res) => {
     // rather than a canned string — this exact failure mode is what showed
     // up to a founder as a silently empty template list with no way to
     // tell why, so the specific reason needs to actually reach the UI.
-    return res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load workflow templates" });
+    return res.status(500).json({ error: describeDbError(err) });
   }
 });
 
@@ -44,7 +46,7 @@ router.get("/workflows", requireAuth, async (req, res) => {
     return res.json({ workflows: rows });
   } catch (err) {
     req.log.error(err);
-    return res.status(500).json({ error: err instanceof Error ? err.message : "Failed to load workflows" });
+    return res.status(500).json({ error: describeDbError(err) });
   }
 });
 
@@ -153,7 +155,10 @@ router.post("/workflows/:id/run", requireAuth, async (req, res) => {
     return res.json({ created });
   } catch (err) {
     req.log.error(err);
-    return res.status(500).json({ error: err instanceof Error ? err.message : "Workflow run failed" });
+    // runWorkflow reaches connectors, so a missing/revoked integration is a
+    // UserFacingError the founder can act on. Everything else is generic.
+    const status = isUserFacingError(err) ? err.status : 500;
+    return res.status(status).json({ error: messageForCaller(err, describeDbError(err)) });
   }
 });
 

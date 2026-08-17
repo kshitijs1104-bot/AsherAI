@@ -127,7 +127,88 @@ export function acceptPrivacy(): void {
     // consent screen will simply be shown again next time, which is the safe
     // direction for this particular failure to fall in.
   }
+  // Unblock the UI immediately, then record it durably. The order matters: the
+  // founder pressed a button and the app should respond to it, not spin on a
+  // network call — and if the POST fails, the server simply has no record and
+  // the gate re-appears on their next load, which is the correct outcome rather
+  // than a silent one.
   emit();
+  void recordConsentServerSide();
+}
+
+/* ---------------------------------------------------------------------------
+   The durable half.
+
+   A record in localStorage is a value the agreeing party holds, on a clock they
+   control, which they can clear — enough to make the screen behave, not enough
+   to be evidence anyone agreed to anything. This sends the acceptance to
+   POST /api/settings/privacy-consent, which stamps it with the SERVER's time
+   (the request deliberately carries no timestamp) against the user's Clerk id.
+
+   Best-effort and never throws: a failure here must not leave a founder staring
+   at a consent screen they already accepted. It is logged to the console and the
+   local copy stands, so they keep working; the server will be asked again on
+   their next load by refreshFromServer below.
+--------------------------------------------------------------------------- */
+async function recordConsentServerSide(): Promise<void> {
+  try {
+    const response = await fetch('/api/settings/privacy-consent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version: PRIVACY_POLICY_VERSION }),
+    });
+    if (!response.ok) {
+      console.error('[privacyConsent] server did not record the acceptance', response.status);
+    }
+  } catch (err) {
+    console.error('[privacyConsent] could not reach the server to record acceptance', err);
+  }
+}
+
+/**
+ * Reconciles the local copy against the server's record, which is the one that
+ * counts. Called once after sign-in (see PrivacyGate).
+ *
+ * TWO DIRECTIONS, BOTH NEEDED:
+ *   - Server has a current acceptance, device does not (new browser, cleared
+ *     storage) → write the local cache so the gate does not ask again for
+ *     something already agreed to.
+ *   - Device claims acceptance, server has none or an older version → clear the
+ *     local claim so the gate asks. This is the direction that matters: it means
+ *     a cleared or forged localStorage value cannot get anyone past the policy,
+ *     because the server is what is actually consulted.
+ *
+ * Silent on network failure. The local value stands in that case, which keeps a
+ * founder working through a blip rather than blocking them on the API being up.
+ */
+export async function refreshFromServer(): Promise<void> {
+  try {
+    const response = await fetch('/api/settings/privacy-consent');
+    if (!response.ok) return;
+    const record = (await response.json()) as { version?: string | null; acceptedAt?: string | null };
+
+    if (record?.version === PRIVACY_POLICY_VERSION) {
+      try {
+        localStorage.setItem(
+          KEY,
+          JSON.stringify({ version: record.version, acceptedAt: record.acceptedAt ?? '' } satisfies PrivacyConsent),
+        );
+      } catch {}
+      emit();
+      return;
+    }
+
+    // Server does not have a current acceptance. If this device claims one, it
+    // is stale or fabricated — drop it and let the gate do its job.
+    if (getPrivacyConsent()?.version === PRIVACY_POLICY_VERSION) {
+      try {
+        localStorage.removeItem(KEY);
+      } catch {}
+      emit();
+    }
+  } catch {
+    // Offline or the API is down — keep the local value and move on.
+  }
 }
 
 /** For testing the first-run screen without clearing the whole origin. */
@@ -172,16 +253,20 @@ export function usePrivacyAccepted(): boolean {
   return useSyncExternalStore(subscribe, hasAcceptedPrivacy, () => false);
 }
 
-// ---- KNOWN LIMIT, WORTH FIXING BEFORE YOU HAVE REAL USERS ----
+// ---- WHERE THE RECORD LIVES NOW ----
 //
-// This record lives in the browser only. That is enough to make the screen
-// behave correctly — it blocks until accepted, and re-blocks when the policy
-// changes — but it is NOT proof of consent: it is a value the user's own device
-// holds and can clear, on a clock they control, with no server-side record that
-// the agreement ever happened.
+// It used to live in the browser only, which made the screen behave correctly
+// and proved nothing. It is now written to settings.policy_version /
+// policy_accepted_at by POST /api/settings/privacy-consent, stamped with the
+// server's clock against the caller's verified Clerk id, and mirrored into an
+// audit event.
 //
-// The durable version is two columns on settingsTable (policy_version,
-// policy_accepted_at) written by an authenticated endpoint when the button is
-// pressed, with this local copy kept only to avoid a round trip on every page
-// load. That needs a schema migration and a route, so it is deliberately not
-// done here rather than half-done.
+// localStorage is kept, but its job changed: it is a CACHE that avoids blocking
+// the first paint on a round trip, not the record. refreshFromServer()
+// reconciles the two after sign-in in both directions — importantly including
+// "the device claims consent and the server has none", which is what stops a
+// hand-edited localStorage value from getting anyone past the policy.
+//
+// STILL TRUE, AND WORTH KNOWING: consent is recorded for SIGNED-IN users, which
+// is every user who can reach the gate (it renders inside RequireAuth). The
+// signed-out landing page collects no consent because it collects no data.

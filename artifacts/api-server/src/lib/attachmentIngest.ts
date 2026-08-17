@@ -1,6 +1,7 @@
-import fsp from "node:fs/promises";
-import path from "node:path";
+import { db, attachmentsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import type { Attachment } from "@workspace/db";
+import { getObject, getText, putText, UPLOADS_DIR, type StorageDriver } from "./storage";
 import { extractDocumentText, isExtractableMimeType } from "./documentText";
 import { readImage } from "./visionExtract";
 import { callGroqJSON, getGroqClient } from "./groq";
@@ -28,14 +29,18 @@ import { getActiveProfile } from "./businessProfiles";
 //     business into Company Memory, so the numbers in a P&L are still known
 //     three chats later instead of scrolling out of history with the file.
 //
-// WHERE THE CACHE LIVES. A sidecar JSON file next to the upload, not a new
-// column. The uploads directory is already the durable store for the bytes
-// themselves (see routes/attachments.ts), so the extracted text has the same
-// lifetime as the file it came from, gets removed with it, and needs no
-// schema migration to ship — which matters because a schema change that
-// isn't pushed turns every attachment SELECT into a hard error.
+// WHERE THE CACHE LIVES. A sidecar JSON object stored beside the upload, with
+// the same key plus a suffix. It used to be a file written directly to the
+// local uploads directory; it now goes through lib/storage.ts like the bytes
+// it describes, and for the same reason — a sidecar on a disk the host
+// discards would mean every founder's documents get re-read (and re-charged
+// to a vision model) after every redeploy, and on a multi-instance host the
+// cache would be a coin flip. Keeping the two in one store also preserves the
+// original property: the extracted text has exactly the lifetime of the file
+// it came from and is removed with it.
 
-export const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
+// Re-exported for the call sites that still resolve local paths directly.
+export { UPLOADS_DIR };
 
 // Bumped when the shape below changes in a way that makes old sidecars
 // wrong; a mismatch re-extracts instead of trusting stale data.
@@ -71,35 +76,61 @@ export interface IngestResult {
   retryable?: boolean;
 }
 
-function sidecarPath(storagePath: string): string {
-  return path.join(UPLOADS_DIR, `${storagePath}.vera.json`);
+/** The sidecar's key is derived from the file's, so the two always travel
+ *  together in whichever store wrote them. */
+export function sidecarKey(storagePath: string): string {
+  return `${storagePath}.vera.json`;
 }
 
-function filePathFor(storagePath: string): string | null {
-  const filePath = path.join(UPLOADS_DIR, storagePath);
-  // storagePath is always a server-generated random filename (see the schema
-  // comment on that column) so this can't be steered by user input — verified
-  // anyway rather than trusting that invariant to survive every future change
-  // to the upload handler.
-  return path.resolve(filePath).startsWith(UPLOADS_DIR) ? filePath : null;
+// Path traversal is guarded inside lib/storage.ts now, for every driver and
+// every caller, rather than here for one of them.
+function driverOf(attachment: Pick<Attachment, "storageDriver">): StorageDriver {
+  return (attachment.storageDriver as StorageDriver) ?? "local";
 }
 
-async function readSidecar(storagePath: string): Promise<IngestResult | null> {
+async function readSidecar(storagePath: string, driver: StorageDriver): Promise<IngestResult | null> {
+  const raw = await getText(sidecarKey(storagePath), driver);
+  if (!raw) return null;
   try {
-    const parsed = JSON.parse(await fsp.readFile(sidecarPath(storagePath), "utf8")) as IngestResult;
+    const parsed = JSON.parse(raw) as IngestResult;
     return parsed?.version === INGEST_VERSION ? parsed : null;
   } catch {
-    return null; // absent or corrupt — re-extract, never guess
+    return null; // corrupt — re-extract, never guess
   }
 }
 
-async function writeSidecar(storagePath: string, result: IngestResult): Promise<void> {
+async function writeSidecar(storagePath: string, driver: StorageDriver, result: IngestResult): Promise<void> {
   try {
-    await fsp.writeFile(sidecarPath(storagePath), JSON.stringify(result), "utf8");
+    await putText(sidecarKey(storagePath), driver, JSON.stringify(result));
   } catch (err) {
     // A cache that can't be written is a performance problem, not a
     // correctness one — the extraction result is still returned to the caller.
     console.error("[attachmentIngest] could not cache extraction result", err);
+  }
+}
+
+/**
+ * Records how reading this file actually went, so a failure is visible instead
+ * of looking like Vera choosing to ignore the document.
+ *
+ * THE GAP THIS CLOSES. Ingestion is deliberately detached from the upload
+ * response, which means its failures had nowhere to surface: a vision model
+ * failing on every image and a model deciding not to mention an image produced
+ * exactly the same observable behaviour. Now the row carries the answer, the
+ * founder-facing UI can say "still reading this" or "couldn't read this", and
+ * an operator can see whether one account's uploads are all failing.
+ *
+ * Best-effort like everything else on this path — a status write failing must
+ * not fail the ingest it describes.
+ */
+async function recordIngestStatus(attachmentId: number, status: "ready" | "failed", note?: string): Promise<void> {
+  try {
+    await db
+      .update(attachmentsTable)
+      .set({ ingestStatus: status, ingestError: status === "failed" ? (note ?? "unreadable").slice(0, 200) : null })
+      .where(eq(attachmentsTable.id, attachmentId));
+  } catch (err) {
+    console.error("[attachmentIngest] could not record ingest status", err);
   }
 }
 
@@ -111,14 +142,16 @@ async function extract(attachment: Attachment): Promise<IngestResult> {
   const now = new Date().toISOString();
   const base = { version: INGEST_VERSION, extractedAt: now } as const;
 
-  const filePath = filePathFor(attachment.storagePath);
-  if (!filePath) return { ...base, status: "unreadable", text: "", source: "none", note: "the stored file could not be located" };
-
   let buf: Buffer;
   try {
-    buf = await fsp.readFile(filePath);
+    buf = await getObject(attachment.storagePath, driverOf(attachment));
   } catch {
-    return { ...base, status: "unreadable", text: "", source: "none", note: "the stored file could not be opened" };
+    // Reading the bytes back can now fail for a transient reason (object
+    // storage unreachable) as well as a permanent one, so this is retryable —
+    // caching it would turn a momentary network blip into a file permanently
+    // declared unreadable, which is the failure mode the retryable flag on
+    // vision calls already exists to prevent.
+    return { ...base, status: "unreadable", text: "", source: "none", note: "the stored file could not be opened", retryable: true };
   }
 
   if (attachment.mimeType.startsWith("image/")) {
@@ -171,7 +204,8 @@ const inFlight = new Map<string, Promise<IngestResult>>();
  */
 export async function ensureIngest(attachment: Attachment): Promise<IngestResult> {
   const key = attachment.storagePath;
-  const cached = await readSidecar(key);
+  const driver = driverOf(attachment);
+  const cached = await readSidecar(key, driver);
   if (cached) return cached;
 
   const existing = inFlight.get(key);
@@ -193,7 +227,13 @@ export async function ensureIngest(attachment: Attachment): Promise<IngestResult
         retryable: true,
       };
     }
-    if (!result.retryable) await writeSidecar(key, result);
+    if (!result.retryable) await writeSidecar(key, driver, result);
+    // Only a settled outcome is recorded on the row. A retryable failure
+    // leaves the status as "pending", which is the truth — it will be tried
+    // again on the next read.
+    if (!result.retryable) {
+      await recordIngestStatus(attachment.id, result.status === "text" ? "ready" : "failed", result.note);
+    }
     console.error(
       `[attachmentIngest] "${attachment.fileName}" (${attachment.mimeType}) -> status=${result.status} source=${result.source} chars=${result.text.length}${result.model ? ` model=${result.model}` : ""}`,
     );
@@ -273,7 +313,7 @@ export async function distilDocumentFacts(attachment: Attachment, ingest: Ingest
 
     const facts: unknown = parsed?.facts;
     if (!Array.isArray(facts) || facts.length === 0) {
-      await writeSidecar(attachment.storagePath, { ...ingest, factsWritten: true });
+      await writeSidecar(attachment.storagePath, driverOf(attachment), { ...ingest, factsWritten: true });
       return 0;
     }
 
@@ -302,7 +342,7 @@ export async function distilDocumentFacts(attachment: Attachment, ingest: Ingest
       if (saved) written++;
     }
 
-    await writeSidecar(attachment.storagePath, { ...ingest, factsWritten: true });
+    await writeSidecar(attachment.storagePath, driverOf(attachment), { ...ingest, factsWritten: true });
     if (written > 0) {
       console.error(`[attachmentIngest] learned ${written} fact(s) from "${attachment.fileName}" for user=${attachment.userId}`);
     }

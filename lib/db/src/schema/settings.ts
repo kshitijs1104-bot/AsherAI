@@ -73,6 +73,20 @@ export const settingsTable = pgTable("settings", {
   // reply can be resolved (supersedeFact vs. add-as-new) without re-deriving
   // any of it. Null = no contradiction pending.
   pendingFactContradiction: text("pending_fact_contradiction"),
+  // ---- Proof that this founder accepted the privacy policy ----
+  //
+  // Until these existed the record lived only in the browser's localStorage
+  // (lib/privacyConsent.ts) — a value on the user's own device, on a clock
+  // they control, that they can clear. The gate behaved correctly; what was
+  // missing was any evidence that anyone agreed to anything, which is the
+  // entire point of recording consent. LAUNCH_CHECKLIST item 3.
+  //
+  // The version string is stored, not a boolean, because the gate re-prompts
+  // when PRIVACY_POLICY_VERSION changes: "accepted" is only ever meaningful
+  // paired with WHAT was accepted. The local copy is kept as a cache so the
+  // gate does not need a round trip before it can decide whether to render.
+  policyVersion: text("policy_version"),
+  policyAcceptedAt: timestamp("policy_accepted_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

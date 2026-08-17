@@ -4,6 +4,7 @@ import { createGmailClient } from "@workspace/integration-gmail";
 import { createSlackClient, type SlackTokens } from "@workspace/integration-slack";
 import { createLinkedinClient, type LinkedinTokens } from "@workspace/integration-linkedin";
 import { decryptToken } from "../crypto";
+import { UserFacingError } from "../userFacingError";
 import { getValidGmailAccessToken } from "./gmail";
 
 async function getConnector(userId: string, type: string) {
@@ -13,7 +14,7 @@ async function getConnector(userId: string, type: string) {
     .where(and(eq(connectorsTable.userId, userId), eq(connectorsTable.type, type)))
     .limit(1);
   if (!connector || connector.status !== "connected") {
-    throw new Error(`${type} isn't connected — reconnect it to send this.`);
+    throw new UserFacingError(`${type} isn't connected — reconnect it to send this.`);
   }
   return connector;
 }
@@ -57,7 +58,7 @@ export async function performQueueItemSendAction(userId: string, item: QueueItem
   // calls this BEFORE resolving the row, so the item stays pending and the
   // error renders on the card.
   if ((item.source === "gmail" || item.source === "slack") && !item.metadataJson) {
-    throw new Error(
+    throw new UserFacingError(
       `This ${item.source} draft is missing its routing details, so it can't be sent. Re-sync ${item.source} and try again.`,
     );
   }

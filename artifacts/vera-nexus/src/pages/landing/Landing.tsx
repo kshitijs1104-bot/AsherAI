@@ -135,9 +135,26 @@ function Hero() {
                   <span className="lp-dot" style={{ background: 'var(--lp-teal)' }} />
                   Memory that persists for the life of the company
                 </span>
+                {/* This read "Your data is never trained on" — the same claim
+                    the footer comment below says "had to go", missed here and
+                    left in the HERO, above the fold, as the first thing any
+                    visitor read. Section 4 of the policy every account must
+                    accept says plainly that we DO train on your content, and
+                    section 4 is not negotiable. So the page was promising the
+                    opposite of the agreement, in the most prominent position
+                    available, which is the worst version of that contradiction
+                    rather than a softer one.
+
+                    Replaced with something that is both true and actually
+                    verifiable: DELETE /account and DELETE /chats/:id really do
+                    cascade across every table and the stored files (see
+                    api-server lib/dataDeletion.ts, and the test that fails if a
+                    new user-scoped table is ever added without being wired in).
+                    Do not put a training claim back here — if the policy ever
+                    changes, section 4 changes first and this follows it. */}
                 <span>
                   <span className="lp-dot" style={{ background: 'var(--lp-violet)' }} />
-                  Your data is never trained on
+                  Delete a chat or your account — it's gone for real
                 </span>
               </div>
             </Reveal>

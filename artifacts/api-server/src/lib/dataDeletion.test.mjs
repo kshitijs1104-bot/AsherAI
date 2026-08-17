@@ -38,6 +38,26 @@ const NOT_USER_SCOPED = {
   reactionsTable: 'Legacy Nexus surface, archived — no userId column.',
 };
 
+// Tables whose rows SURVIVE account deletion with their identifiers stripped,
+// rather than being removed. This is a narrower exemption than NOT_USER_SCOPED
+// and needs a stronger justification: the table must still end up holding no
+// personal data, or section 7 becomes false again by a different route.
+//
+// The assertion below is not "we said it is fine" — it checks the module
+// actually issues the UPDATE that nulls the identifying columns, so a future
+// edit that deletes the anonymisation while leaving this entry fails here.
+const ANONYMISED_NOT_DELETED = {
+  auditEventsTable: {
+    reason:
+      'Security trail. A log its own subject can erase by closing their account is not a log — the ' +
+      'one action an abusive account takes is the one that would destroy the evidence. Identifiers ' +
+      'are nulled instead, and auditLog.ts already forbids content, so what remains ("a limiter ' +
+      'tripped on this route at this time") is not personal data.',
+    // The columns that must be nulled for the claim above to hold.
+    columns: ['userId', 'actorId', 'subject'],
+  },
+};
+
 /** Every exported drizzle table, with whether it carries a per-user column. */
 function readSchemaTables() {
   const tables = [];
@@ -96,7 +116,7 @@ function isDeletedFrom(source, tableName) {
 
 test('every user-scoped table is deleted by deleteAllUserData', () => {
   const missing = readSchemaTables()
-    .filter((t) => t.userScoped && !NOT_USER_SCOPED[t.name])
+    .filter((t) => t.userScoped && !NOT_USER_SCOPED[t.name] && !ANONYMISED_NOT_DELETED[t.name])
     .filter((t) => !isDeletedFrom(DELETION_SRC, t.name))
     .map((t) => `${t.name} (${t.file})`);
 
@@ -160,12 +180,54 @@ test('chat deletion covers every table that references a chat', () => {
 test('attachment sidecars are deleted alongside the file itself', () => {
   // The sidecar holds the FULL extracted text of an upload, and for an image the
   // vision model's description of it. Deleting the original and keeping the
-  // sidecar would leave the readable contents of a deleted P&L on disk.
+  // sidecar would leave the readable contents of a deleted P&L in storage.
+  //
+  // The literal ".vera.json" used to be spelled out here. It now lives in
+  // attachmentIngest.sidecarKey(), because the sidecar has to be addressed as a
+  // storage KEY (object storage has no paths to join) rather than a filename —
+  // so this asserts the call instead of the string. Same promise, one
+  // indirection later.
   assert.match(
     DELETION_SRC,
-    /\.vera\.json/,
-    'dataDeletion.ts must remove the .vera.json sidecar, not just the uploaded file',
+    /deleteObject\(\s*sidecarKey\(/,
+    'dataDeletion.ts must remove the extraction sidecar, not just the uploaded file',
   );
+});
+
+test('uploads are deleted through the storage layer, not the local filesystem', () => {
+  // Once an upload can live in object storage, an fs.unlink deletes nothing for
+  // every file stored there — while still reporting success. That would make
+  // section 7 false for exactly the files founders care most about, and it
+  // would do it silently.
+  assert.doesNotMatch(
+    DELETION_SRC,
+    /fsp?\.unlink|node:fs/,
+    'dataDeletion.ts must not touch the filesystem directly — go through lib/storage.ts so object-storage rows are really deleted',
+  );
+  // And the driver must come off the row, not from the current configuration,
+  // or files written before a storage switch become undeletable.
+  assert.match(
+    DELETION_SRC,
+    /removeAttachmentFiles\(\s*attachment\.storagePath,\s*attachment\.storageDriver/,
+    "the deletion must use each row's own storageDriver, not the active one",
+  );
+});
+
+test('audit events are anonymised rather than left intact', () => {
+  for (const [name, { columns }] of Object.entries(ANONYMISED_NOT_DELETED)) {
+    // The table has to be updated, and every identifying column has to be
+    // nulled in that update — an entry in ANONYMISED_NOT_DELETED is a claim
+    // that the row stops being personal data, and this is what checks it.
+    const updateCall = DELETION_SRC.match(new RegExp(`\\.update\\(\\s*${name}\\s*\\)[\\s\\S]{0,400}?\\)`));
+    assert.ok(updateCall, `${name} is exempt from deletion but is never anonymised either`);
+    for (const column of columns) {
+      assert.match(
+        updateCall[0],
+        new RegExp(`${column}:\\s*null`),
+        `${name} is anonymised but leaves ${column} populated, which still identifies the deleted user`,
+      );
+    }
+  }
 });
 
 test('deletion is scoped by user, never by id alone', () => {

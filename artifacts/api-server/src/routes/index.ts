@@ -15,6 +15,7 @@ import recapsRouter from "./recaps";
 import attachmentsRouter from "./attachments";
 import dossierRouter from "./dossier";
 import accountRouter from "./account";
+import operatorRouter from "./operator";
 
 // ---- Every route registered here is reachable from the live product ----
 //
@@ -58,5 +59,13 @@ router.use(dossierRouter);
 // erasure, and a granted right with no endpoint behind it is a promise that
 // depends on someone hand-writing SQL across fifteen tables.
 router.use(accountRouter);
+// /operator/*. The one router here that is NOT for end users — it is how the
+// founder suspends an account, reads the security trail and revokes a session
+// without a database shell. Guarded inside the router itself (requireAuth +
+// requireOperator applied to the whole mount), and it answers 404 rather than
+// 403 to anyone not on the OPERATOR_USER_IDS allowlist, so its existence is not
+// confirmable by probing. See the header of routes/operator.ts for the three
+// rules it follows — chief among them that it never returns user content.
+router.use(operatorRouter);
 
 export default router;

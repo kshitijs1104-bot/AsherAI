@@ -43,7 +43,7 @@ import { CheckoutGate } from "@/pages/enterprise/Checkout";
 import { PrivacyGate } from "@/pages/legal/PrivacyGate";
 import { PrivacyPolicyPage } from "@/pages/legal/PrivacyPolicyPage";
 import { CookieBanner } from "@/pages/legal/CookieBanner";
-import { usePrivacyAccepted } from "@/lib/privacyConsent";
+import { usePrivacyAccepted, refreshFromServer } from "@/lib/privacyConsent";
 
 const queryClient = new QueryClient();
 
@@ -160,6 +160,20 @@ function RequireAuth({ children }: { children: ReactNode }) {
 // link. Consent costs them their place in the queue, not their destination.
 function RequireConsent({ children }: { children: ReactNode }) {
   const accepted = usePrivacyAccepted();
+
+  // Reconcile with the server's record once per signed-in mount. The server row
+  // is the consent record; localStorage is only a cache that keeps the first
+  // paint off the network. This runs in BOTH directions — see
+  // refreshFromServer — so a new device inherits an acceptance already given,
+  // and a hand-edited local value cannot get anyone past the policy.
+  //
+  // Deliberately not awaited and not gated on: a founder who accepted a moment
+  // ago should not be shown the screen again because a fetch is in flight, and
+  // an API outage should not lock the product. If the server has no record, the
+  // local claim is dropped and the gate renders on the next tick.
+  useEffect(() => {
+    void refreshFromServer();
+  }, []);
 
   if (!accepted) return <PrivacyGate />;
 

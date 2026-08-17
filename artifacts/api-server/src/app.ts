@@ -7,15 +7,79 @@ import pinoHttp from "pino-http";
 import { getAuth } from "@clerk/express";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { clerkMiddleware } from "./middlewares/auth";
+import { clerkMiddleware, operatorCount } from "./middlewares/auth";
 import { sameOriginOnly } from "./middlewares/csrf";
 import { dailyUsageLimit } from "./middlewares/usageLimit";
+import { recordAuditEvent } from "./lib/auditLog";
 
-if (!process.env["CLERK_SECRET_KEY"]) {
+// ---- Every credential this process cannot run without, checked at boot ----
+//
+// THE FAILURE THIS PREVENTS, found by running the built server rather than
+// reading it. Only CLERK_SECRET_KEY was checked here. But @clerk/express's
+// clerkMiddleware ALSO needs CLERK_PUBLISHABLE_KEY on the server — it derives
+// the Frontend API host from it before it can verify a session token. With the
+// secret key set and the publishable key missing, the process starts, logs
+// "Server listening", passes any port check a platform makes — and then throws
+// inside the middleware on EVERY request. Confirmed by A/B: without it, 100%
+// of requests return 500 including GET /api/healthz; with it, the same
+// requests return the correct 200/401/403. So the one endpoint an uptime
+// monitor watches goes down with everything else, and the failure is not a
+// crash-loop anyone would notice — it is a server that is up and answering
+// 500s. The error message ("Publishable key is missing") appears only in the
+// process log, which nothing is watching at 2am.
+//
+// A missing credential must therefore be fatal AT BOOT, before the port is
+// bound, so a bad deploy fails visibly and the previous revision keeps serving
+// instead of being replaced by a running-but-broken one. All of them are
+// listed in one place so adding a dependency on a new secret means adding a
+// line here, not discovering it in production.
+//
+// Names and reasons are kept together because the reason is the useful half
+// when this fires — the person reading it is looking at a deploy that will not
+// start and needs to know what to paste into Replit Secrets, not just a key
+// name to search the codebase for.
+const REQUIRED_ENV: { name: string; why: string }[] = [
+  { name: "CLERK_SECRET_KEY", why: "verifies session tokens server-side (dashboard.clerk.com > API Keys)" },
+  { name: "CLERK_PUBLISHABLE_KEY", why: "clerkMiddleware needs it to resolve the Frontend API — without it EVERY request 500s" },
+  { name: "DATABASE_URL", why: "Postgres connection string; lib/db throws on import without it" },
+  { name: "CONNECTOR_ENCRYPTION_KEY", why: "32 bytes hex/base64; AES-256-GCM key for OAuth tokens at rest (lib/crypto.ts)" },
+];
+
+// Not fatal, but each one silently disables a whole feature, and a feature that
+// is off because a secret was never set looks identical to a feature that is
+// broken. Logged loudly at boot so the answer to "why does Vera say it can't
+// think" is in the first ten lines of the log rather than in a support thread.
+const OPTIONAL_ENV: { name: string; whatBreaks: string }[] = [
+  { name: "GROQ_API_KEY", whatBreaks: "all AI answers fall back to the canned no-model response" },
+  { name: "FRONTEND_URL", whatBreaks: "OAuth connector callbacks redirect to a relative path and land nowhere" },
+];
+
+const missingRequired = REQUIRED_ENV.filter((v) => !process.env[v.name]?.trim());
+
+if (missingRequired.length > 0) {
   throw new Error(
-    "CLERK_SECRET_KEY environment variable is required but was not provided. " +
-      "Set it in your Replit Secrets — see artifacts/api-server/.env.example.",
+    `Refusing to start — ${missingRequired.length} required environment variable(s) are not set:\n` +
+      missingRequired.map((v) => `  - ${v.name}: ${v.why}`).join("\n") +
+      "\n\nSet them in Replit Secrets (or a local .env) — see artifacts/api-server/.env.example for the full list.",
   );
+}
+
+for (const v of OPTIONAL_ENV) {
+  if (!process.env[v.name]?.trim()) {
+    logger.warn({ envVar: v.name }, `${v.name} is not set — ${v.whatBreaks}`);
+  }
+}
+
+// Not fatal, because the product runs fine without an operator — but it is the
+// difference between being able to suspend an abusive account and not, so it
+// should never be discovered mid-incident. Unset means NOBODY has operator
+// access (see middlewares/auth.ts for why the default is closed).
+if (operatorCount() === 0) {
+  logger.warn(
+    "OPERATOR_USER_IDS is not set — nobody can reach /api/operator/*, so there is no way to suspend an account, read the security trail, or revoke a session from inside Vera. Set it to your own Clerk user id (user_…) before external users.",
+  );
+} else {
+  logger.info({ operators: operatorCount() }, "Operator access is configured");
 }
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -200,7 +264,21 @@ function userOrIpKey(req: express.Request): string {
 // records WHICH limiter and WHICH key, never the request body.
 function loggingHandler(limiterName: string, body: { error: string }) {
   return function handler(req: express.Request, res: express.Response) {
-    logger.warn({ limiter: limiterName, key: userOrIpKey(req), path: req.path, method: req.method }, "Rate limit exceeded");
+    const key = userOrIpKey(req);
+    logger.warn({ limiter: limiterName, key, path: req.path, method: req.method }, "Rate limit exceeded");
+    // Also written to audit_events, which is the half that survives a restart.
+    // The pino line is for tailing the log now; the row is for answering "which
+    // account was hammering us on Tuesday" a week later, from the operator
+    // surface, without a database shell. Never the body — just which limiter,
+    // which key, which route.
+    void recordAuditEvent({
+      eventType: "abuse.rate_limited",
+      userId: getAuth(req)?.userId ?? null,
+      subject: key,
+      route: req.path,
+      severity: "warn",
+      metadata: { limiter: limiterName, method: req.method },
+    });
     res.status(429).json(body);
   };
 }
@@ -249,11 +327,76 @@ const expensiveLimiter = rateLimit({
 // disagree about who a caller is are two limiters with different ceilings.
 const dailyModelCallLimiter = dailyUsageLimit(userOrIpKey);
 
-app.use("/api", globalLimiter);
+// ---- The one control that turns Vera off without a developer ----
+//
+// THE GAP THIS CLOSES. There was no way to stop the product. Not a flag, not a
+// route, not a column — if a founder had to take Vera down mid-incident (a
+// leaked key, an abusive account burning the Groq quota, a bad answer going out
+// to every user) the only available action was to delete the deployment, which
+// also destroys the URL and gives every user a connection error with no
+// explanation.
+//
+// VERA_MAINTENANCE_MODE=on refuses every /api call with a 503 and a sentence a
+// founder can read, EXCEPT the health endpoints — those must keep answering or
+// the uptime monitor reports an outage during a deliberate maintenance window
+// and the one alert that matters gets trained into noise.
+//
+// An env var rather than a database row on purpose: the case this exists for
+// includes "the database is the thing that is broken", and a kill switch that
+// needs a working DB to read is not a kill switch. Flipping it is Replit
+// Secrets + restart — no code change, no deploy, no developer.
+//
+// 503 + Retry-After is the correct pair: it tells crawlers and clients this is
+// temporary, where a 500 would say the server is broken and a 404 would say
+// Vera no longer exists.
+const MAINTENANCE_MODE = /^(1|true|on|yes)$/i.test(process.env.VERA_MAINTENANCE_MODE ?? "");
+
+if (MAINTENANCE_MODE) {
+  logger.warn("VERA_MAINTENANCE_MODE is on — all /api routes except health checks will answer 503");
+}
+
+app.use("/api", (req, res, next) => {
+  if (!MAINTENANCE_MODE) return next();
+  if (req.path === "/healthz" || req.path === "/readyz") return next();
+  res.setHeader("Retry-After", "600");
+  res.status(503).json({
+    error:
+      process.env.VERA_MAINTENANCE_MESSAGE?.trim() ||
+      "Vera is down for maintenance right now. Nothing you've saved is affected — please try again shortly.",
+  });
+});
+
+// Health endpoints are exempt from the global limiter, and that exemption is
+// load-bearing rather than a convenience. These two are what an external uptime
+// monitor polls; leaving them behind a 240/min per-IP bucket meant a monitor
+// sharing an egress IP with any other traffic could be throttled into reporting
+// a false outage — an alert channel that cries wolf is worse than none. They are
+// two constant-cost handlers (one returns a literal, one runs SELECT 1 with a
+// 3s timeout), so there is nothing here worth rationing.
+app.use("/api", (req, res, next) => {
+  if (req.path === "/healthz" || req.path === "/readyz") return next();
+  return globalLimiter(req, res, next);
+});
 app.use(["/api/ai", "/api/actions", "/api/attachments"], expensiveLimiter);
 app.use(["/api/ai", "/api/actions"], dailyModelCallLimiter);
 
 app.use("/api", router);
+
+// ---- Unmatched /api paths must answer JSON, like every other route here ----
+//
+// Without this, an unknown path falls through to Express's built-in
+// finalhandler, which renders an HTML page ("Cannot GET /api/whatever"). Every
+// caller in the frontend — apiFetch in venusApi.ts and the generated client
+// alike — reads the body with response.json() on a non-ok response, so an HTML
+// 404 throws inside the error path and the founder is shown a generic
+// "Request failed" instead of the real status. Verified against the running
+// server: GET /api/does-not-exist returned text/html before this.
+//
+// It also stops the default page advertising the framework and echoing the
+// requested path back into a rendered document.
+app.use("/api", (req, res) => {
+  res.status(404).json({ error: `No such endpoint: ${req.method} /api${req.path.replace(/[^\w/:.-]/g, "")}` });
+});
 
 // Without this, an error thrown by middleware BEFORE it reaches a route's
 // own try/catch (multer's fileFilter/size-limit rejection being the
@@ -277,6 +420,21 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   if (res.headersSent) return next(err);
   req.log?.error(err, "Unhandled error");
   const status = typeof err?.status === "number" ? err.status : typeof err?.statusCode === "number" ? err.statusCode : 500;
+
+  // A malformed JSON body is the one 4xx whose message is NOT founder-readable
+  // text written at a throw site — it is body-parser's own parse error, and it
+  // was reaching callers verbatim ("Expected property name or '}' in JSON at
+  // position 1"). Harmless in content, but it is a library's internal string
+  // rather than anything a caller can act on, and returning it made the 4xx
+  // rule ("deliberate, readable messages pass through") quietly untrue. Named
+  // by err.type, which body-parser sets, rather than by sniffing the text.
+  if (err?.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "That request body isn't valid JSON." });
+  }
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({ error: "That request is too large." });
+  }
+
   const message = status < 500 && typeof err?.message === "string" ? err.message : "Internal server error";
   res.status(status).json({ error: message });
 });

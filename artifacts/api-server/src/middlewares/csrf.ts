@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
+import { getAuth } from "@clerk/express";
 import { logger } from "../lib/logger";
+import { recordAuditEvent } from "../lib/auditLog";
 
 // ---- Why this exists, given CORS is already locked down ----
 //
@@ -96,10 +98,23 @@ export function sameOriginOnly(allowedOrigins: string[]) {
     // Logged at warn with the offending origin: an unexplained cross-site
     // write attempt against an authenticated API is a security event, not
     // noise, and it is the signal that someone is probing this server.
+    const offendingOrigin = origin ?? req.get("origin") ?? req.get("referer") ?? null;
     logger.warn(
-      { path: req.path, method: req.method, origin: origin ?? req.get("origin") ?? req.get("referer") ?? null },
+      { path: req.path, method: req.method, origin: offendingOrigin },
       "Blocked state-changing request with missing or foreign Origin",
     );
+    // Durable record too. A cross-site write attempt against an authenticated
+    // API is the clearest single signal that someone is actively attacking a
+    // specific user rather than scanning — and it was previously visible only
+    // in a stdout line that did not survive a restart. The origin is recorded
+    // because it is the one piece of evidence that says who was trying.
+    void recordAuditEvent({
+      eventType: "abuse.csrf_blocked",
+      userId: getAuth(req)?.userId ?? null,
+      route: req.path,
+      severity: "critical",
+      metadata: { method: req.method, origin: offendingOrigin ?? "(none)" },
+    });
 
     res.status(403).json({
       error: origin

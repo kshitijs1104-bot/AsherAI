@@ -1,90 +1,73 @@
 import type { NextFunction, Request, Response } from "express";
+import { db, usageDailyTable } from "@workspace/db";
+import { and, eq, sql } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { recordAuditEvent } from "../lib/auditLog";
 
-// ---- The free plan's usage ceiling ----
-//
-// WHY THIS IS NOT `express-rate-limit`. Everything else in app.ts is, and
-// should stay that way — but this rule has semantics its fixed-window model
-// cannot express. express-rate-limit starts a window at the FIRST request in
-// it, so "250 per 5 hours" means someone who spends 1 call at 09:00 and the
-// remaining 249 at 13:50 is free again at 14:00, ten minutes after hitting the
-// cap. The rule here is a COOLDOWN: the clock starts when the budget runs out,
-// not when it started being spent, so the wait is always the full five hours
-// however the calls were distributed. That difference is the whole point of a
-// cooldown, so it is written out rather than approximated.
-//
-// THE SHAPE, stated plainly because a usage limit that surprises a paying-
-// adjacent user is worse than a slightly looser one:
-//
-//   - Every user gets DAILY_CALL_BUDGET model calls.
-//   - Spending the last one starts a COOLDOWN_MS lockout, timed from that
-//     moment. Requests during it are refused with the real time remaining.
-//   - When the cooldown ends the budget resets in full.
-//   - A budget that is never exhausted also expires on its own after
-//     BUDGET_WINDOW_MS, so someone who uses 30 calls a day forever is never
-//     creeping toward a cap they can't see.
-//
-// WORST CASE, SAID OUT LOUD: because the cooldown is what refills the budget,
-// somebody deliberately maxing out gets 250 calls every 5 hours — up to about
-// 1,200 in a day, not 250. That is the arithmetic of "cap then cooldown" and
-// it is still ~36x tighter than the 43,200/day the per-minute limiter allowed
-// on its own. If a hard 250-per-rolling-24h is wanted instead, make
-// COOLDOWN_MS equal BUDGET_WINDOW_MS (24h) — one line, and the only thing that
-// changes is that an exhausted user waits until tomorrow rather than for five
-// hours.
-//
-// PLAN AWARENESS: there is no plan column yet — /enterprise/plan's tiers are
-// display copy and the server enforces none of them (see LAUNCH_CHECKLIST §10).
-// So this applies to everyone, which is correct while everyone is on the free
-// plan. When paid plans land, `budgetFor(req)` is the seam: read the user's
-// plan and return its numbers. Deliberately left as one function rather than
-// threaded through the middleware so that change touches one place.
+/* ---------------------------------------------------------------------------
+   The free plan's usage ceiling.
+
+   WHY THIS IS NOT `express-rate-limit`. Everything else in app.ts is, and
+   should stay that way — but this rule has semantics its fixed-window model
+   cannot express. express-rate-limit starts a window at the FIRST request in
+   it, so "250 per 5 hours" means someone who spends 1 call at 09:00 and the
+   remaining 249 at 13:50 is free again at 14:00, ten minutes after hitting the
+   cap. The rule here is a COOLDOWN: the clock starts when the budget runs out,
+   not when it started being spent, so the wait is always the full five hours
+   however the calls were distributed.
+
+   WHY IT IS NOW IN POSTGRES AND NOT A Map. The previous version held buckets in
+   process memory, and its own comment named the two consequences honestly: the
+   real ceiling was the budget times the number of autoscale instances, and a
+   redeploy cleared every cooldown. Both mattered more than they looked, because
+   Groq bills against an ORG-WIDE daily quota — an unbounded account does not
+   just run up its own bill, it spends the budget every other founder's next
+   question needs. A counter that resets whenever you deploy is not a cap on the
+   thing that costs money.
+
+   Moving it to a row also made it READABLE, which turned out to matter as much
+   as the correctness: "who is spending the shared quota today" is now a query
+   the operator surface answers (see routes/operator.ts) instead of a number
+   that existed only inside whichever process served the request.
+
+   THE SHAPE, unchanged from before:
+
+     - Every user gets DAILY_CALL_BUDGET model calls.
+     - Spending the last one starts a COOLDOWN_MS lockout, timed from that
+       moment. Requests during it are refused with the real time remaining.
+     - Serving the cooldown refills the budget in full.
+
+   WORST CASE, SAID OUT LOUD: because the cooldown is what refills the budget,
+   somebody deliberately maxing out gets 250 calls every 5 hours — up to about
+   1,200 in a day, not 250. That is the arithmetic of "cap then cooldown". If a
+   hard 250-per-day is wanted instead, set COOLDOWN_MS to a value that runs past
+   midnight UTC, or drop the cooldown and rely on the day boundary alone.
+
+   FAILS OPEN. If the database is unreachable this allows the request through
+   and logs at error. Same reasoning as the suspension check: the alternative is
+   that a database blip makes Vera answer nothing for everybody in order to
+   enforce a cap on nobody. The per-minute limiter in app.ts is in-memory and
+   still applies, so "fails open" here means falling back to 30/min rather than
+   to unlimited.
+
+   PLAN AWARENESS: there is no plan column yet. `budgetFor(req)` is the seam —
+   read the user's plan there and return its numbers.
+--------------------------------------------------------------------------- */
 
 const DAILY_CALL_BUDGET = 250;
 const COOLDOWN_MS = 5 * 60 * 60 * 1000;
-const BUDGET_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-interface Bucket {
-  /** Calls spent in the current budget window. */
-  spent: number;
-  /** When the current budget window expires and `spent` resets to 0. */
-  windowEndsAt: number;
-  /** Set only while locked out; epoch ms at which the cooldown ends. */
-  cooldownUntil: number | null;
+/** The seam for paid plans — see the note above. */
+function budgetFor(_req: Request): { calls: number; cooldownMs: number } {
+  return { calls: DAILY_CALL_BUDGET, cooldownMs: COOLDOWN_MS };
 }
 
-// In-memory, same tradeoff the other limiters make and worth restating: this
-// counts PER PROCESS, so on autoscale the real ceiling is the budget times the
-// number of instances, and a redeploy clears every bucket. That is a genuine
-// weakening — it is accepted here because the alternative (a shared store, or
-// a usage_daily row) is real infrastructure, and this bounds the runaway case
-// by orders of magnitude either way. It is item 4 of the "not fixable from
-// code" list in LAUNCH_CHECKLIST §10 for when that stops being good enough.
-//
-// Bounded so a stream of unauthenticated IPs can't grow it without limit — an
-// abuse control that is itself a memory-exhaustion vector is not a control.
-const MAX_TRACKED_KEYS = 50_000;
-const buckets = new Map<string, Bucket>();
-
-function sweep(now: number) {
-  if (buckets.size < MAX_TRACKED_KEYS) return;
-  for (const [key, b] of buckets) {
-    const idle = (b.cooldownUntil ?? 0) < now && b.windowEndsAt < now;
-    if (idle) buckets.delete(key);
-  }
-  // Still full of live buckets: drop the oldest insertions rather than refuse
-  // service. Map iterates in insertion order, so this evicts the least
-  // recently created. An evicted user gets a fresh budget, which is the safe
-  // direction for THIS failure — losing a limit is recoverable, wrongly
-  // locking out every user is not.
-  if (buckets.size >= MAX_TRACKED_KEYS) {
-    const excess = buckets.size - MAX_TRACKED_KEYS + 1;
-    let dropped = 0;
-    for (const key of buckets.keys()) {
-      buckets.delete(key);
-      if (++dropped >= excess) break;
-    }
-  }
+// UTC, not the founder's local day. A local-day reset needs a timezone per user,
+// which this schema does not have, and getting it wrong means the budget resets
+// at an hour the founder cannot predict. A fixed UTC day is wrong for everyone
+// by the same amount, which is the better failure.
+function utcDay(now: Date): string {
+  return now.toISOString().slice(0, 10);
 }
 
 function humanDuration(ms: number): string {
@@ -96,11 +79,6 @@ function humanDuration(ms: number): string {
   return `${hours}h ${minutes}m`;
 }
 
-/** The seam for paid plans — see the note above. */
-function budgetFor(_req: Request): { calls: number; cooldownMs: number; windowMs: number } {
-  return { calls: DAILY_CALL_BUDGET, cooldownMs: COOLDOWN_MS, windowMs: BUDGET_WINDOW_MS };
-}
-
 /**
  * Counts and caps calls to the endpoints that run a model.
  *
@@ -110,55 +88,104 @@ function budgetFor(_req: Request): { calls: number; cooldownMs: number; windowMs
  */
 export function dailyUsageLimit(keyFor: (req: Request) => string) {
   return function dailyUsageLimitMiddleware(req: Request, res: Response, next: NextFunction) {
-    const now = Date.now();
-    const key = keyFor(req);
-    const { calls, cooldownMs, windowMs } = budgetFor(req);
+    void (async () => {
+      const now = new Date();
+      const subject = keyFor(req);
+      const day = utcDay(now);
+      const { calls, cooldownMs } = budgetFor(req);
 
-    let bucket = buckets.get(key);
+      try {
+        // Read first, then write. Deliberately two statements rather than one
+        // clever upsert: the request that SPENDS the last call is allowed
+        // through (it is within budget), and only the ones after it are
+        // refused — expressing "allow this one, refuse the next" inside a
+        // single ON CONFLICT clause makes it unreadable, and this runs ahead of
+        // a multi-second model call where two fast queries cost nothing.
+        //
+        // The race two concurrent requests can win here is going one or two
+        // calls over the budget. That is an acceptable overshoot for an abuse
+        // control and not worth a lock.
+        const [existing] = await db
+          .select({ spent: usageDailyTable.spent, cooldownUntil: usageDailyTable.cooldownUntil })
+          .from(usageDailyTable)
+          .where(and(eq(usageDailyTable.subject, subject), eq(usageDailyTable.day, day)))
+          .limit(1);
 
-    if (bucket?.cooldownUntil != null) {
-      if (now < bucket.cooldownUntil) {
-        const remaining = bucket.cooldownUntil - now;
-        logger.warn({ key, path: req.path, remainingMs: remaining }, "Usage cooldown — request refused");
-        res.setHeader("Retry-After", String(Math.ceil(remaining / 1000)));
-        res.status(429).json({
-          error: `You've used today's ${calls} Vera analyses. You can pick back up in ${humanDuration(remaining)}.`,
-          retryAfterSeconds: Math.ceil(remaining / 1000),
-        });
-        return;
+        const cooldownUntil = existing?.cooldownUntil ?? null;
+        const lockedOut = cooldownUntil !== null && cooldownUntil.getTime() > now.getTime();
+
+        if (lockedOut) {
+          const remaining = cooldownUntil!.getTime() - now.getTime();
+          logger.warn({ subject, path: req.path, remainingMs: remaining }, "Usage cooldown — request refused");
+          void recordAuditEvent({
+            eventType: "abuse.usage_cooldown",
+            subject,
+            route: req.path,
+            severity: "warn",
+            metadata: { remainingMs: remaining },
+          });
+          res.setHeader("Retry-After", String(Math.ceil(remaining / 1000)));
+          res.status(429).json({
+            error: `You've used today's ${calls} Vera analyses. You can pick back up in ${humanDuration(remaining)}.`,
+            retryAfterSeconds: Math.ceil(remaining / 1000),
+          });
+          return;
+        }
+
+        // A cooldown that has expired is what refills the budget, so this
+        // request starts a fresh count rather than continuing the old one.
+        const cooldownJustServed = cooldownUntil !== null;
+        const priorSpent = cooldownJustServed ? 0 : (existing?.spent ?? 0);
+        const nextSpent = priorSpent + 1;
+        const exhausted = nextSpent >= calls;
+
+        // Charged BEFORE the handler runs, deliberately. Charging on completion
+        // would mean a request that fails slowly (a Groq timeout) costs the
+        // user nothing while still costing the quota it is meant to protect,
+        // and it would let a client cancel just before completion to spend for
+        // free.
+        await db
+          .insert(usageDailyTable)
+          .values({
+            subject,
+            day,
+            spent: nextSpent,
+            cooldownUntil: exhausted ? new Date(now.getTime() + cooldownMs) : null,
+          })
+          .onConflictDoUpdate({
+            target: [usageDailyTable.subject, usageDailyTable.day],
+            set: {
+              // Recomputed in SQL rather than written from the value read
+              // above, so two concurrent requests both increment instead of
+              // one overwriting the other with a stale number.
+              spent: cooldownJustServed ? sql`1` : sql`${usageDailyTable.spent} + 1`,
+              cooldownUntil: exhausted ? new Date(now.getTime() + cooldownMs) : null,
+              updatedAt: now,
+            },
+          });
+
+        if (exhausted) {
+          logger.warn({ subject, spent: nextSpent, cooldownMs }, "Usage budget exhausted — cooldown started");
+          void recordAuditEvent({
+            eventType: "abuse.usage_exhausted",
+            subject,
+            route: req.path,
+            severity: "warn",
+            metadata: { spent: nextSpent, cooldownMs },
+          });
+        }
+
+        // Same header family express-rate-limit emits, so a client can show a
+        // remaining count without knowing which limiter produced it.
+        res.setHeader("RateLimit-Policy", `${calls};w=86400`);
+        res.setHeader("RateLimit-Remaining", String(Math.max(0, calls - nextSpent)));
+
+        next();
+      } catch (err) {
+        // Fails open — see the header.
+        logger.error({ err, subject }, "Usage limit check failed — allowing the request through");
+        next();
       }
-      // Cooldown served — this is what refills the budget.
-      bucket = undefined;
-      buckets.delete(key);
-    }
-
-    if (!bucket || bucket.windowEndsAt <= now) {
-      sweep(now);
-      bucket = { spent: 0, windowEndsAt: now + windowMs, cooldownUntil: null };
-      buckets.set(key, bucket);
-    }
-
-    bucket.spent += 1;
-
-    // Counted BEFORE the handler runs, deliberately. Charging on completion
-    // would mean a request that fails slowly (a Groq timeout) costs the user
-    // nothing while still costing the quota it is meant to protect, and it
-    // would let a client cancel just before completion to spend for free.
-    if (bucket.spent >= calls) {
-      bucket.cooldownUntil = now + cooldownMs;
-      logger.warn({ key, spent: bucket.spent, cooldownMs }, "Usage budget exhausted — cooldown started");
-    }
-
-    // Same header family express-rate-limit emits, so a client can show a
-    // remaining count without knowing which limiter produced it.
-    res.setHeader("RateLimit-Policy", `${calls};w=${Math.floor(windowMs / 1000)}`);
-    res.setHeader("RateLimit-Remaining", String(Math.max(0, calls - bucket.spent)));
-
-    next();
+    })();
   };
-}
-
-/** Test hook — lets a suite start from a known state without waiting 24 hours. */
-export function __resetUsageBuckets(): void {
-  buckets.clear();
 }

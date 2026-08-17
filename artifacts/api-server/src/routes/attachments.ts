@@ -6,22 +6,18 @@ import multer from "multer";
 import { db, attachmentsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { requireAuth, requireUserId } from "../middlewares/auth";
-import { UPLOADS_DIR, ingestInBackground } from "../lib/attachmentIngest";
+import { ingestInBackground } from "../lib/attachmentIngest";
+import { activeDriver, ensureLocalDirs, getObject, putFromTempFile, UPLOAD_TMP_DIR, type StorageDriver } from "../lib/storage";
+import { recordAuditEvent } from "../lib/auditLog";
 
 const router = Router();
 
-// Local disk, not object storage — the simplest thing that works given no
-// S3/R2-equivalent credentials exist in this environment. Deliberately
-// OUTSIDE dist/ (build.mjs wipes dist/ on every rebuild) so redeploys don't
-// silently delete every founder's uploaded files. Swapping to real object
-// storage later only touches this one constant and the two handlers below.
-//
-// UPLOADS_DIR now lives in lib/attachmentIngest.ts — the reader (which
-// extracts file contents and caches them alongside the upload) and this
-// writer must resolve to the same directory, and two independent
-// `path.resolve` calls are exactly the kind of thing that silently drifts
-// apart.
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+// Storage is no longer this file's concern beyond choosing a key — see
+// lib/storage.ts for why local disk alone was losing every founder's uploads
+// on an autoscale host, and how the two drivers are selected. Multer still
+// streams to a LOCAL temp directory first (bounded memory, unchanged), and the
+// storage layer moves it from there into whichever store is active.
+ensureLocalDirs();
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/png",
@@ -94,7 +90,10 @@ const SUPPORTED_FOR_HUMANS = "PDF, Word, Excel, CSV, Markdown, JSON, plain text,
 
 const upload = multer({
   storage: multer.diskStorage({
-    destination: UPLOADS_DIR,
+    // A transient staging directory, not the durable store. The file is moved
+    // out of here by lib/storage.ts as soon as multer finishes, and unlinked
+    // whether that move succeeds or fails.
+    destination: UPLOAD_TMP_DIR,
     // Server-generated random filename, never the founder's original
     // filename — the schema comment on attachments.storagePath is the
     // reason: this value must never be usable for path traversal, even if
@@ -149,6 +148,19 @@ router.post("/attachments", requireAuth, async (req, res) => {
     // practice and exists only to keep the column non-null.
     const mimeType = resolveMimeType(req.file) ?? "application/octet-stream";
 
+    // Move the staged file into durable storage BEFORE the row is written. In
+    // this order a storage failure means no row and an honest error; reversed,
+    // it would mean a row the founder can see pointing at bytes that were
+    // never stored — the exact "listed but unavailable" state this whole
+    // change exists to remove.
+    let storageDriver: StorageDriver;
+    try {
+      storageDriver = await putFromTempFile(req.file.filename, req.file.path, mimeType);
+    } catch (err) {
+      req.log.error({ err, driver: activeDriver }, "Attachment upload could not be stored");
+      return res.status(502).json({ error: "That file couldn't be stored just now — try again in a moment." });
+    }
+
     const [attachment] = await db
       .insert(attachmentsTable)
       .values({
@@ -158,6 +170,7 @@ router.post("/attachments", requireAuth, async (req, res) => {
         mimeType,
         sizeBytes: req.file.size,
         storagePath: req.file.filename,
+        storageDriver,
       })
       .returning();
 
@@ -198,15 +211,36 @@ router.get("/attachments/:id", requireAuth, async (req, res) => {
       // authenticated user walking ids is worth seeing, and only the server
       // should be able to see it.
       req.log.warn({ attachmentId: id, userId }, "Attachment fetch missed — unknown id or not owned by this user");
+      // Durable, queryable record of the same thing. An authenticated user
+      // walking attachment ids is the clearest single signal of someone
+      // probing for other people's files, and until now it existed only in a
+      // stdout line nobody could search after a restart.
+      void recordAuditEvent({
+        eventType: "abuse.ownership_miss",
+        userId,
+        actorId: userId,
+        route: "/attachments/:id",
+        severity: "warn",
+        metadata: { attachmentId: id },
+      });
       return res.status(404).json({ error: "Attachment not found" });
     }
 
-    const filePath = path.join(UPLOADS_DIR, attachment.storagePath);
+    // Reads use the driver recorded ON THE ROW, never the currently-active
+    // one. That is what lets the store change without orphaning everything
+    // written before the change.
+    let bytes: Buffer;
+    try {
+      bytes = await getObject(attachment.storagePath, attachment.storageDriver as StorageDriver);
+    } catch (err) {
+      req.log.error({ err, attachmentId: id, driver: attachment.storageDriver }, "Stored attachment could not be read back");
+      return res.status(404).json({ error: "File no longer available" });
+    }
+
     res.setHeader("Content-Type", attachment.mimeType);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(attachment.fileName)}"`);
-    return res.sendFile(filePath, (err) => {
-      if (err && !res.headersSent) res.status(404).json({ error: "File no longer available" });
-    });
+    res.setHeader("Content-Length", String(bytes.length));
+    return res.end(bytes);
   } catch (err) {
     req.log.error(err);
     return res.status(500).json({ error: "Failed to load attachment" });

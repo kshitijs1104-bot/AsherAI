@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import { db, queueItemsTable, connectorsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { requireAuth, requireUserId } from "../middlewares/auth";
+import { isUserFacingError, messageForCaller } from "../lib/userFacingError";
 import { getGroqClient } from "../lib/groq";
 import { draftText } from "../lib/draftText";
 import { publishLinkedinDraft } from "../lib/connectors/sendAction";
@@ -136,10 +137,15 @@ router.post("/actions/publish", requireAuth, async (req, res) => {
     return res.json({ published: true, postId });
   } catch (err) {
     req.log.error(err);
-    // getConnector throws a founder-readable message ("linkedin isn't
-    // connected — reconnect it to send this."), which the frontend shows
-    // verbatim, so don't flatten it into a generic failure.
-    return res.status(400).json({ error: err instanceof Error ? err.message : "Failed to publish" });
+    // getConnector throws a UserFacingError ("linkedin isn't connected —
+    // reconnect it to send this."), which the frontend shows verbatim, so
+    // don't flatten it into a generic failure. Anything NOT marked that way
+    // is an error nobody wrote for the founder — a driver message, a provider
+    // response — and is answered generically instead of forwarded.
+    const status = isUserFacingError(err) ? err.status : 500;
+    return res.status(status).json({
+      error: messageForCaller(err, "That post couldn't be published just now. Try again in a moment."),
+    });
   }
 });
 
