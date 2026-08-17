@@ -442,6 +442,24 @@ export function VenusPage() {
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [input, setInput] = useState('');
+  // Which LOCAL session id the in-flight analyzeMutation was sent for — not
+  // necessarily the one on screen right now. Set the instant a request goes
+  // out, cleared the instant it settles.
+  //
+  // THE BUG THIS CLOSES. analyzeMutation is one mutation instance shared by
+  // the whole page, so `.isPending` is a single flag with no idea which chat
+  // it belongs to, and the old onSuccess merged its result onto
+  // sessionRef.current — "whatever chat happens to be on screen when the
+  // response lands", not "the chat that asked the question". Send a message,
+  // delete that chat before it answers, open a different one: the loading
+  // ticker kept showing (isPending doesn't care what you're looking at), and
+  // the eventual answer landed in whichever chat you'd navigated to,
+  // including one that had nothing to do with the question — reported live as
+  // exactly that.
+  //
+  // State, not a ref: the ticker's visibility below has to re-render when this
+  // changes, which a ref alone won't trigger.
+  const [pendingForSessionId, setPendingForSessionId] = useState<string | null>(null);
   const [companyReports, setCompanyReports] = useState<Record<string, CompanyReportState>>(loadCompanyReportCache);
   const [pendingAttachment, setPendingAttachment] = useState<UploadedAttachment | null>(null);
   // Local object URL for an image attachment, so the composer shows the
@@ -672,10 +690,21 @@ export function VenusPage() {
       chatId = currentSession.serverChatId;
     }
 
+    // The session this specific request belongs to, captured now — before the
+    // request goes out, not read back later from whatever's on screen when it
+    // returns. `id` is the one field that never changes across a session's
+    // life (createSession() assigns it once; every merge above spreads the
+    // rest of the object around it), so it survives exactly the gap
+    // (ensureServerChat's await, then the analyze call itself) where the
+    // founder is free to delete this chat or switch to another one.
+    const requestSessionId = updated.id;
+    setPendingForSessionId(requestSessionId);
+
     analyzeMutation.mutate(
       { data: { message: text, chatId, sessionHistory: messages.map(m => ({ role: m.role, content: m.content ?? '' })) } },
       {
         onSuccess: (res) => {
+          setPendingForSessionId(null);
           const venusMsg: ChatMessage = {
             role: 'venus',
             content: res.summary,
@@ -692,19 +721,47 @@ export function VenusPage() {
             lengthConstraintNote: (res as any).lengthConstraintNote,
             contextQuery: text,
           };
-          // Merge onto sessionRef.current (see its declaration above), not
-          // `updated` — that's a snapshot from before ensureServerChat's
-          // await, so building the final state from it would silently drop
-          // the serverChatId ensureServerChat may have set in the meantime.
+
+          // The chat this answer is FOR, read fresh from storage rather than
+          // from sessionRef.current — sessionRef tracks whatever's on screen
+          // right now, which by this point may be a different chat entirely,
+          // or the founder may have deleted this one outright. Storage, not
+          // the ref, is what still knows whether requestSessionId is a real
+          // chat and what it actually contains.
+          const targetSession = getSessions().find((s) => s.id === requestSessionId);
+          if (!targetSession) {
+            // Deleted while this was in flight. Discarding the answer is the
+            // correct outcome, not a fallback — the founder said they didn't
+            // want this conversation, and an answer to a chat that no longer
+            // exists has nowhere honest to go. Definitely not into whatever
+            // chat they happened to open next.
+            return;
+          }
+
           // Plain object construction, not a setState updater — persisting
           // (a real localStorage write) as a side effect inside an updater
           // callback is unsafe: React documents updaters as pure functions
           // that may run more than once for one commit (Strict Mode
           // double-invocation, a preempted/discarded render), which would
           // have made persistSession fire an extra, wasted time.
-          const withVenus: ChatSession = { ...sessionRef.current, messages: [...sessionRef.current.messages, venusMsg] };
-          setCurrentSession(withVenus);
+          const withVenus: ChatSession = { ...targetSession, messages: [...targetSession.messages, venusMsg] };
+          // Always saved, so the answer is waiting there next time this chat
+          // is opened, whether or not it's the one on screen right now.
           persistSession(withVenus);
+          // Only swapped into the live view if the founder is STILL looking
+          // at the chat that asked the question — otherwise this would
+          // overwrite whatever chat they've since navigated to with a
+          // transcript that isn't its own.
+          if (sessionRef.current.id === requestSessionId) {
+            setCurrentSession(withVenus);
+          }
+        },
+        onError: () => {
+          // No user-facing error surface exists on this path today (a
+          // pre-existing gap, not introduced here) — this exists so a failed
+          // request doesn't leave the ticker believing something is still
+          // pending for a chat that has already given up on it.
+          setPendingForSessionId(null);
         },
       }
     );
@@ -1466,7 +1523,13 @@ export function VenusPage() {
               );
             })}
 
-            {analyzeMutation.isPending && (
+            {/* Gated on pendingForSessionId matching the chat actually on
+                screen, not just analyzeMutation.isPending — isPending stays
+                true for as long as ANY request is in flight regardless of
+                which chat sent it, so without this the ticker followed the
+                founder to whatever chat they opened next instead of staying
+                with the question it belongs to. */}
+            {analyzeMutation.isPending && pendingForSessionId === currentSession.id && (
               <VeraTracing seed={`${messages.length}:${messages[messages.length - 1]?.content ?? ''}`} />
             )}
             <div ref={endRef} />
