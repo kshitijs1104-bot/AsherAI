@@ -134,9 +134,20 @@ async function supabaseFetch(url: string, init: RequestInit): Promise<Response> 
       ...init,
       signal: controller.signal,
       headers: {
-        // The service-role key. Server-side only — it bypasses row-level
-        // security by design, which is why it must never be exposed to the
-        // browser and why the bucket itself should stay private.
+        // BOTH headers, not just Authorization. Supabase's gateway (Kong) sits
+        // in front of the Storage API and identifies the calling project from
+        // `apikey` independently of who the caller is authenticated as; the
+        // official supabase-js client always sends both for exactly this
+        // reason, and going through only one is an easy way to get a 401 that
+        // has nothing to do with the credential being wrong.
+        //
+        // Works with both of Supabase's key formats. The legacy JWT
+        // `service_role` key and the newer opaque `sb_secret_...` key are
+        // both privileged, server-only, bypass-RLS credentials — Supabase's
+        // own docs describe the new "Secret key" as the direct replacement
+        // for `service_role`, used the same way. Whichever one is in
+        // SUPABASE_SERVICE_ROLE_KEY, it goes in both headers unchanged.
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
         ...(init.headers ?? {}),
       },

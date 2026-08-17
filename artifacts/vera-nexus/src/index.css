@@ -2161,20 +2161,13 @@ html[data-skin] .vera-t-data {
    screen with card-shaped things on it already looks like a dashboard, which
    is the one thing this surface must not do. */
 
-/* Alloy: one 1px centre spine behind the hero, replacing the gradient blob.
-   It marks the composition's axis and stops where the composer takes over —
-   structure doing the job decoration was doing. */
-html[data-skin] .vera-hero-axis { position: relative; }
-html[data-skin] .vera-hero-axis::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 42%;
-  left: 50%;
-  width: 1px;
-  pointer-events: none;
-  background: linear-gradient(to bottom, transparent, var(--v7-border) 35%, var(--v7-border));
-}
+/* Alloy's 1px centre spine behind the hero, removed on request — it read as
+   a rendering artifact (a stray line splitting the page) rather than
+   deliberate structure, and the selector wasn't even skin-scoped (matched
+   any `data-skin`, not just Alloy), so it showed up regardless of which
+   skin or theme was active. Do not reintroduce this as a global rule; if a
+   center-axis motif is wanted again, scope it to one named skin explicitly
+   (`html[data-skin="alloy"]`) and preview it in both light and dark first.
 
 /* ---------- Recomposition ---------------------------------------------
    Tablet and mobile are their own compositions, not a reflow. */

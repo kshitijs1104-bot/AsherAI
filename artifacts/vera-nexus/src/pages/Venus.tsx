@@ -1203,7 +1203,7 @@ export function VenusPage() {
               }}
             ></div>
 
-            <div className={`m-auto flex flex-col items-center w-full max-w-[600px] relative ${skinned ? 'vera-hero-axis' : ''}`}>
+            <div className="m-auto flex flex-col items-center w-full max-w-[600px] relative">
               {/* Only ever shown on this "new chat" landing view, never
                   overlaid on an in-progress chat thread — a check-in is a
                   start-of-session moment, not something that should follow

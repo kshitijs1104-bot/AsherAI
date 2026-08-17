@@ -166,20 +166,40 @@ async function recordConsentServerSide(): Promise<void> {
 }
 
 /**
- * Reconciles the local copy against the server's record, which is the one that
- * counts. Called once after sign-in (see PrivacyGate).
+ * Reconciles the local copy against the server's record. Called once after
+ * sign-in (see App.tsx's RequireConsent).
  *
- * TWO DIRECTIONS, BOTH NEEDED:
- *   - Server has a current acceptance, device does not (new browser, cleared
- *     storage) → write the local cache so the gate does not ask again for
- *     something already agreed to.
- *   - Device claims acceptance, server has none or an older version → clear the
- *     local claim so the gate asks. This is the direction that matters: it means
- *     a cleared or forged localStorage value cannot get anyone past the policy,
- *     because the server is what is actually consulted.
+ * ADDITIVE ONLY, NEVER SUBTRACTIVE — this is a fix, not the original design.
+ * The first version also cleared the local flag whenever the server came back
+ * without a matching record, on the theory that a local-only "yes" with no
+ * server backing must be stale or forged. In practice that punished ordinary
+ * founders instead of catching anyone: recordConsentServerSide() is
+ * fire-and-forget (see acceptPrivacy above), so ANY single dropped write — a
+ * blip, a slow request, the server briefly unreachable, a migration not yet
+ * applied to this environment — leaves the server with nothing forever, since
+ * nothing ever retries it. This function runs on every fresh app load, so one
+ * bad write anywhere in an account's history turned into the policy screen
+ * reappearing on every sign-in for good. Reported live as exactly that.
  *
- * Silent on network failure. The local value stands in that case, which keeps a
- * founder working through a blip rather than blocking them on the API being up.
+ * The fix is to stop treating "the server has nothing" as evidence of
+ * tampering. It almost never is — the honest failure mode is a lost write, not
+ * a forged flag — and there is nothing server-side that actually enforces
+ * consent before allowing API access (grep the routes: nothing reads
+ * policyVersion outside this settings endpoint), so the old check was not
+ * closing a real gap, only creating a false-positive loop for legitimate
+ * accounts. If that enforcement is ever added, reconsider this trade-off then.
+ *
+ * So now: an already-accepted device is trusted and left alone, full stop.
+ * The server round trip is used only to CATCH UP a device that has nothing
+ * locally (a new browser, cleared storage) from a record made elsewhere, and
+ * to retry writing the durable record if this device thinks it's accepted but
+ * the server disagrees — self-healing the exact failure that caused the loop,
+ * instead of punishing the founder for it.
+ *
+ * A genuine policy change still re-prompts correctly with no special case
+ * needed here: hasAcceptedPrivacy() compares the stored version against the
+ * current PRIVACY_POLICY_VERSION constant directly, so bumping that constant
+ * makes every existing local record stop matching on its own.
  */
 export async function refreshFromServer(): Promise<void> {
   try {
@@ -188,6 +208,9 @@ export async function refreshFromServer(): Promise<void> {
     const record = (await response.json()) as { version?: string | null; acceptedAt?: string | null };
 
     if (record?.version === PRIVACY_POLICY_VERSION) {
+      // Server has a current acceptance this device doesn't know about yet
+      // (new browser, cleared storage, or this device's own write from a
+      // previous session that succeeded after all) — adopt it.
       try {
         localStorage.setItem(
           KEY,
@@ -198,16 +221,16 @@ export async function refreshFromServer(): Promise<void> {
       return;
     }
 
-    // Server does not have a current acceptance. If this device claims one, it
-    // is stale or fabricated — drop it and let the gate do its job.
-    if (getPrivacyConsent()?.version === PRIVACY_POLICY_VERSION) {
-      try {
-        localStorage.removeItem(KEY);
-      } catch {}
-      emit();
+    // Server has no current record. If this device already believes it's
+    // accepted, that belief is left completely alone — no gate reappears —
+    // and the durable write is simply retried in the background, so the
+    // account self-heals instead of getting stuck re-asking forever.
+    if (hasAcceptedPrivacy()) {
+      void recordConsentServerSide();
     }
   } catch {
-    // Offline or the API is down — keep the local value and move on.
+    // Offline or the API is down — nothing to reconcile right now, try again
+    // next load.
   }
 }
 
@@ -262,10 +285,12 @@ export function usePrivacyAccepted(): boolean {
 // audit event.
 //
 // localStorage is kept, but its job changed: it is a CACHE that avoids blocking
-// the first paint on a round trip, not the record. refreshFromServer()
-// reconciles the two after sign-in in both directions — importantly including
-// "the device claims consent and the server has none", which is what stops a
-// hand-edited localStorage value from getting anyone past the policy.
+// the first paint on a round trip, not the record. refreshFromServer() uses the
+// server to fill in a device that has nothing locally, and to retry the durable
+// write when the server is missing one this device believes it already made —
+// it never clears an accepted device. See refreshFromServer's own comment for
+// why the earlier version did the opposite and what that actually cost real
+// accounts.
 //
 // STILL TRUE, AND WORTH KNOWING: consent is recorded for SIGNED-IN users, which
 // is every user who can reach the gate (it renders inside RequireAuth). The
