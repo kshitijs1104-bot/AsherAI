@@ -8,6 +8,7 @@ import { isLastDayOfMonth, currentPeriodMonth } from "../lib/recap";
 import { buildMonthlyWrap, persistMonthlyWrap } from "../lib/monthlyWrap";
 import { getGroqClient } from "../lib/groq";
 import { buildDailyDigest, ensureDailyBriefItem, emailConfigured, sendDigestEmail } from "../lib/dailyDigest";
+import { getNudgesFor } from "../lib/nudges";
 
 // THE background execution loop. Deliberately a standalone script, not a
 // setInterval living inside the API process — this deployment's target is
@@ -100,7 +101,15 @@ async function main() {
           // Only ever emailed alongside a NEWLY created item, so a re-run
           // cannot email twice about the same day.
           const email = user.primaryEmailAddress?.emailAddress ?? user.emailAddresses[0]?.emailAddress ?? null;
-          if (email && emailConfigured() && (await sendDigestEmail(email, digest))) emailsSent++;
+          // The same unfinished work the in-app strip shows, folded into the
+          // email. Read-only: getNudgesFor never records a nudge as shown, so
+          // emailing about something cannot silence it in the product (see
+          // routes/nudges.ts for why showing is a separate, render-time call).
+          // Best-effort — a failure here costs the list, never the email.
+          const unfinished = await getNudgesFor(user.id)
+            .then((ns) => ns.map((n) => n.title))
+            .catch(() => [] as string[]);
+          if (email && emailConfigured() && (await sendDigestEmail(email, digest, unfinished))) emailsSent++;
         } catch (err) {
           briefFailures++;
           console.error(`[dailyJob] daily brief failed for user ${user.id}:`, err);

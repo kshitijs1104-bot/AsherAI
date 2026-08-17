@@ -20,6 +20,7 @@ import {
   usageDailyTable,
   userStatusTable,
   auditEventsTable,
+  nudgeStateTable,
 } from "@workspace/db";
 import { sidecarKey } from "./attachmentIngest";
 import { deleteObject, type StorageDriver } from "./storage";
@@ -77,6 +78,7 @@ export interface DeletionReport {
   settings?: number;
   usage?: number;
   status?: number;
+  nudges?: number;
   auditEventsAnonymised?: number;
 }
 
@@ -323,6 +325,13 @@ export async function deleteAllUserData(userId: string): Promise<DeletionReport>
       .delete(usageDailyTable)
       .where(or(eq(usageDailyTable.subject, userId), eq(usageDailyTable.subject, `u:${userId}`)))
       .returning({ id: usageDailyTable.id }),
+  );
+
+  // What Vera had already nudged them about. Ordinary per-user bookkeeping,
+  // so it goes with them — and leaving it would mean a future account on the
+  // same id inheriting a stranger's "already told them this" history.
+  report.nudges = await del("nudge_state", () =>
+    db.delete(nudgeStateTable).where(eq(nudgeStateTable.userId, userId)).returning({ id: nudgeStateTable.id }),
   );
 
   // The suspension record. Deleted, not kept: the account it describes no

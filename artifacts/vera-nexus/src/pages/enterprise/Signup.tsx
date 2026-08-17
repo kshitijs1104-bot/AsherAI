@@ -1,90 +1,71 @@
-import { useState } from 'react';
-import { saveSignupData } from '../../lib/enterpriseGate';
-import { useLocation } from 'wouter';
+/* ---------------------------------------------------------------------------
+   THE SIGN-UP FORM THAT USED TO LIVE HERE IS GONE.
 
-export function SignupGate() {
-  const [, navigate] = useLocation();
-  const [form, setForm] = useState({ name: '', email: '' });
-  const [error, setError] = useState('');
+   `SignupGate` rendered a name + work-email form, wrote both to localStorage,
+   and moved the visitor to onboarding. It had not been reachable for some time:
+   `/enterprise/signup` routes to `SignupEntry` in App.tsx, which hands the
+   visitor to Clerk's real sign-up. So this was a second, fake front door with
+   no account behind it — it collected an email nobody read and produced a
+   "signed up" state that no server had heard of.
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name || !form.email) {
-      setError('All fields are required.');
-      return;
-    }
-    if (!form.email.includes('@')) {
-      setError('Enter a valid email address.');
-      return;
-    }
-    saveSignupData({ ...form, company: '' });
-    navigate('/enterprise/onboarding');
-  };
+   Deleting it rather than leaving it unrouted, for the same reason the backend
+   deleted its six dead routers: a screen no live path reaches cannot be tested
+   by using the product, so it drifts away from the real one and eventually
+   somebody wires it back up by accident.
 
-  return (
-    <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center p-8">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 bg-[var(--mint)]/10 border border-[var(--mint)]/30 px-4 py-1.5 rounded-full text-xs font-mono text-[var(--mint)] uppercase tracking-widest mb-6">
-            Enterprise Access · Gate 1 of 4
-          </div>
-          <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Create Your Account</h1>
-          <p className="text-sm text-[var(--muted)]">
-            Vera is available exclusively to enterprise operators. Sign up to begin.
-          </p>
-        </div>
+   Real sign-up is Clerk's. It owns the password, the verification email, the
+   reset flow, the lockout and the enumeration defences — none of which this
+   codebase should be reimplementing on a form that stored its results in a
+   browser.
+--------------------------------------------------------------------------- */
 
-        <form onSubmit={handleSubmit} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 space-y-5">
-          {error && (
-            <div className="bg-[var(--red)]/10 border border-[var(--red)]/30 text-[var(--red)] text-sm p-3 rounded font-mono">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-mono text-[var(--dim)] uppercase tracking-wider mb-2">Full Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="Jane Smith"
-              className="w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-4 py-3 text-sm text-[var(--text)] placeholder-[var(--dim)] focus:outline-none focus:border-[var(--indigo)] transition-colors"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono text-[var(--dim)] uppercase tracking-wider mb-2">Work Email</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-              placeholder="jane@company.com"
-              className="w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-4 py-3 text-sm text-[var(--text)] placeholder-[var(--dim)] focus:outline-none focus:border-[var(--indigo)] transition-colors"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-[var(--indigo)] hover:bg-[var(--indigo-light)] text-white font-bold py-3 rounded-lg transition-colors text-sm uppercase tracking-wider mt-2"
-          >
-            Continue to Onboarding →
-          </button>
-        </form>
-
-        <GateProgress current={0} />
-      </div>
-    </div>
-  );
-}
+// ---- The step indicator, telling the truth about how many steps there are ----
+//
+// This used to render "Gate 1 / Gate 2 / Gate 3 / Gate 4" on every screen in
+// the funnel. Three separate things were wrong with that:
+//
+//   Gate 1 was this file's deleted form, so the first pip pointed at a step
+//   that no longer exists — a founder arriving from Clerk landed on "Gate 2"
+//   with no way to know what they had supposedly already done.
+//
+//   Gate 4 was checkout, which is no longer in the funnel at all (billing
+//   isn't live; see Plan.tsx). It advertised a payment step that never comes.
+//
+//   "Gate" is the product's internal word for it. Nobody signing up thinks of
+//   themselves as passing through gates, and the word reads as an obstacle
+//   course — the opposite of what a two-step setup should feel like.
+//
+// What remains is what actually exists: tell Vera about your company, then
+// start. Two steps, named as themselves.
+const STEPS = ['Your company', 'Start using Vera'] as const;
 
 export function GateProgress({ current }: { current: number }) {
   return (
-    <div className="flex justify-center gap-2 mt-8">
-      {['Gate 1', 'Gate 2', 'Gate 3', 'Gate 4'].map((g, i) => (
-        <div key={g} className={`text-[10px] font-mono px-2 py-1 rounded ${i <= current ? 'bg-[var(--indigo)] text-white' : 'bg-[var(--surface)] text-[var(--dim)] border border-[var(--border)]'}`}>
-          {g}
-        </div>
-      ))}
-    </div>
+    <nav aria-label="Setup progress" className="flex justify-center items-center gap-2 mt-8">
+      {STEPS.map((label, i) => {
+        const done = i < current;
+        const active = i === current;
+        return (
+          <div key={label} className="flex items-center gap-2">
+            <span
+              aria-current={active ? 'step' : undefined}
+              className={`text-[10px] font-mono px-2.5 py-1 rounded transition-colors ${
+                active
+                  ? 'bg-[var(--indigo)] text-white'
+                  : done
+                    ? 'bg-[var(--mint)]/15 text-[var(--mint)] border border-[var(--mint)]/30'
+                    : 'bg-[var(--surface)] text-[var(--dim)] border border-[var(--border)]'
+              }`}
+            >
+              {done ? '✓ ' : ''}
+              {label}
+            </span>
+            {i < STEPS.length - 1 && (
+              <span aria-hidden="true" className="w-4 h-px" style={{ background: 'var(--border)' }} />
+            )}
+          </div>
+        );
+      })}
+    </nav>
   );
 }

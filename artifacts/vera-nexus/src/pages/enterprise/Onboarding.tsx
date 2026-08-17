@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { saveOnboardingData } from '../../lib/enterpriseGate';
 import { useLocation } from 'wouter';
 import { GateProgress } from './Signup';
+import { useSaveOnboarding } from '../../lib/venusApi';
 
 const ROLES = ['Founder / CEO', 'Co-founder', 'CTO', 'COO', 'Product Lead', 'Other'];
 const REFERRAL_SOURCES = ['Twitter / X', 'LinkedIn', 'Friend / Referral', 'Search', 'Product Hunt', 'Investor / Advisor', 'Other'];
 
 export function OnboardingGate() {
   const [, navigate] = useLocation();
+  const saveOnboarding = useSaveOnboarding();
   const [form, setForm] = useState({
     companyName: '',
     revenue: '',
@@ -21,9 +23,30 @@ export function OnboardingGate() {
   const effectiveRole = form.role === 'Other' ? form.roleOther : form.role;
   const isValid = form.companyName.trim() && form.role && effectiveRole.trim() && form.referralSource && form.headcount;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // ---- These answers now reach the server ----
+  //
+  // THE GAP THIS CLOSES. saveOnboardingData writes to localStorage, and that
+  // was the ONLY thing this form did. Five questions asked of every founder
+  // before they can use the product — company, revenue, team size, role, and
+  // how they heard about Vera — and not one of the answers left the browser.
+  // Nobody could have answered "which channel is actually bringing people in"
+  // or "what stage are our users at", because the product did not hold it.
+  //
+  // The local write is KEPT alongside the server write, deliberately: the gate
+  // machinery in lib/enterpriseGate.ts reads it synchronously to decide which
+  // step comes next, and making that decision wait on a network round trip
+  // would put a spinner in the middle of a funnel for no gain.
+  //
+  // The server write is awaited but never blocking on failure. A founder who
+  // has filled in this form has done their part; refusing to let them into the
+  // product because our analytics write failed would be punishing them for our
+  // problem. The failure is logged, and the nudge engine will notice the
+  // profile is still incomplete and ask again later — which is the correct
+  // recovery, and it is automatic.
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid) { setError('Please fill in all required fields.'); return; }
+
     saveOnboardingData({
       companyName: form.companyName,
       revenue: form.revenue || '0',
@@ -31,6 +54,19 @@ export function OnboardingGate() {
       role: effectiveRole,
       referralSource: form.referralSource,
     } as any);
+
+    try {
+      await saveOnboarding.mutateAsync({
+        companyName: form.companyName.trim(),
+        role: effectiveRole.trim(),
+        teamSize: form.headcount.trim() || undefined,
+        monthlyRevenue: form.revenue.trim() || undefined,
+        referralSource: form.referralSource || undefined,
+      });
+    } catch (err) {
+      console.error('[onboarding] could not save profile to the server', err);
+    }
+
     navigate('/enterprise/plan');
   };
 
@@ -39,7 +75,7 @@ export function OnboardingGate() {
       <div className="w-full max-w-lg">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 bg-[var(--mint)]/10 border border-[var(--mint)]/30 px-4 py-1.5 rounded-full text-xs font-mono text-[var(--mint)] uppercase tracking-widest mb-6">
-            Enterprise Access · Gate 2 of 4
+            Step 1 of 2
           </div>
           <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Tell Vera About You</h1>
           <p className="text-sm text-[var(--muted)]">Vera calibrates every analysis to your company, stage, and goals.</p>
@@ -130,7 +166,7 @@ export function OnboardingGate() {
           </button>
         </form>
 
-        <GateProgress current={1} />
+        <GateProgress current={0} />
       </div>
     </div>
   );

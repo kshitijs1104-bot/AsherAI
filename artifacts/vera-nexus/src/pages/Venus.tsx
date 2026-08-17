@@ -23,7 +23,7 @@ import { AttachmentPreviewModal, type PreviewableAttachment } from './Attachment
 import { useVenusTheme } from '../lib/venusTheme';
 import { useVeraSkin } from '../lib/veraSkin';
 import { prefStorage } from '../lib/cookieConsent';
-import { useUploadAttachment, useQueue, useMarkQueueSeen, type UploadedAttachment } from '../lib/venusApi';
+import { useUploadAttachment, useQueue, useMarkQueueSeen, useNudges, type UploadedAttachment } from '../lib/venusApi';
 
 // One consistent compact row shape for everything below New Chat — replaces
 // the old mismatched treatment (a separately-styled full-width Command
@@ -475,6 +475,17 @@ export function VenusPage() {
   // "something arrived you haven't looked at", clears when the board is opened,
   // and returns when the 6am brief or a connector poll adds something.
   const unseenQueueCount = queueData?.unseen ?? 0;
+  // Nudges count toward the same badge. They are the other half of "there is
+  // something here for you": the queue holds work Vera is waiting on, nudges
+  // hold work the founder left unfinished, and a founder does not care which
+  // bucket a thing came from when deciding whether to open the board.
+  //
+  // Deliberately NOT marked seen by opening Command Center the way queue items
+  // are — a nudge is satisfied by DOING the thing, not by glancing at it, and
+  // its own three-hour cooldown (see api-server lib/nudges.ts) is what stops it
+  // repeating in the meantime.
+  const { data: nudgeData } = useNudges();
+  const nudgeCount = nudgeData?.count ?? 0;
   const markQueueSeen = useMarkQueueSeen();
 
   // Marked seen when the board is actually SHOWN — keyed on the view, not on
@@ -1080,7 +1091,7 @@ export function VenusPage() {
             actually control (a panel in this view) and sit under their own
             heading; the destinations below are named as destinations. */}
         <div className="mb-[18px]" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={unseenQueueCount} skinned={skinned} />
+          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={unseenQueueCount + nudgeCount} skinned={skinned} />
           <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/vera/workflows')} skinned={skinned} />
           {/* The slot the sidebar comment above explicitly left open ("room
               left for future nav items between Workflows and Goals"). */}

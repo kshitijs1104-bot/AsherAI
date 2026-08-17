@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Plug, Palette, SlidersHorizontal, X } from 'lucide-react';
+import { Plug, Palette, SlidersHorizontal, X, IdCard } from 'lucide-react';
 import { ConnectorPicker } from './ConnectorPicker';
 import { SkinChoiceList } from './SkinPicker';
 import { GeneralSettings } from './GeneralSettings';
+import { AccountCard } from './AccountCard';
 import type { VenusTheme } from '../lib/venusTheme';
 
-type Tab = 'general' | 'connectors' | 'appearance';
+type Tab = 'account' | 'general' | 'connectors' | 'appearance';
 
 /**
  * Vera's sidebar Settings button used to expand an inline panel at the
@@ -35,7 +36,7 @@ export function VeraSettingsModal({
   onClose: () => void;
   theme: VenusTheme;
 }) {
-  const [tab, setTab] = useState<Tab>('connectors');
+  const [tab, setTab] = useState<Tab>('account');
 
   useEffect(() => {
     if (!open) return;
@@ -134,6 +135,9 @@ export function VeraSettingsModal({
         >
           {(
             [
+              // Account leads: it answers 'who does Vera think I am', which is
+              // the question somebody opening Settings most often came to check.
+              { id: 'account' as const, label: 'Account', icon: IdCard },
               { id: 'general' as const, label: 'General', icon: SlidersHorizontal },
               { id: 'connectors' as const, label: 'Connectors', icon: Plug },
               { id: 'appearance' as const, label: 'Appearance', icon: Palette },
@@ -177,7 +181,15 @@ export function VeraSettingsModal({
             reachable by scrolling the popup, never by scrolling or zooming
             the page behind it. */}
         <div style={{ overflowY: 'auto', padding: '0 20px 20px' }}>
-          {tab === 'general' ? <GeneralSettings /> : tab === 'connectors' ? <ConnectorPicker /> : <SkinChoiceList />}
+          {tab === 'account' ? (
+            <AccountCard />
+          ) : tab === 'general' ? (
+            <GeneralSettings />
+          ) : tab === 'connectors' ? (
+            <ConnectorPicker />
+          ) : (
+            <SkinChoiceList />
+          )}
         </div>
       </div>
     </div>

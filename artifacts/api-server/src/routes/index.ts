@@ -16,6 +16,9 @@ import attachmentsRouter from "./attachments";
 import dossierRouter from "./dossier";
 import accountRouter from "./account";
 import operatorRouter from "./operator";
+import profileRouter from "./profile";
+import nudgesRouter from "./nudges";
+import accessRouter from "./access";
 
 // ---- Every route registered here is reachable from the live product ----
 //
@@ -67,5 +70,16 @@ router.use(accountRouter);
 // confirmable by probing. See the header of routes/operator.ts for the three
 // rules it follows — chief among them that it never returns user content.
 router.use(operatorRouter);
+// GET/PATCH /profile and POST /profile/onboarding. The onboarding form used to
+// write its five answers to localStorage and nowhere else, so the one screen
+// that asks every founder who they are produced no analysable data at all.
+router.use(profileRouter);
+// GET /nudges — what is genuinely unfinished for this founder right now. See
+// lib/nudges.ts for why nudges are derived per request and never stored.
+router.use(nudgesRouter);
+// GET /access/me + the operator half of the waitlist. Signup is OPEN unless
+// VERA_SIGNUP_MODE=waitlist, in which case new accounts are captured and told
+// where they stand rather than silently blocked. See routes/access.ts.
+router.use(accessRouter);
 
 export default router;

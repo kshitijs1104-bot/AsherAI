@@ -113,7 +113,7 @@ export function CheckoutGate() {
           </p>
         </div>
 
-        <GateProgress current={3} />
+
       </div>
     </div>
   );

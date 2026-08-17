@@ -87,6 +87,38 @@ export const settingsTable = pgTable("settings", {
   // gate does not need a round trip before it can decide whether to render.
   policyVersion: text("policy_version"),
   policyAcceptedAt: timestamp("policy_accepted_at"),
+
+  // ---- The onboarding answers that were being thrown away ----
+  //
+  // THE GAP THIS CLOSES. The onboarding form (pages/enterprise/Onboarding.tsx)
+  // asks for company name, monthly revenue, team size, role and how they heard
+  // about Vera — then wrote all of it to localStorage and nowhere else. So the
+  // five questions every single founder is made to answer before they can use
+  // the product produced ZERO analysable data: no way to know which channel
+  // brought them, what stage they are at, or who is actually signing up. The
+  // one screen designed to tell you who your users are was telling you nothing.
+  //
+  // companyName/teamSize/stage/industry/country/primaryGoal already existed
+  // above (written by the older /settings/onboarding route). These are the
+  // fields the live form collects that had no column at all.
+  //
+  // Deliberately all nullable and all text: this is self-reported founder
+  // input, not validated data. "Monthly revenue" arrives as whatever they
+  // typed — "0", "pre-revenue", "~40k" — and coercing that to a number at the
+  // boundary would either reject honest answers or invent precision. It is
+  // stored as given and interpreted when read.
+  monthlyRevenue: text("monthly_revenue"),
+  role: text("role"),
+  referralSource: text("referral_source"),
+  // What they want to be called, if they change it from the Clerk account
+  // name. Null means "use the Clerk identity", which is the default and the
+  // common case — see routes/profile.ts.
+  displayName: text("display_name"),
+  // When the funnel was actually completed, distinct from onboardingCompleted
+  // (a boolean that cannot answer "how long did they take" or "when did the
+  // signups spike").
+  onboardingCompletedAt: timestamp("onboarding_completed_at"),
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

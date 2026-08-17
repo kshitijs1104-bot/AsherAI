@@ -243,20 +243,43 @@ export function emailConfigured(): boolean {
   return !!RESEND_API_KEY && !!DIGEST_FROM;
 }
 
-export async function sendDigestEmail(to: string, digest: DailyDigest): Promise<boolean> {
+export async function sendDigestEmail(to: string, digest: DailyDigest, unfinished: string[] = []): Promise<boolean> {
   if (!emailConfigured()) return false;
 
   const boardUrl = `${APP_URL}/vera?view=command-center`;
 
+  // ---- The unfinished list, from the same engine the in-app strip uses ----
+  //
+  // Passed in rather than fetched here so this function stays a pure sender —
+  // and, more importantly, so the email cannot mark nudges as "shown". Only a
+  // real in-app render does that (see routes/nudges.ts), because an email
+  // burning the three-hour cooldown would mean the founder opens Vera to find
+  // the thing it just emailed them about has gone quiet.
+  //
+  // Capped at three. A longer list stops being a prompt and becomes a list of
+  // everything you have not done, which people close rather than act on.
+  const topUnfinished = unfinished.slice(0, 3);
+
+  const unfinishedText = topUnfinished.length > 0 ? `\n\nStill open:\n${topUnfinished.map((u) => `  · ${u}`).join("\n")}` : "";
+
   // Plain text alongside HTML: a digest that only renders as HTML lands in
   // spam more often, and this content is short enough that the text version is
   // genuinely readable rather than a courtesy.
-  const text = `${digest.headline}\n\n${digest.body}\n\nOpen your board: ${boardUrl}\n\nTo stop these, turn off daily email in Vera → Settings.`;
+  const text = `${digest.headline}\n\n${digest.body}${unfinishedText}\n\nOpen your board: ${boardUrl}\n\nTo stop these, turn off daily email in Vera → Settings.`;
+
+  const unfinishedHtml =
+    topUnfinished.length > 0
+      ? `<p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#757d8c;margin:22px 0 8px">Still open</p>
+  <ul style="margin:0 0 20px;padding-left:18px;color:#4a515e">${topUnfinished
+    .map((u) => `<li style="margin:0 0 4px">${escapeHtml(u)}</li>`)
+    .join("")}</ul>`
+      : "";
 
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;color:#16191f;line-height:1.6">
   <p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#757d8c;margin:0 0 14px">Vera · Daily brief</p>
   <h1 style="font-size:19px;margin:0 0 10px;line-height:1.3">${escapeHtml(digest.headline)}</h1>
   <p style="margin:0 0 20px;color:#4a515e">${escapeHtml(digest.body)}</p>
+  ${unfinishedHtml}
   <a href="${escapeHtml(boardUrl)}" style="display:inline-block;background:#2f4c8c;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:14px">Open your board</a>
   <p style="font-size:12px;color:#757d8c;margin:24px 0 0">To stop these, turn off daily email in Vera → Settings.</p>
 </div>`;

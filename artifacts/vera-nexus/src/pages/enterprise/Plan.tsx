@@ -69,7 +69,7 @@ export function PlanGate() {
       <div className="w-full max-w-4xl">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 bg-[var(--mint)]/10 border border-[var(--mint)]/30 px-4 py-1.5 rounded-full text-xs font-mono text-[var(--mint)] uppercase tracking-widest mb-6">
-            Enterprise Access · Gate 3 of 4
+            Step 2 of 2
           </div>
           <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Your Plan</h1>
           <p className="text-sm text-[var(--muted)]">
@@ -110,7 +110,7 @@ export function PlanGate() {
           </button>
         </div>
 
-        <GateProgress current={2} />
+        <GateProgress current={1} />
       </div>
     </div>
   );

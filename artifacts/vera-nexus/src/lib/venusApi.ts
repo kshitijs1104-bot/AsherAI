@@ -638,3 +638,153 @@ export function useDeleteAccount() {
     mutationFn: () => apiFetch<DeleteAccountResult>('/api/account', { method: 'DELETE' }),
   });
 }
+
+// ---- Profile / account identity ----
+
+export interface VeraProfile {
+  userId: string;
+  /** Vera's display name if set, otherwise the Clerk account name, otherwise null. */
+  name: string | null;
+  displayName: string | null;
+  clerkName: string | null;
+  email: string | null;
+  imageUrl: string | null;
+  memberSince: string | null;
+  company: string | null;
+  role: string | null;
+  teamSize: string | null;
+  monthlyRevenue: string | null;
+  referralSource: string | null;
+  primaryGoal: string | null;
+  stage: string | null;
+  industry: string | null;
+  country: string | null;
+  onboardingCompleted: boolean;
+  onboardingCompletedAt: string | null;
+}
+
+/** Only the fields the account card lets a founder change. Identity (email,
+ *  joined date) is Clerk's and is deliberately not editable from here. */
+export interface ProfilePatch {
+  displayName?: string | null;
+  company?: string | null;
+  role?: string | null;
+  teamSize?: string | null;
+  monthlyRevenue?: string | null;
+  primaryGoal?: string | null;
+  stage?: string | null;
+  industry?: string | null;
+  country?: string | null;
+}
+
+export function useProfile() {
+  return useQuery({
+    queryKey: ['/api/profile'],
+    queryFn: () => apiFetch<VeraProfile>('/api/profile'),
+  });
+}
+
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: ProfilePatch) =>
+      apiFetch<Partial<VeraProfile>>('/api/profile', { method: 'PATCH', body: JSON.stringify(patch) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profile'] });
+      // The company name and role are read into the model's prompt, so a change
+      // here changes what Vera knows — the nudge list is derived from the same
+      // state and can go stale in the same breath.
+      queryClient.invalidateQueries({ queryKey: ['/api/nudges'] });
+    },
+  });
+}
+
+export interface OnboardingSubmission {
+  companyName: string;
+  role: string;
+  teamSize?: string;
+  monthlyRevenue?: string;
+  referralSource?: string;
+}
+
+// The write the onboarding form never used to make. Its five answers went to
+// localStorage and nowhere else, so the one screen every founder completes
+// produced nothing anyone could analyse — not even which channel brought them.
+export function useSaveOnboarding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: OnboardingSubmission) =>
+      apiFetch<{ ok: boolean }>('/api/profile/onboarding', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/profile'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/nudges'] });
+    },
+  });
+}
+
+// ---- Nudges ----
+
+export interface Nudge {
+  kind: string;
+  title: string;
+  body: string;
+  href: string;
+  actionLabel: string;
+  priority: 'high' | 'normal' | 'low';
+}
+
+// Polled rather than pushed: the cadence that matters here is "did something
+// become true while I was away", which a refetch answers exactly as well as a
+// socket would, without a socket. staleTime keeps a tab switch from re-asking.
+export function useNudges() {
+  return useQuery({
+    queryKey: ['/api/nudges'],
+    queryFn: () => apiFetch<{ nudges: Nudge[]; count: number }>('/api/nudges'),
+    // Three hours is the nudge cooldown itself (see api-server lib/nudges.ts),
+    // so asking more often than every 15 minutes cannot surface anything new —
+    // it would only spend requests.
+    refetchInterval: 15 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Reported only once nudges have genuinely been RENDERED. Kept separate from
+// the read for that reason: a background poll marking them shown would burn
+// the cooldown and the show-ceiling on nudges no human ever saw.
+export function useMarkNudgesShown() {
+  return useMutation({
+    mutationFn: (kinds: string[]) =>
+      apiFetch<{ ok: boolean }>('/api/nudges/shown', { method: 'POST', body: JSON.stringify({ kinds }) }),
+  });
+}
+
+export function useDismissNudge() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (kind: string) =>
+      apiFetch<{ ok: boolean }>('/api/nudges/dismiss', { method: 'POST', body: JSON.stringify({ kind }) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/nudges'] }),
+  });
+}
+
+// ---- Signup access mode (waitlist toggle) ----
+
+export interface AccessState {
+  mode: 'open' | 'waitlist';
+  allowed: boolean;
+  status: 'open' | 'approved' | 'pending' | 'declined' | 'no-email' | 'check-failed';
+}
+
+// Checked once per session at the app gate. In open mode (the default) the
+// server answers allowed:true immediately without touching the database, so
+// this costs one trivial request for the overwhelmingly common case.
+export function useAccessState() {
+  return useQuery({
+    queryKey: ['/api/access/me'],
+    queryFn: () => apiFetch<AccessState>('/api/access/me'),
+    staleTime: 10 * 60 * 1000,
+    // Never retry into a lockout: if this fails the server already fails open
+    // (see routes/access.ts), and hammering it would just delay the app.
+    retry: false,
+  });
+}

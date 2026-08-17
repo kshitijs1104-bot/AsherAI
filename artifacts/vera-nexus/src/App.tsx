@@ -44,6 +44,8 @@ import { PrivacyGate } from "@/pages/legal/PrivacyGate";
 import { PrivacyPolicyPage } from "@/pages/legal/PrivacyPolicyPage";
 import { CookieBanner } from "@/pages/legal/CookieBanner";
 import { usePrivacyAccepted, refreshFromServer } from "@/lib/privacyConsent";
+import { useAccessState } from "@/lib/venusApi";
+import { WaitlistGate } from "@/pages/WaitlistGate";
 
 const queryClient = new QueryClient();
 
@@ -137,7 +139,14 @@ function RequireAuth({ children }: { children: ReactNode }) {
     return <RedirectToSignIn signInFallbackRedirectUrl={returnTo} signUpFallbackRedirectUrl={returnTo} />;
   }
 
-  return <RequireConsent>{children}</RequireConsent>;
+  // Access before consent, deliberately: making somebody accept a privacy
+  // policy for a product they are not allowed into would be collecting an
+  // agreement for nothing.
+  return (
+    <RequireAccess>
+      <RequireConsent>{children}</RequireConsent>
+    </RequireAccess>
+  );
 }
 
 // ---- Consent is a condition on the product, not a step in the funnel ----
@@ -158,6 +167,29 @@ function RequireAuth({ children }: { children: ReactNode }) {
 // and the originally requested route appears underneath. Someone who signed up
 // and landed here continues to onboarding; someone who pasted a link gets the
 // link. Consent costs them their place in the queue, not their destination.
+// ---- Signup mode, checked once at the door ----
+//
+// In open mode (the default, and what ships) the server answers immediately
+// without a database read, so this is one trivial request and nothing else.
+// In waitlist mode an unapproved account gets the waiting room instead of the
+// product — and an APPROVED one, or anyone who was already using Vera before
+// the switch was flipped, notices nothing at all.
+//
+// Renders children while the check is in flight rather than blocking on it.
+// The gate exists to slow growth, not to put a spinner in front of founders
+// who already have access, and the server fails open for the same reason —
+// so the worst case of a slow or failed check is that somebody sees the app,
+// which is the correct direction for this particular thing to fail in.
+function RequireAccess({ children }: { children: ReactNode }) {
+  const { data } = useAccessState();
+
+  if (data && !data.allowed) {
+    return <WaitlistGate declined={data.status === 'declined'} />;
+  }
+
+  return <>{children}</>;
+}
+
 function RequireConsent({ children }: { children: ReactNode }) {
   const accepted = usePrivacyAccepted();
 

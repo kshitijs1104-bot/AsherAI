@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { SavedAnalysisBook, typeColor as savedTypeColor, TYPE_ORDER as SAVED_TYPE_ORDER } from './SavedAnalysisBook';
 import { ActivityWeek } from './ActivityWeek';
+import { NudgeStrip } from './NudgeStrip';
 import { getSavedAnalyses, typeLabel, type SavedAnalysis, type SavedAnalysisType, type ChatMessage } from '../lib/venusHistory';
 import {
   useQueue, useQueueAction, useDailyBrief, useRunInstantAction, useConnectors, useDecisions,
@@ -455,7 +456,16 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
 // on the page to miss entirely. This gives the streak the top line, at a
 // size that registers, and says something addressed to the founder rather
 // than printing a bare number.
-function streakLine(streak: number): { headline: string; sub: string } {
+function streakLine(streak: number, keptToday = true): { headline: string; sub: string } {
+  // The at-risk case first, so the full-width band tells the same story as the
+  // rail tile rather than two components disagreeing about the same number.
+  // See streakCaption for the reasoning behind the three states.
+  if (streak > 0 && !keptToday) {
+    return {
+      headline: `${streak} day${streak === 1 ? '' : 's'} in a row`,
+      sub: `Not kept today. One item off the board makes it ${streak + 1}; skipping today puts it back to zero.`,
+    };
+  }
   // See streakCaption below for why the zero case names the streak explicitly
   // rather than saying "Day one" next to a lifetime days-active tally.
   if (streak <= 0) return { headline: 'No streak yet', sub: 'Clear something off the board and your streak starts today.' };
@@ -468,18 +478,71 @@ function streakLine(streak: number): { headline: string; sub: string } {
 // The rail's version of the same idea, cut to fit beside a 32px numeral in a
 // ~320px column. streakLine's sentences are written for the classic board's
 // full-width band and wrap to three lines here.
-function streakCaption(streak: number): { label: string; note: string } {
+/* ---- The streak, framed as something owned rather than something scored ----
+ *
+ * A streak only changes behaviour once it belongs to the person: an unbroken
+ * run you own reads as something to protect, where the same number presented as
+ * a score reads as the product congratulating itself. Three states, and the
+ * middle one is the whole point:
+ *
+ *   none     — nothing to lose yet, so say plainly how one starts.
+ *   at risk  — a real run exists and TODAY has not been kept up. This is the
+ *              only moment the streak is losable, and it is the only moment
+ *              worth saying so.
+ *   secure   — kept today. Says so and then gets out of the way; a product that
+ *              keeps celebrating after the work is done is noise.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT DO. No countdown timer, no red alarm state,
+ * no "don't lose it!!". The honest fact — this ends tonight unless you clear
+ * one thing — is already motivating and is *true*; dressing it up would make
+ * the one genuinely time-bound message in the product indistinguishable from
+ * manufactured urgency, and then it gets ignored like everything else.
+ *
+ * `keptToday` comes from the same activityByDay the week strip is drawn from,
+ * so the caption can never disagree with the bars directly beneath it.
+ */
+type StreakState = 'none' | 'at-risk' | 'secure';
+
+function streakState(streak: number, keptToday: boolean): StreakState {
+  if (streak <= 0) return 'none';
+  return keptToday ? 'secure' : 'at-risk';
+}
+
+function streakCaption(streak: number, keptToday = true): { label: string; note: string; state: StreakState } {
+  const state = streakState(streak, keptToday);
+
   // The zero case says WHICH streak this is, not just "Day one". It sits
   // directly under a "N days active" tally counting every day the founder has
   // ever used Vera, so an unqualified "Day one" read as the panel disagreeing
   // with itself — reported as exactly that. These are two different measures:
   // days active is distinct days of any activity, ever; this is consecutive
   // days of clearing the board, which is 0 until something is actioned.
-  if (streak <= 0) return { label: 'No streak yet', note: 'Clear one item off the board to start one.' };
-  if (streak === 1) return { label: 'Day in a row', note: 'Come back tomorrow and it sticks.' };
-  if (streak < 5) return { label: 'Days in a row', note: "You've shown up every day this week." };
-  if (streak < 14) return { label: 'Days in a row', note: 'A routine now, not a novelty.' };
-  return { label: 'Days in a row', note: 'Vera works better the longer you do this.' };
+  if (state === 'none') {
+    return { label: 'No streak yet', note: 'Clear one item off the board to start one.', state };
+  }
+
+  if (state === 'at-risk') {
+    // Names the number being lost, because "your streak" is abstract and
+    // "your 6-day streak" is a thing you built.
+    return {
+      label: streak === 1 ? 'Day in a row' : 'Days in a row',
+      note: `Not kept today — clear one item and it's ${streak + 1}. Skip today and it's back to zero.`,
+      state,
+    };
+  }
+
+  if (streak === 1) return { label: 'Day in a row', note: 'Kept today. Come back tomorrow and it sticks.', state };
+  if (streak < 5) return { label: 'Days in a row', note: "Kept today. You've shown up every day this week.", state };
+  if (streak < 14) return { label: 'Days in a row', note: 'Kept today. A routine now, not a novelty.', state };
+  return { label: 'Days in a row', note: 'Kept today. Vera works better the longer you do this.', state };
+}
+
+/** Whether the board was actually cleared today, read off the same per-day
+ *  activity the week strip renders. Last entry is today (buildActivityByDay
+ *  fills the window forward to now), so an empty list is honestly "no". */
+function keptStreakToday(days: { actions: number }[] | undefined): boolean {
+  if (!days || days.length === 0) return false;
+  return (days[days.length - 1]?.actions ?? 0) > 0;
 }
 
 // "Time saved" was a number in minutes — 8m, 24m — which reads as a
@@ -503,7 +566,8 @@ function StreakBand({ palette, stats, streak }: { palette: Palette; stats: Daily
   // one, is gone), so this is constant true. Kept as a named flag because many
   // style branches read it; collapsing those is a separate change.
   const skinned = true;
-  const { headline, sub } = streakLine(streak);
+  // Same source as the rail tile and the week strip, so all three agree.
+  const { headline, sub } = streakLine(streak, keptStreakToday(stats.activityByDay));
   const counters = [
     stats.decisionsCaptured > 0 && [String(stats.decisionsCaptured), stats.decisionsCaptured === 1 ? 'decision captured' : 'decisions captured'],
     stats.lessonsLearned > 0 && [String(stats.lessonsLearned), stats.lessonsLearned === 1 ? 'lesson learned' : 'lessons learned'],
@@ -1119,6 +1183,11 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
              notebook page below, untouched. */
           <div className="vera-bento">
             <div className="vera-bento-main">
+              {/* Above the board header on purpose: these are things the FOUNDER
+                  left unfinished, and they outrank the queue of work Vera is
+                  waiting on a decision for. Renders nothing at all when there
+                  is nothing genuinely outstanding. */}
+              <NudgeStrip onNavigate={() => setView('board')} />
               <div className="vera-tile" style={{ padding: '20px 22px' }}>
                 <p className="vera-t-support" style={{ margin: '0 0 2px' }}>{dateLabel}</p>
                 <h1 className="vera-t-title" style={{ margin: '0 0 6px' }}>Today's {boardName}</h1>
@@ -1196,14 +1265,49 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
                   {/* The streak leads, because it is the only figure here
                       that can go DOWN — everything below it is an
                       accumulating total that only ever climbs, and a column
-                      of numbers that can't fall reads as decoration. */}
-                  <div className="vera-streak">
-                    <span className="vera-streak-n">{streak}</span>
-                    <span style={{ display: 'grid', gap: '2px', minWidth: 0 }}>
-                      <span className="vera-t-heading">{streakCaption(streak).label}</span>
-                      <span className="vera-t-support">{streakCaption(streak).note}</span>
-                    </span>
-                  </div>
+                      of numbers that can't fall reads as decoration.
+
+                      The at-risk state is the one moment this tile is worth
+                      interrupting anyone about, so it gets the only colour
+                      change on the board — and only then. See streakCaption. */}
+                  {(() => {
+                    const keptToday = keptStreakToday(dailyBrief.data.stats.activityByDay);
+                    const caption = streakCaption(streak, keptToday);
+                    const atRisk = caption.state === 'at-risk';
+                    return (
+                      <div
+                        className="vera-streak"
+                        style={atRisk ? { color: 'var(--v7-amber, #e0a868)' } : undefined}
+                      >
+                        <span
+                          className="vera-streak-n"
+                          style={atRisk ? { color: 'var(--v7-amber, #e0a868)' } : undefined}
+                        >
+                          {streak}
+                        </span>
+                        <span style={{ display: 'grid', gap: '2px', minWidth: 0 }}>
+                          <span className="vera-t-heading">
+                            {caption.label}
+                            {atRisk && (
+                              <span
+                                className="font-mono"
+                                style={{
+                                  marginLeft: 7,
+                                  fontSize: 9,
+                                  letterSpacing: '0.12em',
+                                  textTransform: 'uppercase',
+                                  color: 'var(--v7-amber, #e0a868)',
+                                }}
+                              >
+                                Ends tonight
+                              </span>
+                            )}
+                          </span>
+                          <span className="vera-t-support">{caption.note}</span>
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   {/* …and the week under it says whether that streak was
                       earned steadily or in one sitting, which no total can. */}

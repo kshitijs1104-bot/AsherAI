@@ -28,3 +28,11 @@ export * from "./company_dossiers";
 export * from "./user_status";
 export * from "./audit_events";
 export * from "./usage_daily";
+// Signup waitlist. Not user data in the deletion sense — a row here records
+// that somebody ASKED for access, and survives them never getting an account.
+// It is keyed on email rather than a Clerk user id for exactly that reason.
+export * from "./access_requests";
+// What Vera has already nudged each founder about. See the header in
+// nudge_state.ts for why the nudges themselves are derived and only the
+// "have they been told / did they say no" part is stored.
+export * from "./nudge_state";
