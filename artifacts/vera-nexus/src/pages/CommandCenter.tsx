@@ -456,7 +456,9 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
 // size that registers, and says something addressed to the founder rather
 // than printing a bare number.
 function streakLine(streak: number): { headline: string; sub: string } {
-  if (streak <= 0) return { headline: 'Day one', sub: 'Clear something off the board and the streak starts today.' };
+  // See streakCaption below for why the zero case names the streak explicitly
+  // rather than saying "Day one" next to a lifetime days-active tally.
+  if (streak <= 0) return { headline: 'No streak yet', sub: 'Clear something off the board and your streak starts today.' };
   if (streak === 1) return { headline: '1 day in a row', sub: 'One day is a start. Come back tomorrow and it becomes a habit.' };
   if (streak < 5) return { headline: `${streak} days in a row`, sub: "You've shown up every day this week. Vera's been keeping up." };
   if (streak < 14) return { headline: `${streak} days in a row`, sub: 'This is a routine now, not a novelty.' };
@@ -467,7 +469,13 @@ function streakLine(streak: number): { headline: string; sub: string } {
 // ~320px column. streakLine's sentences are written for the classic board's
 // full-width band and wrap to three lines here.
 function streakCaption(streak: number): { label: string; note: string } {
-  if (streak <= 0) return { label: 'Day one', note: 'Clear one item and the streak starts.' };
+  // The zero case says WHICH streak this is, not just "Day one". It sits
+  // directly under a "N days active" tally counting every day the founder has
+  // ever used Vera, so an unqualified "Day one" read as the panel disagreeing
+  // with itself — reported as exactly that. These are two different measures:
+  // days active is distinct days of any activity, ever; this is consecutive
+  // days of clearing the board, which is 0 until something is actioned.
+  if (streak <= 0) return { label: 'No streak yet', note: 'Clear one item off the board to start one.' };
   if (streak === 1) return { label: 'Day in a row', note: 'Come back tomorrow and it sticks.' };
   if (streak < 5) return { label: 'Days in a row', note: "You've shown up every day this week." };
   if (streak < 14) return { label: 'Days in a row', note: 'A routine now, not a novelty.' };
@@ -1206,14 +1214,47 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
                   {/* The accumulating record, as structured data rather than
                       prose — this is the one place on the board where every
                       value is directly comparable, so it gets the key/value
-                      system instead of a sentence. */}
+                      system instead of a sentence.
+
+                      SCOPE IS NOW STATED, and that is the fix rather than a
+                      decoration. Every figure in this tile is a LIFETIME total,
+                      while the monthly wrap counts the same-named things for the
+                      current calendar month — so the two disagreed on "how many
+                      decisions" and the board looked wrong next to a wrap that
+                      was right. Nothing was miscomputed; the window was just
+                      never named, which is worse, because a number a founder
+                      believes is this month's and isn't is a number they can act
+                      on wrongly.
+
+                      Same reason the streak above needed the caption it now has:
+                      "14 days active" (distinct days ever) sat directly above
+                      "Day one" (consecutive days clearing the board), and read
+                      as the panel contradicting itself. */}
                   <div className="vera-kv">
-                    <div className="vera-kv-row"><span className="k">Decisions</span><span className="v">{dailyBrief.data.stats.decisionsCaptured}</span></div>
-                    <div className="vera-kv-row"><span className="k">Lessons</span><span className="v">{dailyBrief.data.stats.lessonsLearned}</span></div>
-                    <div className="vera-kv-row"><span className="k">Automations</span><span className="v">{dailyBrief.data.stats.automationsCompleted}</span></div>
-                    <div className="vera-kv-row"><span className="k">Active goals</span><span className="v">{dailyBrief.data.stats.goalsActive}</span></div>
-                    <div className="vera-kv-row"><span className="k">Free time</span><span className="v">{freeTimeLabel(dailyBrief.data.stats.timeSavedMinutes)}</span></div>
+                    <div className="vera-kv-row">
+                      <span className="k">Decisions</span>
+                      <span className="v">{dailyBrief.data.stats.decisionsCaptured}</span>
+                    </div>
+                    <div className="vera-kv-row">
+                      <span className="k">Lessons</span>
+                      <span className="v">{dailyBrief.data.stats.lessonsLearned}</span>
+                    </div>
+                    <div className="vera-kv-row">
+                      <span className="k">Automations</span>
+                      <span className="v">{dailyBrief.data.stats.automationsCompleted}</span>
+                    </div>
+                    <div className="vera-kv-row">
+                      <span className="k">Active goals</span>
+                      <span className="v">{dailyBrief.data.stats.goalsActive}</span>
+                    </div>
+                    <div className="vera-kv-row">
+                      <span className="k">Free time</span>
+                      <span className="v">{freeTimeLabel(dailyBrief.data.stats.timeSavedMinutes)}</span>
+                    </div>
                   </div>
+                  <p className="vera-t-support" style={{ marginTop: 8 }}>
+                    Totals since you started — the monthly review counts this month only, so the two won't match.
+                  </p>
                 </div>
               )}
 
