@@ -23,7 +23,7 @@ import { AttachmentPreviewModal, type PreviewableAttachment } from './Attachment
 import { useVenusTheme } from '../lib/venusTheme';
 import { useVeraSkin } from '../lib/veraSkin';
 import { prefStorage } from '../lib/cookieConsent';
-import { useUploadAttachment, useQueue, type UploadedAttachment } from '../lib/venusApi';
+import { useUploadAttachment, useQueue, useMarkQueueSeen, type UploadedAttachment } from '../lib/venusApi';
 
 // One consistent compact row shape for everything below New Chat — replaces
 // the old mismatched treatment (a separately-styled full-width Command
@@ -452,7 +452,25 @@ export function VenusPage() {
   // Backs the Command Center nav row's unread badge — same query
   // NotificationBell used to poll independently, now read once here.
   const { data: queueData } = useQueue();
-  const pendingQueueCount = queueData?.items.filter(i => i.status === 'pending').length ?? 0;
+  // UNSEEN, not pending. A badge showing every pending item never clears until
+  // the whole board is empty, so it stops meaning anything; this one means
+  // "something arrived you haven't looked at", clears when the board is opened,
+  // and returns when the 6am brief or a connector poll adds something.
+  const unseenQueueCount = queueData?.unseen ?? 0;
+  const markQueueSeen = useMarkQueueSeen();
+
+  // Marked seen when the board is actually SHOWN — keyed on the view, not on
+  // the query, so a background refetch (TanStack refetches on window focus)
+  // can never clear the dot for items the founder never had on screen.
+  //
+  // Guarded on there being something unseen so this fires once per arrival
+  // rather than on every render of the view, and `isPending` keeps a slow
+  // response from queueing a second identical write.
+  useEffect(() => {
+    if (mainView !== 'command-center') return;
+    if (unseenQueueCount === 0 || markQueueSeen.isPending) return;
+    markQueueSeen.mutate();
+  }, [mainView, unseenQueueCount]);
   const endRef = useRef<HTMLDivElement | null>(null);
   // One hook per composer — only one of the two is mounted at a time (empty
   // state vs. active thread), but they are separate elements so each needs
@@ -1005,7 +1023,7 @@ export function VenusPage() {
             actually control (a panel in this view) and sit under their own
             heading; the destinations below are named as destinations. */}
         <div className="mb-[18px]" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={pendingQueueCount} skinned={skinned} />
+          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={unseenQueueCount} skinned={skinned} />
           <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/vera/workflows')} skinned={skinned} />
           {/* The slot the sidebar comment above explicitly left open ("room
               left for future nav items between Workflows and Goals"). */}

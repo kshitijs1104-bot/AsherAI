@@ -28,13 +28,17 @@ function todayAt(hour: number, minute: number): string {
   return d.toISOString();
 }
 
-function base(id: number): Pick<QueueItem, 'id' | 'userId' | 'resolvedAt' | 'externalId' | 'metadataJson'> {
+function base(id: number): Pick<QueueItem, 'id' | 'userId' | 'resolvedAt' | 'externalId' | 'metadataJson' | 'seenAt'> {
   // externalId/metadataJson are null on every fixture deliberately. A gmail
   // row without metadataJson is one the board reports as un-sendable, which
   // is the honest state for a fixture — these are photographed for the ad and
   // must not show Vera claiming it will send mail from an account that does
   // not exist.
-  return { id, userId: 'shots', resolvedAt: null, externalId: null, metadataJson: null };
+  //
+  // seenAt is null so these photograph as UNREAD — which is the state the ad
+  // wants (work waiting, notification live), and the honest one for a board
+  // nobody has opened.
+  return { id, userId: 'shots', resolvedAt: null, externalId: null, metadataJson: null, seenAt: null };
 }
 
 /**

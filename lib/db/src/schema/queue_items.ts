@@ -53,6 +53,19 @@ export const queueItemsTable = pgTable(
     // history is itself a signal (e.g. future "you keep rejecting X" tuning).
     status: text("status").notNull().default("pending"),
 
+    // ---- Unread state, for the notification dot ----
+    //
+    // Null means the founder has never had this item on screen. Set the first
+    // time the board is opened after it arrived.
+    //
+    // DELIBERATELY SEPARATE FROM `status`. An item can be seen and still
+    // pending (read it, haven't acted), or unseen and already resolved (a
+    // workflow accepted it automatically). Collapsing "have I looked at this"
+    // into "is it done" would make the dot lie in both directions — it would
+    // clear when a founder actioned one item out of five, and it would light up
+    // again for something they had already read but chosen to leave.
+    seenAt: timestamp("seen_at"),
+
     createdAt: timestamp("created_at").defaultNow(),
     resolvedAt: timestamp("resolved_at"),
   },

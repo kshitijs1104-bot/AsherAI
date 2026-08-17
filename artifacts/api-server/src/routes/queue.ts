@@ -6,6 +6,7 @@ import { requireAuth, requireUserId } from "../middlewares/auth";
 import { describeDbError } from "../lib/dbErrors";
 import { isUserFacingError, messageForCaller } from "../lib/userFacingError";
 import { performQueueItemSendAction } from "../lib/connectors/sendAction";
+import { countUnseen, markQueueSeen } from "../lib/dailyDigest";
 
 const router = Router();
 
@@ -82,7 +83,11 @@ router.get("/queue", requireAuth, async (req, res) => {
       .orderBy(sql`case when ${queueItemsTable.status} = 'pending' then 0 else 1 end`, desc(queueItemsTable.createdAt))
       .limit(50);
 
-    return res.json({ items: rows });
+    // The notification dot's number. Counted server-side rather than derived
+    // from `rows` because the list is capped at 50 — deriving it would silently
+    // under-report the moment a founder had more than fifty items, which is
+    // exactly when the dot matters most.
+    return res.json({ items: rows, unseen: await countUnseen(userId) });
   } catch (err) {
     req.log.error(err);
     return res.status(500).json({ error: "Failed to load queue" });
@@ -151,6 +156,28 @@ router.post("/queue/:id/action", requireAuth, async (req, res) => {
     // is answered generically.
     const status = isUserFacingError(err) ? err.status : 500;
     return res.status(status).json({ error: messageForCaller(err, describeDbError(err)) });
+  }
+});
+
+/* ---- Clearing the notification dot ----
+ *
+ * Separate from GET /queue on purpose. If reading the board marked everything
+ * seen as a side effect, the dot would clear on any background refetch —
+ * TanStack Query refetches on window focus, so simply alt-tabbing back to a
+ * tab left open on another page would silently mark a founder's items read
+ * without them ever being on screen. That is the failure mode that makes a
+ * notification dot untrustworthy, and once it is untrustworthy it is ignored.
+ *
+ * So the client calls this deliberately, when the board is actually shown.
+ */
+router.post("/queue/seen", requireAuth, async (req, res) => {
+  try {
+    const userId = requireUserId(req);
+    const marked = await markQueueSeen(userId);
+    return res.json({ marked, unseen: await countUnseen(userId) });
+  } catch (err) {
+    req.log.error(err);
+    return res.status(500).json({ error: describeDbError(err) });
   }
 });
 

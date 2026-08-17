@@ -17,7 +17,23 @@ export function NotificationBell({ className = '', onOpenCommandCenter }: { clas
   const { data } = useQueue();
 
   const pending = (data?.items ?? []).filter((i) => i.status === 'pending');
-  const count = pending.length;
+
+  // ---- The dot counts UNSEEN, not pending ----
+  //
+  // It used to show every pending item, which meant the badge sat on a number
+  // permanently until the founder cleared the whole board — and a badge that is
+  // always lit stops carrying information. It cannot say "something new arrived
+  // today", which is the one thing worth interrupting someone for.
+  //
+  // `unseen` is items that have never been on screen. It clears when the board
+  // is actually opened and lights up again when the 6am brief (or a connector
+  // poll) puts something new in — so the dot means "there is something here you
+  // haven't looked at", every time.
+  //
+  // The popover below still lists PENDING items, because "what's waiting for a
+  // decision" is the right content once you've opened it. Two different
+  // questions, two different numbers.
+  const count = data?.unseen ?? 0;
 
   useEffect(() => {
     if (!open) return;

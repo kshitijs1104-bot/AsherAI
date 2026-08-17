@@ -1,0 +1,1 @@
+ALTER TABLE "queue_items" ADD COLUMN "seen_at" timestamp;

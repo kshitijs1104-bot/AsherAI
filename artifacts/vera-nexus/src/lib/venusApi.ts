@@ -272,16 +272,36 @@ export interface QueueItem {
   // board row and the chat the decision was made in.
   externalId: string | null;
   metadataJson: string | null;
+  /** Null until the board has actually been on screen — drives the dot. */
+  seenAt: string | null;
 }
 
 export function useQueue() {
   return useQuery({
     queryKey: ['/api/queue'],
-    queryFn: () => apiFetch<{ items: QueueItem[] }>('/api/queue'),
+    // `unseen` is counted server-side rather than derived from `items`, because
+    // the list is capped at 50 — deriving it would under-report exactly when a
+    // founder has the most waiting.
+    queryFn: () => apiFetch<{ items: QueueItem[]; unseen: number }>('/api/queue'),
     // The notification bell polls off this same query — a founder acting on
     // an item in another tab (or a background job dropping in a new one)
     // should clear/update the badge without a manual refresh.
     refetchInterval: 60_000,
+  });
+}
+
+/**
+ * Clears the notification dot. Called when the board is actually SHOWN, never
+ * as a side effect of fetching it — TanStack Query refetches on window focus,
+ * so marking on read would clear the dot whenever a founder alt-tabbed back to
+ * a tab parked on another page, without the items ever being on screen. A dot
+ * that clears itself is a dot nobody trusts.
+ */
+export function useMarkQueueSeen() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch<{ marked: number; unseen: number }>('/api/queue/seen', { method: 'POST' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/queue'] }),
   });
 }
 

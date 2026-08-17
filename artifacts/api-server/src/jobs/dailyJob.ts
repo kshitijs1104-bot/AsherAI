@@ -1,4 +1,5 @@
 import { CronExpressionParser } from "cron-parser";
+import { clerkClient } from "@clerk/express";
 import { db, pool, workflowsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { runWorkflow } from "../lib/workflows/runners";
@@ -6,6 +7,7 @@ import { checkAutomationSuggestions } from "../lib/workflows/suggestions";
 import { isLastDayOfMonth, currentPeriodMonth } from "../lib/recap";
 import { buildMonthlyWrap, persistMonthlyWrap } from "../lib/monthlyWrap";
 import { getGroqClient } from "../lib/groq";
+import { buildDailyDigest, ensureDailyBriefItem, emailConfigured, sendDigestEmail } from "../lib/dailyDigest";
 
 // THE background execution loop. Deliberately a standalone script, not a
 // setInterval living inside the API process — this deployment's target is
@@ -61,6 +63,58 @@ async function main() {
     }
   }
 
+  /* ---- The daily brief: one board item per founder, plus an email ----
+   *
+   * WHY THIS ENUMERATES CLERK AND NOT `usersTouched`. Everything above only
+   * knows about founders who own an active workflow, which is the wrong
+   * population for this by definition — the whole point of a daily brief is to
+   * reach someone who ISN'T already engaged. There is no users table in this
+   * schema (identity lives in Clerk), so Clerk is both the only complete list
+   * and the only place the email address exists. Paginated because getUserList
+   * caps a page, and a silent first-100-only would look like it worked.
+   *
+   * Failures are per-founder: one account with a revoked email or a bad row
+   * must not stop the rest of the run.
+   */
+  let briefsCreated = 0;
+  let emailsSent = 0;
+  let briefFailures = 0;
+
+  try {
+    const PAGE = 100;
+    for (let offset = 0; ; offset += PAGE) {
+      const page = await clerkClient.users.getUserList({ limit: PAGE, offset });
+      if (page.data.length === 0) break;
+
+      for (const user of page.data) {
+        try {
+          const digest = await buildDailyDigest(user.id);
+          // hasSignal false means a genuinely quiet day — no item, no email.
+          // See lib/dailyDigest.ts on why silence beats a manufactured nudge.
+          if (!digest.hasSignal) continue;
+
+          const created = await ensureDailyBriefItem(user.id, digest);
+          if (!created) continue; // already covered today
+          briefsCreated++;
+
+          // Only ever emailed alongside a NEWLY created item, so a re-run
+          // cannot email twice about the same day.
+          const email = user.primaryEmailAddress?.emailAddress ?? user.emailAddresses[0]?.emailAddress ?? null;
+          if (email && emailConfigured() && (await sendDigestEmail(email, digest))) emailsSent++;
+        } catch (err) {
+          briefFailures++;
+          console.error(`[dailyJob] daily brief failed for user ${user.id}:`, err);
+        }
+      }
+
+      if (page.data.length < PAGE) break;
+    }
+  } catch (err) {
+    // Reaching Clerk at all failed — the brief step is skipped entirely this
+    // run, and the workflow/recap work above still stands.
+    console.error("[dailyJob] could not enumerate users for the daily brief:", err);
+  }
+
   // The monthly wrap, frozen on the last day of the month. Was
   // ensureMonthlyRecap (five lifetime totals — see lib/recap.ts's own
   // "placeholder" comment); now buildMonthlyWrap, which is month-scoped and
@@ -94,7 +148,7 @@ async function main() {
   }
 
   console.log(
-    `[dailyJob] done in ${Date.now() - startedAt}ms — ${activeWorkflows.length} active workflows, ${due} due, ${ran} ran, ${failed} failed, ${itemsCreated} queue items created, ${recapsGenerated} monthly recaps generated`,
+    `[dailyJob] done in ${Date.now() - startedAt}ms — ${activeWorkflows.length} active workflows, ${due} due, ${ran} ran, ${failed} failed, ${itemsCreated} queue items created, ${recapsGenerated} monthly recaps generated, ${briefsCreated} daily briefs (${emailsSent} emailed, ${briefFailures} failed)${emailConfigured() ? "" : " — email not configured, board item only"}`,
   );
 }
 
