@@ -1,9 +1,9 @@
-import fsp from "node:fs/promises";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import {
   db,
   attachmentsTable,
   businessProfilesTable,
+  chatSummariesTable,
   chatsTable,
   companyDossiersTable,
   companyFactsTable,
@@ -17,10 +17,13 @@ import {
   settingsTable,
   venusDecisionsTable,
   workflowsTable,
+  usageDailyTable,
+  userStatusTable,
+  auditEventsTable,
 } from "@workspace/db";
-import { UPLOADS_DIR } from "./attachmentIngest";
+import { sidecarKey } from "./attachmentIngest";
+import { deleteObject, type StorageDriver } from "./storage";
 import { logger } from "./logger";
-import path from "node:path";
 
 /* ---------------------------------------------------------------------------
    Deletion, for real.
@@ -63,6 +66,7 @@ export interface DeletionReport {
   decisions: number;
   feedback: number;
   chats?: number;
+  chatSummaries?: number;
   companyFacts?: number;
   dossiers?: number;
   profiles?: number;
@@ -71,6 +75,9 @@ export interface DeletionReport {
   queueItems?: number;
   workflows?: number;
   settings?: number;
+  usage?: number;
+  status?: number;
+  auditEventsAnonymised?: number;
 }
 
 // Removes an upload and its sidecar from disk. The sidecar is the cached
@@ -80,29 +87,26 @@ export interface DeletionReport {
 // founder's P&L on disk after they deleted it, which is the opposite of what
 // deletion means. ENOENT is success: the goal is absence, not a specific
 // sequence of syscalls.
-async function removeAttachmentFiles(storagePath: string): Promise<boolean> {
-  // Re-derived and re-checked here rather than trusting the stored value. The
-  // column is always a server-generated random filename, but this function
-  // deletes files, so it verifies containment itself instead of inheriting
-  // that guarantee from a different module's invariant.
-  const target = path.resolve(path.join(UPLOADS_DIR, storagePath));
-  if (!target.startsWith(path.resolve(UPLOADS_DIR))) {
-    logger.error({ storagePath }, "Refused to delete a path outside the uploads directory");
-    return false;
-  }
-
-  let removed = false;
-  for (const file of [target, `${target}.vera.json`]) {
-    try {
-      await fsp.unlink(file);
-      removed = true;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-        logger.error({ err, file }, "Failed to delete an attachment file");
-      }
-    }
-  }
-  return removed;
+//
+// DELETES THROUGH THE STORAGE LAYER, USING THE ROW'S OWN DRIVER. This used to
+// unlink two local paths directly. Once uploads can live in object storage
+// that would have deleted nothing for every file stored there, while still
+// reporting a successful deletion — turning section 7 of the privacy policy
+// back into a false statement in exactly the way this module exists to
+// prevent. The driver is read off the attachment row rather than the current
+// configuration, so a founder who uploaded before the switch and deletes after
+// it still has their real bytes removed.
+async function removeAttachmentFiles(storagePath: string, driver: StorageDriver): Promise<boolean> {
+  // Both objects, always: the file and the extraction sidecar. The sidecar
+  // holds the readable text of the document — on an image, the vision model's
+  // description of it — so deleting the original and leaving the sidecar would
+  // leave the contents of a founder's P&L in storage after they deleted it.
+  // Containment and "already gone" are handled inside lib/storage.ts, which
+  // never throws here: one missing object must not abort the removal of
+  // everything else the founder asked to have deleted.
+  const fileRemoved = await deleteObject(storagePath, driver);
+  const sidecarRemoved = await deleteObject(sidecarKey(storagePath), driver);
+  return fileRemoved || sidecarRemoved;
 }
 
 /**
@@ -118,13 +122,13 @@ export async function deleteChatData(userId: string, chatId: number): Promise<De
   // row pointing at it is undeletable by any later request — nothing would know
   // it existed. So the unrecoverable step runs while its index still exists.
   const attachments = await db
-    .select({ id: attachmentsTable.id, storagePath: attachmentsTable.storagePath })
+    .select({ id: attachmentsTable.id, storagePath: attachmentsTable.storagePath, storageDriver: attachmentsTable.storageDriver })
     .from(attachmentsTable)
     .where(and(eq(attachmentsTable.userId, userId), eq(attachmentsTable.chatId, chatId)));
 
   let filesRemoved = 0;
   for (const attachment of attachments) {
-    if (await removeAttachmentFiles(attachment.storagePath)) filesRemoved++;
+    if (await removeAttachmentFiles(attachment.storagePath, attachment.storageDriver as StorageDriver)) filesRemoved++;
   }
 
   if (attachments.length > 0) {
@@ -140,6 +144,16 @@ export async function deleteChatData(userId: string, chatId: number): Promise<De
     .delete(messagesTable)
     .where(and(eq(messagesTable.userId, userId), eq(messagesTable.chatId, chatId)))
     .returning({ id: messagesTable.id });
+
+  // Rule 1 in the header: this is derived from the conversation, and it is the
+  // one derivative that other chats can READ. Deleting the transcript and
+  // leaving the summary would mean a founder deletes a conversation and Vera
+  // goes on recalling it — by name, with its contacts and conclusions — in
+  // every future chat. That is a deletion that visibly did not happen.
+  const chatSummaries = await db
+    .delete(chatSummariesTable)
+    .where(and(eq(chatSummariesTable.userId, userId), eq(chatSummariesTable.chatId, chatId)))
+    .returning({ id: chatSummariesTable.id });
 
   const goals = await db
     .delete(goalsTable)
@@ -166,6 +180,7 @@ export async function deleteChatData(userId: string, chatId: number): Promise<De
 
   return {
     messages: messages.length,
+    chatSummaries: chatSummaries.length,
     attachments: attachments.length,
     filesRemoved,
     goals: goals.length,
@@ -189,13 +204,13 @@ export async function deleteAllUserData(userId: string): Promise<DeletionReport>
   // Same ordering logic as above: irreversible filesystem work first, while the
   // rows that name the files are still there to be read.
   const attachments = await db
-    .select({ id: attachmentsTable.id, storagePath: attachmentsTable.storagePath })
+    .select({ id: attachmentsTable.id, storagePath: attachmentsTable.storagePath, storageDriver: attachmentsTable.storageDriver })
     .from(attachmentsTable)
     .where(eq(attachmentsTable.userId, userId));
 
   let filesRemoved = 0;
   for (const attachment of attachments) {
-    if (await removeAttachmentFiles(attachment.storagePath)) filesRemoved++;
+    if (await removeAttachmentFiles(attachment.storagePath, attachment.storageDriver as StorageDriver)) filesRemoved++;
   }
 
   const del = async (label: string, run: () => Promise<{ id: number }[]>): Promise<number> => {
@@ -226,6 +241,12 @@ export async function deleteAllUserData(userId: string): Promise<DeletionReport>
   );
   report.messages = await del("messages", () =>
     db.delete(messagesTable).where(eq(messagesTable.userId, userId)).returning({ id: messagesTable.id }),
+  );
+  report.chatSummaries = await del("chat_summaries", () =>
+    db
+      .delete(chatSummariesTable)
+      .where(eq(chatSummariesTable.userId, userId))
+      .returning({ id: chatSummariesTable.id }),
   );
   report.goals = await del("goals", () =>
     db.delete(goalsTable).where(eq(goalsTable.userId, userId)).returning({ id: goalsTable.id }),
@@ -292,6 +313,47 @@ export async function deleteAllUserData(userId: string): Promise<DeletionReport>
   report.settings = await del("settings", () =>
     db.delete(settingsTable).where(eq(settingsTable.sessionId, userId)).returning({ id: settingsTable.id }),
   );
+
+  // Usage counters. Ordinary usage data about this person, so it goes with
+  // them. Matched on both key forms because the limiter writes `u:<userId>`
+  // for authenticated callers while other call sites use the bare id — missing
+  // one would leave a row keyed to a deleted account.
+  report.usage = await del("usage_daily", () =>
+    db
+      .delete(usageDailyTable)
+      .where(or(eq(usageDailyTable.subject, userId), eq(usageDailyTable.subject, `u:${userId}`)))
+      .returning({ id: usageDailyTable.id }),
+  );
+
+  // The suspension record. Deleted, not kept: the account it describes no
+  // longer exists, so there is nothing left to suspend and nothing a retained
+  // row would protect.
+  report.status = await del("user_status", () =>
+    db.delete(userStatusTable).where(eq(userStatusTable.userId, userId)).returning({ id: userStatusTable.id }),
+  );
+
+  // ---- audit_events is ANONYMISED, not deleted, and that is deliberate ----
+  //
+  // Two true things are in tension here. Section 7 promises that closing an
+  // account removes what we hold about that person. A security trail that its
+  // own subject can erase by closing their account is also not a security
+  // trail — the one action an abusive account would take is exactly the action
+  // that would delete the evidence.
+  //
+  // Nulling the identifiers resolves it rather than picking a side. What is
+  // retained afterwards is "a rate limit was tripped on this route at this
+  // time" — no user id, no actor, no subject key, and by the rules in
+  // auditLog.ts never any content in the first place. That is no longer
+  // personal data, so it does not contradict section 7, while the aggregate
+  // signal an operator needs after an incident survives.
+  //
+  // Counted in the report so the caller can log that it happened.
+  const anonymised = await db
+    .update(auditEventsTable)
+    .set({ userId: null, actorId: null, subject: null })
+    .where(or(eq(auditEventsTable.userId, userId), eq(auditEventsTable.actorId, userId)))
+    .returning({ id: auditEventsTable.id });
+  report.auditEventsAnonymised = anonymised.length;
 
   logger.info({ userId, report }, "Deleted all data for a user");
   return report;

@@ -20,6 +20,7 @@ import { materializeRoadmapFromCard } from "../lib/roadmap";
 import { addCompanyFact, getActiveCompanyFacts, getActivePreferenceFacts, formatCompanyFactsForPrompt, formatPreferenceFactsForPrompt, findPotentialContradiction, supersedeFact, mergeContextBlob } from "../lib/companyMemory";
 import { getOrCreateActiveProfile, findMatchingProfile, createProfile, setActiveProfile, updateProfileContext } from "../lib/businessProfiles";
 import { logMessage, getRelevantMessages, getRecentMessages } from "../lib/messageLog";
+import { buildCrossChatMemory, ensureChatSummary, looksLikeRecallQuestion } from "../lib/chatMemory";
 import { buildAttachmentBlock, parseAttachmentMarkers } from "../lib/attachmentContext";
 import { getDossier, formatDossierForPrompt } from "../lib/dossier";
 import {
@@ -1126,12 +1127,23 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // `object` rather than a precise shape because the gate builders
     // (buildContextAcknowledgment, buildBusinessContextConfirmation, …) are
     // typed as returning plain `object`; the summary is read defensively.
+    // Sequenced rather than fired in parallel so the chat-summary refresh at
+    // the end sees BOTH sides of this turn in the log. Still fire-and-forget
+    // from the response's point of view — res.json does not wait on it.
     const respondGated = (payload: object) => {
-      logMessage({ userId: sessionId, chatId: body.data.chatId, role: "user", content: body.data.message }).catch(() => {});
       const summary = (payload as { summary?: unknown }).summary;
-      if (typeof summary === "string") {
-        logMessage({ userId: sessionId, chatId: body.data.chatId, role: "assistant", content: summary }).catch(() => {});
-      }
+      logMessage({ userId: sessionId, chatId: body.data.chatId, role: "user", content: body.data.message })
+        .then(() =>
+          typeof summary === "string"
+            ? logMessage({ userId: sessionId, chatId: body.data.chatId, role: "assistant", content: summary })
+            : undefined,
+        )
+        // The gated turns are where a founder states their business, answers
+        // "same company or new?", or sets a preference — the turns most worth
+        // remembering, and the ones a summariser wired only to the model path
+        // would never see.
+        .then(() => ensureChatSummary(sessionId, body.data.chatId))
+        .catch(() => {});
       return res.json(payload);
     };
 
@@ -1649,6 +1661,39 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // active goal, including one-word replies.
     const goalBlock = isNarrowScope ? "" : await buildGoalPromptBlock(body.data.chatId);
 
+    // ---- The founder's OTHER chats (see lib/chatMemory.ts) ----
+    //
+    // Everything above this line is scoped to THIS chat or to already-extracted
+    // structure (the dossier, company_facts, resolved decisions). Nothing read
+    // back what was actually SAID in the founder's other conversations, so a
+    // new chat began with Vera unable to recall a conversation it had had —
+    // reported live as "I don't have a record of our previous conversation"
+    // about a chat that was two hours old and fully logged.
+    //
+    // Gated by scope EXCEPT on a recall question. isNarrowScope exists to
+    // protect the TPM budget on quick follow-ups, and a follow-up inside a
+    // chat genuinely doesn't need other chats — but "what did we decide last
+    // time" is precisely the message that does, and it can classify narrow.
+    // The recall path also gets a larger budget, because for that question
+    // this block is not context supporting the answer, it IS the answer.
+    //
+    // The regex runs before the lookup so a narrow non-recall follow-up skips
+    // the database round-trip entirely rather than paying for a result it
+    // would discard.
+    const isRecallQuestion = looksLikeRecallQuestion(body.data.message);
+    const crossChatMemory =
+      !isNarrowScope || isRecallQuestion
+        ? await buildCrossChatMemory(sessionId, body.data.chatId, body.data.message, {
+            charBudget: isRecallQuestion ? 1800 : 1100,
+          })
+        : null;
+    const crossChatBlock = crossChatMemory?.block ?? "";
+    if (crossChatBlock) {
+      console.error(
+        `[chatMemory] session=${sessionId} recall=${isRecallQuestion} chats=${crossChatMemory?.chatsUsed} chars=${crossChatBlock.length}`,
+      );
+    }
+
     // Everything stored about this founder that was previously write-only —
     // company_facts got written on every business-context statement (see
     // addCompanyFact calls above) but nothing ever read it back into a
@@ -1884,6 +1929,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         // than they're present.
         hasOwnHistory: Boolean(ownHistoryBlock),
         hasOpenSession: Boolean(openSessionBlock),
+        hasCrossChat: Boolean(crossChatBlock),
       });
 
     // Typed as the PROMPT's mode union, not the classifier's — "document" is
@@ -1925,6 +1971,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         estimateTokens(effectiveBusinessContext ?? "") +
         estimateTokens(ownHistoryBlock) +
         estimateTokens(openSessionBlock) +
+        estimateTokens(crossChatBlock) +
         estimateTokens(goalBlock) +
         estimateTokens(memoryBlock) +
         estimateTokens(shadowModeInstructions) +
@@ -2061,6 +2108,13 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         // disagree, the structured, founder-confirmed field is what the
         // model reads as authoritative.
         effectiveBusinessContext ? `Business Context: ${effectiveBusinessContext}` : "",
+        // Placed ABOVE the precedent dataset deliberately. shrinkMessages cuts
+        // from the end of this list on a 413 retry, and these are records of
+        // what this founder actually said, where precedents are third-party
+        // case studies — on a recall question, losing this block turns the
+        // answer into the exact "I have no record of that" denial this exists
+        // to end, while losing a precedent costs one supporting example.
+        crossChatBlock,
         isNone ? "" : precedentBlock,
         ownHistoryBlock,
         openSessionBlock,
@@ -2447,6 +2501,11 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         const groundingText = [
           effectiveBusinessContext, historyGroundingText, webSearchBlock, precedentBlock,
           ownHistoryBlock, openSessionBlock, goalBlock, memoryBlock,
+          // Without this, correctly recalling a real detail from another chat
+          // — the contact address the founder was given last week — reads to
+          // the groundedness check as an entity that appeared from nowhere,
+          // and the founder is warned to verify something Vera actually knows.
+          crossChatBlock,
           body.data.message,
         ].filter(Boolean).join(" ");
         const groundednessIssues: { description: string }[] = [];
@@ -2498,7 +2557,14 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           chatId: body.data.chatId,
           role: "assistant",
           content: cardDigest ? `${sanitized.summary}\n\n[Cards shown with this answer: ${cardDigest}]` : sanitized.summary,
-        }).catch(() => {});
+        })
+          // Chained rather than fired in parallel: the summariser reads the
+          // raw log, so starting it before this turn is written would fold in
+          // everything except the exchange that just happened — leaving the
+          // newest turn, the one a founder is most likely to ask about next,
+          // out of memory until some later turn happened to sweep it up.
+          .then(() => ensureChatSummary(sessionId, body.data.chatId))
+          .catch(() => {});
       }
       return res.json(sanitized);
     }

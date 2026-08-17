@@ -11,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(path.join(__dirname, 'groq.ts'), 'utf8');
 
 const VALID_TAGS = new Set([
-  'core', 'strategy', 'cards', 'drafting', 'capability', 'openEnded', 'ownHistory', 'openSession',
+  'core', 'strategy', 'cards', 'drafting', 'capability', 'openEnded', 'ownHistory', 'openSession', 'crossChat',
 ]);
 
 function parseSections() {
@@ -27,7 +27,10 @@ function parseSections() {
 // Mirrors buildVenusPrompt() in groq.ts. Kept in sync deliberately: if the
 // real assembly changes shape, these assertions should be re-read, not
 // silently satisfied by importing the thing they're meant to be checking.
-function build(sections, { mode = 'strategy', includeDrafting = false, hasOwnHistory = false, hasOpenSession = false } = {}) {
+function build(
+  sections,
+  { mode = 'strategy', includeDrafting = false, hasOwnHistory = false, hasOpenSession = false, hasCrossChat = false } = {},
+) {
   const w = new Set(['core']);
   if (mode === 'strategy') w.add('strategy');
   if (mode === 'drafting' || includeDrafting) w.add('drafting');
@@ -36,6 +39,7 @@ function build(sections, { mode = 'strategy', includeDrafting = false, hasOwnHis
   if (mode !== 'drafting') w.add('cards');
   if (hasOwnHistory) w.add('ownHistory');
   if (hasOpenSession) w.add('openSession');
+  if (hasCrossChat) w.add('crossChat');
   return sections.filter((s) => w.has(s.tag)).map((s) => s.text).join('\n\n');
 }
 
@@ -54,6 +58,25 @@ test('every prompt section carries a known tag', () => {
   for (const s of sections) {
     assert.ok(VALID_TAGS.has(s.tag), `unknown tag "${s.tag}" — buildVenusPrompt would silently drop this section`);
     assert.ok(s.text.trim().length > 0, 'empty section');
+  }
+});
+
+test('the cross-chat rule rides on every mode a recall question can land in', () => {
+  const sections = parseSections();
+  // A founder asking "what did we talk about last time" is classified
+  // open_ended or capability far more often than strategy, so gating this rule
+  // on mode would drop it from exactly the messages it exists to answer. The
+  // rule is what stops Vera denying a conversation whose record is in the
+  // prompt — the live failure this whole path was built for.
+  for (const mode of ['strategy', 'drafting', 'capability', 'open_ended']) {
+    const withMemory = build(sections, { mode, hasCrossChat: true });
+    assert.match(withMemory, /OTHER CONVERSATIONS WITH THIS FOUNDER/, `${mode} lost the cross-chat rule`);
+    assert.match(withMemory, /NEVER say you have no record/, `${mode} lost the denial guard`);
+
+    // And it is not carried when the block itself isn't in the prompt — a rule
+    // for reading a block that isn't there is pure budget.
+    const without = build(sections, { mode });
+    assert.doesNotMatch(without, /OTHER CONVERSATIONS WITH THIS FOUNDER/, `${mode} carries the rule with no block`);
   }
 });
 

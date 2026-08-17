@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786961324283,
+      "tag": "0000_baseline_existing_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786961335758,
+      "tag": "0001_operator_controls_and_object_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786963254058,
+      "tag": "0002_cross_chat_memory",
+      "breakpoints": true
+    }
+  ]
+}
