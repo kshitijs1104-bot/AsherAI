@@ -655,6 +655,7 @@ export interface VeraProfile {
   teamSize: string | null;
   monthlyRevenue: string | null;
   referralSource: string | null;
+  arrivalReason: string | null;
   primaryGoal: string | null;
   stage: string | null;
   industry: string | null;
@@ -705,6 +706,7 @@ export interface OnboardingSubmission {
   teamSize?: string;
   monthlyRevenue?: string;
   referralSource?: string;
+  arrivalReason?: string;
 }
 
 // The write the onboarding form never used to make. Its five answers went to

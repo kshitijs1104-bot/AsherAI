@@ -4,7 +4,7 @@ import { useLocation } from 'wouter';
 import {
   getSessions, saveSession, deleteSession, createSession,
   getSavedAnalyses, saveAnalysis, deleteSavedAnalysis,
-  detectAnalysisType, typeLabel, titleFromMessage, takePendingChatId, hydrateSessionFromServer,
+  detectAnalysisType, typeLabel, titleFromMessage, takePendingChatId, takePendingSeedMessage, hydrateSessionFromServer,
   type ChatSession, type ChatMessage, type SavedAnalysisType, type SavedAnalysis,
   type EvidenceRefEntry, type ContradictionEntry,
 } from '../lib/venusHistory';
@@ -23,7 +23,8 @@ import { AttachmentPreviewModal, type PreviewableAttachment } from './Attachment
 import { useVenusTheme } from '../lib/venusTheme';
 import { useVeraSkin } from '../lib/veraSkin';
 import { prefStorage } from '../lib/cookieConsent';
-import { useUploadAttachment, useQueue, useMarkQueueSeen, useNudges, type UploadedAttachment } from '../lib/venusApi';
+import { useUploadAttachment, useQueue, useMarkQueueSeen, useNudges, useDailyBrief, type UploadedAttachment } from '../lib/venusApi';
+import { getPresenceNote, recordSeen, type PresenceNote } from '../lib/veraPresence';
 
 // One consistent compact row shape for everything below New Chat — replaces
 // the old mismatched treatment (a separately-styled full-width Command
@@ -613,6 +614,63 @@ export function VenusPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, analyzeMutation.isPending]);
+
+  // ---- Answer what they came for, before they ask again ----
+  //
+  // Onboarding asks "what brings you here today?" and hands the answer forward
+  // (see setPendingSeedMessage). This sends it as the founder's own first
+  // message, so the first thing they see is Vera working on THEIR problem
+  // rather than an empty box and six generic example prompts.
+  //
+  // Consumed on read, so a reload never re-asks something already answered —
+  // which would look like the product forgetting, in the exact place it is
+  // trying to prove it remembers.
+  //
+  // Guarded on an empty thread and on nothing already being in flight: if a
+  // founder somehow lands here with a conversation already going, silently
+  // injecting a message into it would be the product talking over them.
+  // ---- Vera noticing something, once per day at most ----
+  //
+  // Deferred until the daily brief resolves, because the streak-milestone note
+  // needs the same streak number the board shows — computing it eagerly would
+  // read 0 on every mount and that moment could never fire. The absence and
+  // unfinished-work notes need no server data, so waiting costs those nothing
+  // except appearing a moment after the screen does, which is also when a
+  // returning founder is actually reading it.
+  //
+  // recordSeen() runs immediately AFTER the note is computed, never before:
+  // reading the timestamp after updating it would always show a zero gap.
+  // getPresenceNote consumes its own once-a-day marker, so the guard below is
+  // only protecting against React re-running this effect, not against repeats.
+  const dailyBrief = useDailyBrief();
+  const [presenceNote, setPresenceNote] = useState<PresenceNote | null>(null);
+  const presenceComputedRef = useRef(false);
+
+  useEffect(() => {
+    if (presenceComputedRef.current) return;
+    // Wait for the brief, but not forever — if it errors, the notes that need
+    // no server data should still get their chance.
+    if (dailyBrief.isLoading) return;
+
+    presenceComputedRef.current = true;
+    setPresenceNote(getPresenceNote(dailyBrief.data?.stats?.queueStreakDays ?? 0));
+    recordSeen();
+  }, [dailyBrief.isLoading, dailyBrief.data]);
+
+  const seedSentRef = useRef(false);
+  useEffect(() => {
+    if (seedSentRef.current) return;
+    if (messages.length > 0 || analyzeMutation.isPending) return;
+
+    const seed = takePendingSeedMessage();
+    if (!seed) return;
+
+    seedSentRef.current = true;
+    void handleSend(seed);
+    // Runs once on mount for a fresh session. handleSend is recreated every
+    // render and including it would re-run this on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleNewChat = () => {
     const s = createSession();
@@ -1337,6 +1395,27 @@ export function VenusPage() {
               <p className="font-medium mb-8" style={{ fontSize: '15px', color: 'var(--v7-text-dim)', maxWidth: '420px', lineHeight: '1.6' }}>
                 Vera traces what's actually driving your numbers, so every decision has a reason behind it.
               </p>
+
+              {/* Vera noticing something real — a long absence, a run worth
+                  acknowledging, work left open. Null on most opens, which is
+                  the point: a product that always has a remark is one whose
+                  remarks stop meaning anything. See lib/veraPresence.ts for
+                  why every line is a fact and never a mood. */}
+              {presenceNote && (
+                <div
+                  className="mb-7 px-3.5 py-2.5 rounded-xl"
+                  style={{
+                    maxWidth: 460,
+                    background: 'var(--v7-bg-raised)',
+                    border: '1px solid var(--v7-border)',
+                    fontSize: 13,
+                    lineHeight: 1.55,
+                    color: 'var(--v7-text-dim)',
+                  }}
+                >
+                  {presenceNote.text}
+                </div>
+              )}
 
               {(pendingAttachment || uploadAttachment.isPending || uploadAttachment.isError) && (
                 <AttachmentChip

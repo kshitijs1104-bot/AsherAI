@@ -36,6 +36,13 @@
       "when": 1786995807247,
       "tag": "0004_onboarding_capture_waitlist_nudges",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786997273561,
+      "tag": "0005_arrival_reason",
+      "breakpoints": true
     }
   ]
 }

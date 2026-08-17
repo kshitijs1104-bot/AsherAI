@@ -132,6 +132,53 @@ export function takePendingChatId(): number | null {
   }
 }
 
+/* ---------------------------------------------------------------------------
+   The answer to "What brings you here today?", on its way to becoming the
+   first real conversation.
+
+   Set by the onboarding funnel and consumed by Venus on mount, which then sends
+   it as the founder's own first message. Same shape and same reasoning as
+   OPEN_CHAT_KEY above: local, because the chat it will become does not exist
+   yet and has no server id to point at.
+
+   WHY THIS EXISTS AT ALL. Onboarding asked what brought them here and then —
+   before this — dropped them on an empty chat screen with six generic example
+   prompts. The question had been asked purely for our benefit. A founder who
+   says "my churn is climbing and I don't know why" and is handed a blank box
+   has been surveyed; one who arrives to find Vera already working on their
+   churn has been answered, and has watched the product do the thing it claims
+   to do before being asked to trust it with anything.
+
+   CONSUMED ON READ, like the chat key, so a reload later never re-sends a
+   question the founder has already had answered — which would look like the
+   product forgetting, in the exact place it is trying to prove it remembers.
+--------------------------------------------------------------------------- */
+export const SEED_MESSAGE_KEY = 've_seed_message';
+
+/** Longer than any preset, short enough that pasting an entire document cannot
+ *  become an unbounded first prompt. */
+const MAX_SEED_LENGTH = 500;
+
+export function setPendingSeedMessage(text: string): void {
+  try {
+    const trimmed = text.trim().slice(0, MAX_SEED_LENGTH);
+    if (trimmed) localStorage.setItem(SEED_MESSAGE_KEY, trimmed);
+  } catch {}
+}
+
+/** Reads and clears the pending seed message. Null when none is set. */
+export function takePendingSeedMessage(): string | null {
+  try {
+    const raw = localStorage.getItem(SEED_MESSAGE_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(SEED_MESSAGE_KEY);
+    const trimmed = raw.trim();
+    return trimmed ? trimmed.slice(0, MAX_SEED_LENGTH) : null;
+  } catch {
+    return null;
+  }
+}
+
 function uid() {
   return Math.random().toString(36).slice(2, 10);
 }

@@ -110,6 +110,26 @@ export const settingsTable = pgTable("settings", {
   monthlyRevenue: text("monthly_revenue"),
   role: text("role"),
   referralSource: text("referral_source"),
+
+  // ---- The one question the whole first session is built around ----
+  //
+  // "What brings you here today?" — asked first, in the founder's own words,
+  // and then actually SOLVED before they reach the home screen rather than
+  // filed away. A founder who arrives with "my churn is climbing and I don't
+  // know why" and is handed a generic empty chat has been asked a question for
+  // the product's benefit; one who is handed Vera already working on their
+  // churn has been answered.
+  //
+  // Stored as free text, not an enum, even though the UI offers presets. The
+  // presets exist to make answering fast; the typed answer is the honest one
+  // and is what gets sent to the model verbatim. Coercing it to a category
+  // would throw away the specifics that make the first answer good — and the
+  // specifics are the entire reason to ask.
+  //
+  // Also the single most useful column here for product decisions: it is what
+  // founders say they came for, in their own language, before Vera has shaped
+  // how they talk about it.
+  arrivalReason: text("arrival_reason"),
   // What they want to be called, if they change it from the Clerk account
   // name. Null means "use the Clerk identity", which is the default and the
   // common case — see routes/profile.ts.

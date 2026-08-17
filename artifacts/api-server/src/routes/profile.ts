@@ -104,6 +104,7 @@ router.get("/profile", requireAuth, async (req, res) => {
       stage: settings?.stage ?? null,
       industry: settings?.industry ?? null,
       country: settings?.country ?? null,
+      arrivalReason: settings?.arrivalReason ?? null,
       onboardingCompleted: settings?.onboardingCompleted ?? false,
       onboardingCompletedAt: settings?.onboardingCompletedAt?.toISOString() ?? null,
     });
@@ -217,6 +218,9 @@ const OnboardingBody = z.object({
   teamSize: z.string().trim().max(40).optional(),
   monthlyRevenue: z.string().trim().max(40).optional(),
   referralSource: z.string().trim().max(80).optional(),
+  // Free text, in the founder's own words — see the column comment in the
+  // settings schema for why this is deliberately not an enum.
+  arrivalReason: z.string().trim().max(500).optional(),
 });
 
 router.post("/profile/onboarding", requireAuth, async (req, res) => {
@@ -238,6 +242,7 @@ router.post("/profile/onboarding", requireAuth, async (req, res) => {
         teamSize: body.data.teamSize || null,
         monthlyRevenue: body.data.monthlyRevenue || null,
         referralSource: body.data.referralSource || null,
+        arrivalReason: body.data.arrivalReason || null,
         onboardingCompleted: true,
         // Set once. Re-running onboarding (which the funnel allows if someone
         // navigates back) must not move the original completion date — that is
