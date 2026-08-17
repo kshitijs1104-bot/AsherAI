@@ -387,23 +387,68 @@ function UnknownFields({ dossierId, fields }: { dossierId: number; fields: { key
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const saveAnswers = useSaveDossierAnswers();
 
+  // ---- Per-key state, not one shared mutation flag ----
+  //
+  // TWO BUGS THIS FIXES, both reported as simply "can't save these".
+  //
+  // 1. NOTHING SURFACED A FAILURE. The mutation's error was never rendered
+  //    anywhere in this component, so a failed save looked identical to no
+  //    click at all: the row stayed open, the text stayed put, and the founder
+  //    got no reason. Whatever the cause (a schema migration not yet applied on
+  //    this environment being the likeliest), the founder could not tell it
+  //    apart from a dead button — and these values are typed by hand, which
+  //    makes silently dropping them the worst available outcome.
+  //
+  // 2. ONE `isPending` GOVERNED EVERY ROW. All rows shared a single mutation,
+  //    so clicking Save on one disabled the Save button on all the others while
+  //    it was in flight, and a founder filling in three gaps in a row (exactly
+  //    what the screenshot showed) would find the next button dead just as they
+  //    reached it. Pending and error are now tracked per field key.
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
   const open = (key: string) => setOpenKeys((prev) => new Set(prev).add(key));
-  const close = (key: string) =>
+  const close = (key: string) => {
     setOpenKeys((prev) => {
       const next = new Set(prev);
       next.delete(key);
       return next;
     });
+    // Clearing the error with the row means a cancelled attempt doesn't leave a
+    // stale complaint on screen next time the founder opens the same field.
+    setErrors((prev) => {
+      const { [key]: _dropped, ...rest } = prev;
+      return rest;
+    });
+  };
 
   const saveOne = (key: string) => {
     const value = (drafts[key] ?? '').trim();
     if (!value) return;
+    setPendingKey(key);
+    setErrors((prev) => {
+      const { [key]: _dropped, ...rest } = prev;
+      return rest;
+    });
     saveAnswers.mutate(
       { dossierId, answers: { [key]: value } },
       {
         onSuccess: () => {
+          setPendingKey(null);
           close(key);
           setDrafts((prev) => ({ ...prev, [key]: '' }));
+        },
+        onError: (err) => {
+          setPendingKey(null);
+          // The row stays OPEN and the typed value stays in the draft, so a
+          // failure never costs the founder what they wrote — they can retry
+          // without retyping. apiFetch already surfaces the server's own
+          // message where there is one, which for this route includes the
+          // actual reason (see the api-server's lib/dbErrors.ts mapping).
+          setErrors((prev) => ({
+            ...prev,
+            [key]: err instanceof Error ? err.message : "That didn't save. Try again.",
+          }));
         },
       },
     );
@@ -417,42 +462,49 @@ function UnknownFields({ dossierId, fields }: { dossierId: number; fields: { key
       {opened.length > 0 && (
         <div className="space-y-2 mb-2.5">
           {opened.map((f) => (
-            <div key={f.key} className="flex items-center gap-2">
-              <input
-                autoFocus
-                value={drafts[f.key] ?? ''}
-                onChange={(e) => setDrafts((prev) => ({ ...prev, [f.key]: e.target.value }))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    saveOne(f.key);
-                  }
-                  if (e.key === 'Escape') close(f.key);
-                }}
-                placeholder={f.label}
-                className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-[12.5px] outline-none"
-                style={{
-                  background: 'var(--v7-bg, rgba(0,0,0,0.25))',
-                  border: '1px solid var(--v7-border, rgba(255,255,255,0.12))',
-                  color: 'var(--v7-text)',
-                }}
-              />
-              <button
-                onClick={() => saveOne(f.key)}
-                disabled={!(drafts[f.key] ?? '').trim() || saveAnswers.isPending}
-                className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold disabled:opacity-30"
-                style={{ border: '1px solid var(--v7-border, rgba(255,255,255,0.14))', color: 'var(--v7-text-dim)' }}
-              >
-                {saveAnswers.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
-              </button>
-              <button
-                onClick={() => close(f.key)}
-                title="Cancel"
-                className="shrink-0 p-1.5 rounded-lg"
-                style={{ color: 'var(--v7-text-mute)' }}
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+            <div key={f.key}>
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={drafts[f.key] ?? ''}
+                  onChange={(e) => setDrafts((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      saveOne(f.key);
+                    }
+                    if (e.key === 'Escape') close(f.key);
+                  }}
+                  placeholder={f.label}
+                  className="flex-1 min-w-0 rounded-lg px-3 py-1.5 text-[12.5px] outline-none"
+                  style={{
+                    background: 'var(--v7-bg, rgba(0,0,0,0.25))',
+                    border: `1px solid ${errors[f.key] ? 'var(--v7-danger, #f0776a)' : 'var(--v7-border, rgba(255,255,255,0.12))'}`,
+                    color: 'var(--v7-text)',
+                  }}
+                />
+                <button
+                  onClick={() => saveOne(f.key)}
+                  disabled={!(drafts[f.key] ?? '').trim() || pendingKey === f.key}
+                  className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11.5px] font-semibold disabled:opacity-30"
+                  style={{ border: '1px solid var(--v7-border, rgba(255,255,255,0.14))', color: 'var(--v7-text-dim)' }}
+                >
+                  {pendingKey === f.key ? <Loader2 className="w-3 h-3 animate-spin" /> : errors[f.key] ? 'Retry' : 'Save'}
+                </button>
+                <button
+                  onClick={() => close(f.key)}
+                  title="Cancel"
+                  className="shrink-0 p-1.5 rounded-lg"
+                  style={{ color: 'var(--v7-text-mute)' }}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {errors[f.key] && (
+                <p className="text-[11.5px] mt-1 leading-relaxed" style={{ color: 'var(--v7-danger, #f0776a)' }}>
+                  {errors[f.key]}
+                </p>
+              )}
             </div>
           ))}
         </div>
