@@ -56,12 +56,20 @@ const INCLUDED: string[] = [
 export function PlanGate() {
   const [, navigate] = useLocation();
 
-  // No tier state any more: there is one plan, so there is nothing to choose.
-  // The gate is marked complete and the founder goes straight into the product
-  // rather than through a checkout that takes no payment and grants nothing.
+  // No tier state: there is one plan, so there is nothing to choose. When paid
+  // tiers are real this is where the choice goes, and a non-free choice routes
+  // to checkout before consent — see the header comment for what must be true
+  // first (a server-resolved price id, Stripe owning the card field).
+  //
+  // Ends at the CONSENT step, not at /vera. Consent was previously a modal that
+  // appeared once the founder thought they were finished, which made it read as
+  // an obstacle bolted onto the end rather than part of setting up. It is the
+  // fourth gate now and is numbered as one. RequireConsent still wraps every
+  // route as the backstop for anyone who did not arrive through this funnel —
+  // an existing account after a policy version bump, a deep link, a shared URL.
   const handleContinue = () => {
     setGateStage('complete');
-    navigate('/vera');
+    navigate('/enterprise/privacy');
   };
 
   return (
@@ -69,7 +77,7 @@ export function PlanGate() {
       <div className="w-full max-w-4xl">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 bg-[var(--mint)]/10 border border-[var(--mint)]/30 px-4 py-1.5 rounded-full text-xs font-mono text-[var(--mint)] uppercase tracking-widest mb-6">
-            Step 2 of 2
+            Step 3 of 4
           </div>
           <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Your Plan</h1>
           <p className="text-sm text-[var(--muted)]">
@@ -106,11 +114,11 @@ export function PlanGate() {
             onClick={handleContinue}
             className="px-12 py-3.5 font-bold text-sm uppercase tracking-wider rounded-lg transition-all bg-[var(--mint)] text-black hover:bg-opacity-90"
           >
-            Start using Vera →
+            Continue →
           </button>
         </div>
 
-        <GateProgress current={1} />
+        <GateProgress current={2} />
       </div>
     </div>
   );

@@ -39,6 +39,7 @@ const VeraPrototype = import.meta.env.DEV
   : null;
 import { OnboardingGate } from "@/pages/enterprise/Onboarding";
 import { PlanGate } from "@/pages/enterprise/Plan";
+import { GateProgress } from "@/pages/enterprise/Signup";
 import { CheckoutGate } from "@/pages/enterprise/Checkout";
 import { PrivacyGate } from "@/pages/legal/PrivacyGate";
 import { PrivacyPolicyPage } from "@/pages/legal/PrivacyPolicyPage";
@@ -207,7 +208,20 @@ function RequireConsent({ children }: { children: ReactNode }) {
     void refreshFromServer();
   }, []);
 
-  if (!accepted) return <PrivacyGate />;
+  // ---- The one path this backstop must NOT swallow ----
+  //
+  // /enterprise/privacy renders the same gate as a numbered funnel step (see
+  // PrivacyStep). Without this exemption the backstop below would short-circuit
+  // first and render the bare gate, so the step-4 route could never mount and
+  // the founder would lose the progress indicator at exactly the point the
+  // funnel is telling them how far along they are.
+  //
+  // Not a hole in the gate: that route renders the SAME PrivacyGate with the
+  // same accept action, and it lives inside RequireAuth like everything else.
+  // The only thing that differs is the chrome around it.
+  const onConsentStep = currentPath().startsWith('/enterprise/privacy');
+
+  if (!accepted && !onConsentStep) return <PrivacyGate />;
 
   return <>{children}</>;
 }
@@ -266,6 +280,41 @@ function SignupEntry() {
   }
 
   return <Redirect to="/enterprise/onboarding" />;
+}
+
+// ---- Gate 4: consent, as a funnel step rather than an ambush ----
+//
+// PrivacyGate is mounted in two places and that is deliberate, not duplication.
+//
+// As the BACKSTOP (RequireConsent, below) it wraps every protected route, so an
+// existing account whose accepted version is out of date, a deep link, or a
+// shared URL all hit it whatever path they took. That has to stay: consent
+// cannot be something only the funnel enforces, or every route outside the
+// funnel becomes a way around it.
+//
+// As this ROUTE it is the funnel's fourth step, reached from the plan screen,
+// carrying the same progress indicator as the two steps before it. Same
+// component and same accept action — the only difference is that a founder
+// coming through setup sees it as "step 4 of 4" instead of as a wall that
+// appeared after they were told they had finished.
+//
+// Once accepted, RequireConsent stops rendering the gate and the redirect below
+// lands them in the product.
+function PrivacyStep() {
+  const accepted = usePrivacyAccepted();
+
+  if (accepted) return <Redirect to="/vera" />;
+
+  return (
+    <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+      <div className="flex-1">
+        <PrivacyGate />
+      </div>
+      <div className="pb-8">
+        <GateProgress current={3} />
+      </div>
+    </div>
+  );
 }
 
 // ---- Routing is DENY BY DEFAULT ----
@@ -329,6 +378,9 @@ function Router() {
                 could walk onboarding -> plan -> checkout and be told they were
                 set up without an account ever existing. */}
             <Route path="/enterprise/onboarding" component={OnboardingGate} />
+            {/* Gate 4. Inside the authenticated block: consent is given BY an
+                account, so there is nothing to record for a signed-out visitor. */}
+            <Route path="/enterprise/privacy" component={PrivacyStep} />
             <Route path="/enterprise/plan" component={PlanGate} />
             <Route path="/enterprise/checkout" component={CheckoutGate} />
 

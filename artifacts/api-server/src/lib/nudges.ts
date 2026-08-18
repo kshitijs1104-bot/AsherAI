@@ -175,8 +175,25 @@ async function deriveCandidates(userId: string, now: Date): Promise<Nudge[]> {
   ]);
 
   // ---- Onboarding never finished ----
+  //
+  // "Completed" is onboardingCompleted OR a company name being on file, and the
+  // second half is not redundant — it is the fix for a live bug.
+  //
+  // The flag is only set by POST /profile/onboarding, which did not exist until
+  // recently. Every account created before it, and every account whose write
+  // failed (the columns not yet existing on that environment being the reported
+  // case), has the flag false while plainly having completed the form. Those
+  // founders were told to "finish setup" they had already finished, on every
+  // load, with no way to make it stop.
+  //
+  // A company name can only get into that column by way of the onboarding form
+  // or the account card, so its presence is direct evidence the founder has
+  // told Vera who they are — which is the thing this nudge actually wants to
+  // know. Checking the evidence rather than the bookkeeping flag makes the
+  // nudge correct for accounts that predate the flag entirely.
   const s = settings[0];
-  if (s && !s.onboardingCompleted) {
+  const hasToldVeraWhoTheyAre = !!s?.onboardingCompleted || !!s?.companyName?.trim();
+  if (s && !hasToldVeraWhoTheyAre) {
     candidates.push({
       kind: "onboarding.incomplete",
       title: "Tell Vera who you are",

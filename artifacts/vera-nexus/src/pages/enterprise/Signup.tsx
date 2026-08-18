@@ -37,7 +37,23 @@
 //
 // What remains is what actually exists: tell Vera about your company, then
 // start. Two steps, named as themselves.
-const STEPS = ['Your company', 'Start using Vera'] as const;
+// The four steps a new founder actually passes through, in order:
+//
+//   1  Create account   — Clerk. Hosted by them, so this step has no screen of
+//                         ours; anyone looking at the indicator is past it by
+//                         definition, which is why it always renders as done.
+//   2  Your company     — Onboarding.tsx
+//   3  Your plan        — Plan.tsx
+//   4  Privacy & terms  — PrivacyGate, reached as the funnel's last step
+//                         rather than only as the global backstop it also is.
+//
+// An earlier version of this file cut the list to two, on the grounds that
+// step 1's old fake form had been deleted and step 4's checkout was out of the
+// funnel. That was half right: the FORM was gone, but signing up is still a
+// step a new founder does, and consent is still a screen they must pass. Both
+// were happening and simply weren't being counted, which made the indicator
+// under-report the journey instead of over-reporting it.
+const STEPS = ['Create account', 'Your company', 'Your plan', 'Privacy & terms'] as const;
 
 export function GateProgress({ current }: { current: number }) {
   return (

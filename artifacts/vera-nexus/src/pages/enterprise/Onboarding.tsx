@@ -46,6 +46,10 @@ export function OnboardingGate() {
     referralSource: '',
   });
   const [error, setError] = useState('');
+  // Distinct from `error`: that blocks submission, this reports that the submit
+  // went through but the durable write did not. Two different things and the
+  // founder should not see them worded the same way.
+  const [serverWarning, setServerWarning] = useState('');
 
   const effectiveRole = form.role === 'Other' ? form.roleOther : form.role;
   const isValid = form.companyName.trim() && form.role && effectiveRole.trim() && form.referralSource && form.headcount;
@@ -101,18 +105,49 @@ export function OnboardingGate() {
         arrivalReason: form.arrivalReason.trim() || undefined,
       });
     } catch (err) {
+      // NOT silent any more, and that changed because of what silence cost.
+      //
+      // This was console.error only, on the theory that a founder who filled in
+      // the form should not be blocked by our analytics write. That part still
+      // holds — they continue to the next step either way. But swallowing it
+      // entirely meant a failing write was invisible from BOTH sides: the
+      // founder saw a successful submit, and the server never recorded them as
+      // onboarded, so the "tell Vera who you are" nudge kept firing at somebody
+      // who had just done exactly that. Reported live as precisely that loop.
+      //
+      // Now it is stated plainly, they carry on regardless, and the nudge no
+      // longer depends on this write succeeding (see hasToldVeraWhoTheyAre in
+      // the api-server's lib/nudges.ts).
       console.error('[onboarding] could not save profile to the server', err);
+      setServerWarning(
+        err instanceof Error
+          ? `Vera couldn't save this to its server — ${err.message}`
+          : "Vera couldn't save this to its server.",
+      );
+      // Stops here rather than navigating on. Setting a warning and then
+      // immediately leaving the page would show it to nobody, and carrying on
+      // silently is what produced the reported loop: the founder believes they
+      // are set up, the server has no record, and the "tell Vera who you are"
+      // nudge follows them around forever. They can still continue — the button
+      // below the warning does exactly that — but now it is their decision and
+      // they know what it costs.
+      return;
     }
 
     navigate('/enterprise/plan');
   };
+
+  // Escape hatch for the failure above. Their answers are already in local
+  // storage, so the funnel works; what they lose is Vera reasoning from this
+  // on the server, and the account card will show it as missing.
+  const continueAnyway = () => navigate('/enterprise/plan');
 
   return (
     <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center p-8">
       <div className="w-full max-w-lg">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 bg-[var(--mint)]/10 border border-[var(--mint)]/30 px-4 py-1.5 rounded-full text-xs font-mono text-[var(--mint)] uppercase tracking-widest mb-6">
-            Step 1 of 2
+            Step 2 of 4
           </div>
           <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Tell Vera About You</h1>
           <p className="text-sm text-[var(--muted)]">Vera calibrates every analysis to your company, stage, and goals.</p>
@@ -121,6 +156,23 @@ export function OnboardingGate() {
         <form onSubmit={handleSubmit} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 space-y-5">
           {error && (
             <div className="bg-[var(--red)]/10 border border-[var(--red)]/30 text-[var(--red)] text-sm p-3 rounded font-mono">{error}</div>
+          )}
+
+          {serverWarning && (
+            <div className="bg-[var(--red)]/10 border border-[var(--red)]/30 rounded p-3">
+              <p className="text-[var(--red)] text-xs leading-relaxed m-0">{serverWarning}</p>
+              <p className="text-[var(--muted)] text-[11px] leading-relaxed mt-1.5 mb-2">
+                Your answers are saved on this device. Try again, or carry on — Vera just won't be able
+                to use them until this saves.
+              </p>
+              <button
+                type="button"
+                onClick={continueAnyway}
+                className="text-[11px] font-semibold text-[var(--muted)] underline underline-offset-2"
+              >
+                Continue anyway →
+              </button>
+            </div>
           )}
 
           {/* Leads the form. Everything below this is something Vera needs;
@@ -242,7 +294,7 @@ export function OnboardingGate() {
           </button>
         </form>
 
-        <GateProgress current={0} />
+        <GateProgress current={1} />
       </div>
     </div>
   );

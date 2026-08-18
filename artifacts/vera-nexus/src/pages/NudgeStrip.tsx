@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { ArrowRight, X } from 'lucide-react';
 import { useNudges, useMarkNudgesShown, useDismissNudge, type Nudge } from '../lib/venusApi';
@@ -44,7 +44,26 @@ export function NudgeStrip({ onNavigate }: { onNavigate?: (href: string) => void
   const dismiss = useDismissNudge();
   const [, navigate] = useLocation();
 
-  const nudges = data?.nudges ?? [];
+  // ---- Dismissal is LOCAL FIRST, and that is a correctness fix ----
+  //
+  // Reported live: a nudge that could not be closed. The X called the server
+  // and waited for the refetch to drop the card — so when the write failed
+  // (nudge_state not yet migrated onto that environment, in the reported case)
+  // the card stayed on screen with no way to remove it, forever, on every load.
+  //
+  // A dismiss control that depends on a network write is not a dismiss control.
+  // The card now disappears the moment it is clicked, and the server write is
+  // best-effort behind it. Worst case the nudge returns on a later session
+  // instead of never — which is a far smaller failure than a permanently
+  // undismissable box on the founder's board.
+  const [locallyDismissed, setLocallyDismissed] = useState<Set<string>>(new Set());
+
+  const nudges = (data?.nudges ?? []).filter((n) => !locallyDismissed.has(n.kind));
+
+  const dismissNudge = (kind: string) => {
+    setLocallyDismissed((prev) => new Set(prev).add(kind));
+    dismiss.mutate(kind);
+  };
 
   // Report exactly once per distinct set. The ref guards against the effect
   // re-firing on unrelated re-renders (a sibling query resolving, a theme
@@ -110,7 +129,7 @@ export function NudgeStrip({ onNavigate }: { onNavigate?: (href: string) => void
 
           <button
             type="button"
-            onClick={() => dismiss.mutate(n.kind)}
+            onClick={() => dismissNudge(n.kind)}
             title="Don't show this again"
             aria-label={`Dismiss: ${n.title}`}
             className="shrink-0 p-1 rounded-md transition-colors"
