@@ -46,6 +46,7 @@ import { PrivacyPolicyPage } from "@/pages/legal/PrivacyPolicyPage";
 import { CookieBanner } from "@/pages/legal/CookieBanner";
 import { usePrivacyAccepted, refreshFromServer } from "@/lib/privacyConsent";
 import { useAccessState } from "@/lib/venusApi";
+import { repairServerProfile } from "@/lib/enterpriseGate";
 import { WaitlistGate } from "@/pages/WaitlistGate";
 
 const queryClient = new QueryClient();
@@ -206,6 +207,13 @@ function RequireConsent({ children }: { children: ReactNode }) {
   // local claim is dropped and the gate renders on the next tick.
   useEffect(() => {
     void refreshFromServer();
+    // Reconcile the onboarding answers too. Same failure shape as consent: two
+    // copies, one write path, nothing that ever retried — so a single failed
+    // write left the account screen empty and the "tell Vera who you are"
+    // prompt firing forever at somebody who had already answered it. Exits
+    // immediately when the server already has the profile, which is the normal
+    // case. See repairServerProfile.
+    void repairServerProfile();
   }, []);
 
   // ---- The one path this backstop must NOT swallow ----

@@ -3,41 +3,34 @@ import { saveOnboardingData } from '../../lib/enterpriseGate';
 import { useLocation } from 'wouter';
 import { GateProgress } from './Signup';
 import { useSaveOnboarding } from '../../lib/venusApi';
-import { setPendingSeedMessage } from '../../lib/venusHistory';
 
 const ROLES = ['Founder / CEO', 'Co-founder', 'CTO', 'COO', 'Product Lead', 'Other'];
 const REFERRAL_SOURCES = ['Twitter / X', 'LinkedIn', 'Friend / Referral', 'Search', 'Product Hunt', 'Investor / Advisor', 'Other'];
 
-/* ---- "What brings you here today?" ----
- *
- * Asked FIRST, above everything else, and then actually solved before the
- * founder reaches the home screen — see setPendingSeedMessage in the submit
- * handler. Every other field on this form is something Vera needs; this is the
- * only one that is about what THEY need, which is why it leads.
- *
- * The presets are starting points, not categories. Clicking one fills the box
- * with editable text rather than selecting a value, because the specifics are
- * the entire reason to ask — "churn is climbing" and "churn is climbing since
- * we changed onboarding in March" produce very different first answers, and a
- * radio button can only ever capture the first.
- *
- * Deliberately optional. A founder who does not know yet, or who does not want
- * to say, gets into the product exactly as fast; they simply land on the normal
- * empty chat instead of a seeded one. Making this required would turn the one
- * question asked for their benefit into another toll gate.
- */
-const ARRIVAL_PRESETS: string[] = [
-  "I'm not sure what's actually driving my numbers",
-  'I need to decide something and want it pressure-tested',
-  'I want a plan for the next 90 days',
-  'Something in the business is stalling and I want to know why',
-];
+// REMOVED: the "What brings you here today?" question and its four presets.
+//
+// It came from the engagement-factors material ("sell the identity in
+// onboarding — ask one question on the first screen, then solve that exact
+// problem before they reach the home screen") and it worked as specified: the
+// answer was sent as the founder's first message so Vera opened already working
+// on their actual problem.
+//
+// Removed on request after seeing it in place. Worth recording why it might be
+// wanted back, and why it might not: it made the signup form longer at the one
+// moment a founder is least patient, and a free-text box above five structured
+// fields reads as an essay question. If it returns, the better home for it is
+// the empty chat screen itself — where the founder is already deciding what to
+// type — rather than as a sixth field in a form.
+//
+// The seed-message plumbing it fed (setPendingSeedMessage / takePendingSeedMessage
+// in lib/venusHistory.ts, and the consuming effect in Venus.tsx) went with it.
+// settings.arrival_reason stays in the schema, unwritten: dropping a column
+// needs a migration that buys nothing, and leaving it costs nothing.
 
 export function OnboardingGate() {
   const [, navigate] = useLocation();
   const saveOnboarding = useSaveOnboarding();
   const [form, setForm] = useState({
-    arrivalReason: '',
     companyName: '',
     revenue: '',
     headcount: '',
@@ -86,15 +79,6 @@ export function OnboardingGate() {
       referralSource: form.referralSource,
     } as any);
 
-    // Hand the founder's own words forward so Vera opens already working on
-    // them, instead of on an empty screen with six generic prompts. Written
-    // before the network call and independently of it: the seeded first
-    // conversation is the point of asking, and it must not be lost because an
-    // analytics write failed.
-    if (form.arrivalReason.trim()) {
-      setPendingSeedMessage(form.arrivalReason);
-    }
-
     try {
       await saveOnboarding.mutateAsync({
         companyName: form.companyName.trim(),
@@ -102,7 +86,6 @@ export function OnboardingGate() {
         teamSize: form.headcount.trim() || undefined,
         monthlyRevenue: form.revenue.trim() || undefined,
         referralSource: form.referralSource || undefined,
-        arrivalReason: form.arrivalReason.trim() || undefined,
       });
     } catch (err) {
       // NOT silent any more, and that changed because of what silence cost.
@@ -174,45 +157,6 @@ export function OnboardingGate() {
               </button>
             </div>
           )}
-
-          {/* Leads the form. Everything below this is something Vera needs;
-              this is the only question about what the FOUNDER needs, and it is
-              answered before they reach the home screen. */}
-          <div className="pb-5 mb-1 border-b border-[var(--border)]">
-            <label className="block text-xs font-mono text-[var(--dim)] uppercase tracking-wider mb-2">
-              What brings you here today?
-            </label>
-            <textarea
-              value={form.arrivalReason}
-              onChange={e => setForm(f => ({ ...f, arrivalReason: e.target.value }))}
-              rows={2}
-              placeholder="The thing you actually want help with. Vera starts on it right away."
-              className="w-full bg-[var(--surface2)] border border-[var(--border)] rounded-lg px-4 py-2.5 text-sm text-[var(--text)] placeholder-[var(--dim)] focus:outline-none focus:border-[var(--indigo)] transition-colors resize-none"
-            />
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {ARRIVAL_PRESETS.map(preset => (
-                <button
-                  key={preset}
-                  type="button"
-                  // Fills the box rather than selecting a value — the founder
-                  // can then make it specific, which is what makes the first
-                  // answer good.
-                  onClick={() => setForm(f => ({ ...f, arrivalReason: preset }))}
-                  className="text-[11px] px-2.5 py-1 rounded-full border transition-colors"
-                  style={{
-                    borderColor: form.arrivalReason === preset ? 'var(--indigo)' : 'var(--border)',
-                    color: form.arrivalReason === preset ? 'var(--text)' : 'var(--muted)',
-                    background: form.arrivalReason === preset ? 'var(--indigo)' + '20' : 'transparent',
-                  }}
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-            <p className="text-[11px] text-[var(--dim)] mt-2 leading-relaxed">
-              Optional — skip it and you'll land on a normal blank chat.
-            </p>
-          </div>
 
           <div>
             <label className="block text-xs font-mono text-[var(--dim)] uppercase tracking-wider mb-2">Company Name <span className="text-[var(--red)]">*</span></label>

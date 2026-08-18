@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { SavedAnalysisBook, typeColor as savedTypeColor, TYPE_ORDER as SAVED_TYPE_ORDER } from './SavedAnalysisBook';
 import { ActivityWeek } from './ActivityWeek';
-import { NudgeStrip } from './NudgeStrip';
 import { getSavedAnalyses, typeLabel, type SavedAnalysis, type SavedAnalysisType, type ChatMessage } from '../lib/venusHistory';
 import {
   useQueue, useQueueAction, useDailyBrief, useRunInstantAction, useConnectors, useDecisions,
@@ -1183,11 +1182,13 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
              notebook page below, untouched. */
           <div className="vera-bento">
             <div className="vera-bento-main">
-              {/* Above the board header on purpose: these are things the FOUNDER
-                  left unfinished, and they outrank the queue of work Vera is
-                  waiting on a decision for. Renders nothing at all when there
-                  is nothing genuinely outstanding. */}
-              <NudgeStrip onNavigate={() => setView('board')} />
+              {/* REMOVED: the floating nudge strip that used to sit here.
+                  Nudges are written into the board itself now (see
+                  ensureNudgeItems in the api-server's routes/queue.ts), so they
+                  appear as ordinary items among everything else Vera surfaces.
+                  Keeping both would have shown the same prompt twice, and the
+                  strip was the half that made the unread badge disagree with
+                  the board it pointed at. */}
               <div className="vera-tile" style={{ padding: '20px 22px' }}>
                 <p className="vera-t-support" style={{ margin: '0 0 2px' }}>{dateLabel}</p>
                 <h1 className="vera-t-title" style={{ margin: '0 0 6px' }}>Today's {boardName}</h1>

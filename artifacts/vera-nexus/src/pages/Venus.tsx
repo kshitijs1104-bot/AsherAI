@@ -4,7 +4,7 @@ import { useLocation } from 'wouter';
 import {
   getSessions, saveSession, deleteSession, createSession,
   getSavedAnalyses, saveAnalysis, deleteSavedAnalysis,
-  detectAnalysisType, typeLabel, titleFromMessage, takePendingChatId, takePendingSeedMessage, hydrateSessionFromServer,
+  detectAnalysisType, typeLabel, titleFromMessage, takePendingChatId, hydrateSessionFromServer,
   type ChatSession, type ChatMessage, type SavedAnalysisType, type SavedAnalysis,
   type EvidenceRefEntry, type ContradictionEntry,
 } from '../lib/venusHistory';
@@ -23,7 +23,7 @@ import { AttachmentPreviewModal, type PreviewableAttachment } from './Attachment
 import { useVenusTheme } from '../lib/venusTheme';
 import { useVeraSkin } from '../lib/veraSkin';
 import { prefStorage } from '../lib/cookieConsent';
-import { useUploadAttachment, useQueue, useMarkQueueSeen, useNudges, useDailyBrief, type UploadedAttachment } from '../lib/venusApi';
+import { useUploadAttachment, useQueue, useMarkQueueSeen, useDailyBrief, type UploadedAttachment } from '../lib/venusApi';
 import { getPresenceNote, recordSeen, type PresenceNote } from '../lib/veraPresence';
 
 // One consistent compact row shape for everything below New Chat — replaces
@@ -475,18 +475,19 @@ export function VenusPage() {
   // the whole board is empty, so it stops meaning anything; this one means
   // "something arrived you haven't looked at", clears when the board is opened,
   // and returns when the 6am brief or a connector poll adds something.
-  const unseenQueueCount = queueData?.unseen ?? 0;
-  // Nudges count toward the same badge. They are the other half of "there is
-  // something here for you": the queue holds work Vera is waiting on, nudges
-  // hold work the founder left unfinished, and a founder does not care which
-  // bucket a thing came from when deciding whether to open the board.
+  // ---- The badge counts UNSEEN BOARD ITEMS. Nothing else. ----
   //
-  // Deliberately NOT marked seen by opening Command Center the way queue items
-  // are — a nudge is satisfied by DOING the thing, not by glancing at it, and
-  // its own three-hour cooldown (see api-server lib/nudges.ts) is what stops it
-  // repeating in the meantime.
-  const { data: nudgeData } = useNudges();
-  const nudgeCount = nudgeData?.count ?? 0;
+  // It used to be unseenQueueCount + a separately-derived nudge count, and that
+  // was the bug: the badge could read "1" while the board said "Nothing waiting
+  // on you", because the nudge was rendered as a floating strip rather than
+  // being a board item. A dot that points at an empty board is a dot that means
+  // nothing, and people learn to ignore it.
+  //
+  // Nudges are now written INTO the board (see ensureNudgeItems in the
+  // api-server's routes/queue.ts), so they are counted here for free, by being
+  // what they always claimed to be: something waiting on the board. Clear the
+  // board and the dot goes.
+  const unseenQueueCount = queueData?.unseen ?? 0;
   const markQueueSeen = useMarkQueueSeen();
 
   // Marked seen when the board is actually SHOWN — keyed on the view, not on
@@ -615,20 +616,6 @@ export function VenusPage() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, analyzeMutation.isPending]);
 
-  // ---- Answer what they came for, before they ask again ----
-  //
-  // Onboarding asks "what brings you here today?" and hands the answer forward
-  // (see setPendingSeedMessage). This sends it as the founder's own first
-  // message, so the first thing they see is Vera working on THEIR problem
-  // rather than an empty box and six generic example prompts.
-  //
-  // Consumed on read, so a reload never re-asks something already answered —
-  // which would look like the product forgetting, in the exact place it is
-  // trying to prove it remembers.
-  //
-  // Guarded on an empty thread and on nothing already being in flight: if a
-  // founder somehow lands here with a conversation already going, silently
-  // injecting a message into it would be the product talking over them.
   // ---- Vera noticing something, once per day at most ----
   //
   // Deferred until the daily brief resolves, because the streak-milestone note
@@ -657,20 +644,13 @@ export function VenusPage() {
     recordSeen();
   }, [dailyBrief.isLoading, dailyBrief.data]);
 
-  const seedSentRef = useRef(false);
-  useEffect(() => {
-    if (seedSentRef.current) return;
-    if (messages.length > 0 || analyzeMutation.isPending) return;
-
-    const seed = takePendingSeedMessage();
-    if (!seed) return;
-
-    seedSentRef.current = true;
-    void handleSend(seed);
-    // Runs once on mount for a fresh session. handleSend is recreated every
-    // render and including it would re-run this on every keystroke.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // REMOVED: the seeded first message, which sent the founder's answer to
+  // onboarding's "what brings you here today?" as their opening question so
+  // Vera was already working on it when they arrived. That question was taken
+  // out of the funnel on request (see the note in Onboarding.tsx), so nothing
+  // can feed this any more — and an effect whose only input no longer exists is
+  // worse than no effect, because the next person to read it has to work out
+  // why it never fires.
 
   const handleNewChat = () => {
     const s = createSession();
@@ -1149,7 +1129,7 @@ export function VenusPage() {
             actually control (a panel in this view) and sit under their own
             heading; the destinations below are named as destinations. */}
         <div className="mb-[18px]" style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={unseenQueueCount + nudgeCount} skinned={skinned} />
+          <SidebarNavRow icon={LayoutGrid} label="Command Center" onClick={() => setMainView('command-center')} badgeCount={unseenQueueCount} skinned={skinned} />
           <SidebarNavRow icon={WorkflowIcon} label="Workflows" onClick={() => navigate('/vera/workflows')} skinned={skinned} />
           {/* The slot the sidebar comment above explicitly left open ("room
               left for future nav items between Workflows and Goals"). */}

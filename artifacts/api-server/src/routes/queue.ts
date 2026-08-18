@@ -7,6 +7,8 @@ import { describeDbError } from "../lib/dbErrors";
 import { isUserFacingError, messageForCaller } from "../lib/userFacingError";
 import { performQueueItemSendAction } from "../lib/connectors/sendAction";
 import { countUnseen, markQueueSeen } from "../lib/dailyDigest";
+import { getNudgesFor, markNudgesShown } from "../lib/nudges";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -70,11 +72,85 @@ async function ensureWelcomeItem(userId: string) {
 // queue in the order things came in), then resolved items most-recent-first
 // as a short history underneath. Capped at 50: this is a daily workspace,
 // not an archive browser.
+/* ---- Nudges become REAL BOARD ITEMS, at most one every three hours ----
+ *
+ * THE BUG THIS FIXES. Nudges used to render as a separate strip above the board
+ * and were added into the sidebar's unread badge. So the badge could read "1"
+ * while the board itself said "Nothing waiting on you" — two different concepts
+ * sharing one number, and the founder reasonably read the dot as a permanent
+ * decoration that meant nothing. Reported as exactly that.
+ *
+ * The dot now means one thing only: there are unseen items ON THIS BOARD. For
+ * that to stay true while still prompting people, the prompt has to BE a board
+ * item. So the most important unfinished thing gets written into queue_items
+ * like anything else Vera surfaces — it lights the dot because it is genuinely
+ * there, it can be acted on or rejected, and clearing the board clears the dot.
+ *
+ * CADENCE WITHOUT A CRON. Checked lazily on board load rather than by a
+ * scheduler, the same way ensureWelcomeItem works. nudge_state.lastShownAt is
+ * the rate limiter — getNudgesFor already refuses to return a kind inside its
+ * three-hour cooldown, so calling this on every load cannot produce more than
+ * one item per kind per three hours. No new infrastructure, and it cannot drift
+ * out of sync with the cooldown because it IS the cooldown.
+ *
+ * ONE AT A TIME, deliberately. Writing every outstanding nudge at once would
+ * put four items on a board that had none and read as spam. The engine already
+ * returns them ordered by priority, so the first is the one worth interrupting
+ * for.
+ *
+ * Best-effort throughout: a failure here must never cost the founder the board
+ * itself, which is the thing they actually came for.
+ */
+async function ensureNudgeItems(userId: string): Promise<void> {
+  try {
+    const nudges = await getNudgesFor(userId, new Date(), 1);
+    const top = nudges[0];
+    if (!top) return;
+
+    // externalId is what stops a restart or a second tab creating a duplicate:
+    // the same nudge kind on the same day resolves to the same row.
+    const externalId = `nudge:${top.kind}:${new Date().toISOString().slice(0, 10)}`;
+
+    const [existing] = await db
+      .select({ id: queueItemsTable.id })
+      .from(queueItemsTable)
+      .where(and(eq(queueItemsTable.userId, userId), eq(queueItemsTable.externalId, externalId)))
+      .limit(1);
+    if (existing) return;
+
+    await db
+      .insert(queueItemsTable)
+      .values({
+        userId,
+        type: "nudge",
+        source: "vera",
+        title: top.title,
+        body: top.body,
+        draftContent: null,
+        externalId,
+      })
+      .onConflictDoNothing();
+
+    // Recorded as shown only once the row is actually written, so the cooldown
+    // starts when the founder can genuinely see it — not when it was computed.
+    await markNudgesShown(userId, [top.kind]);
+  } catch (err) {
+    req_log_safe(err);
+  }
+}
+
+// The board must load even if nudging fails. Kept as a named helper so the
+// swallow is deliberate and greppable rather than a bare empty catch.
+function req_log_safe(err: unknown): void {
+  logger.error({ err }, "Could not materialise a nudge onto the board");
+}
+
 router.get("/queue", requireAuth, async (req, res) => {
   try {
     const userId = requireUserId(req);
     await purgeRetiredDemoRows(userId);
     await ensureWelcomeItem(userId);
+    await ensureNudgeItems(userId);
 
     const rows = await db
       .select()
