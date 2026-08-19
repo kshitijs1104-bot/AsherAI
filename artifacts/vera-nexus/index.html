@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <!-- maximum-scale removed: it disabled pinch zoom, and the composer now
+         renders at 16px on mobile so iOS Safari has no reason to auto-zoom. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Kept in step with the active theme by lib/venusTheme.ts. -->
+    <meta name="theme-color" content="#070707" />
     <!-- The root now serves the landing page, so this is the marketing card
          every share and search result renders from — not a placeholder. -->
     <title>Vera — The cause behind every decision.</title>
@@ -27,7 +31,7 @@
 
          Dropped with the old skins: M PLUS Rounded 1c, Archivo, Instrument
          Sans, Instrument Serif, Onest, Azeret Mono, Spline Sans Mono. -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
   </head>
   <body>
     <div id="root"></div>

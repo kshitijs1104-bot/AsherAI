@@ -541,7 +541,7 @@ function CompanyFile({ dossier, onRebuild }: { dossier: Dossier; onRebuild: () =
       <Panel className="p-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="min-w-0">
-            <h2 className="text-[17px] font-extrabold leading-tight truncate">
+            <h2 className="text-[17px] font-semibold leading-tight truncate">
               {dossier.companyName ?? 'Your company'}
             </h2>
             {dossier.oneLine && (
@@ -745,7 +745,7 @@ function WrapView({ wrap, companyName }: { wrap: MonthlyWrap; companyName: strin
     tiles.push({
       key: `stat-${stat.key}`,
       label: stat.label,
-      value: <span className="text-[30px] font-extrabold leading-none">{stat.value}</span>,
+      value: <span className="text-[30px] font-semibold leading-none">{stat.value}</span>,
       note: <TrendChip stat={stat} />,
     });
   }
@@ -862,7 +862,7 @@ function WrapView({ wrap, companyName }: { wrap: MonthlyWrap; companyName: strin
           >
             {companyName ?? 'Your company'}
           </div>
-          <h2 className="text-[26px] font-extrabold tracking-[-0.03em] mt-2 leading-none">
+          <h2 className="text-[26px] font-semibold tracking-[-0.03em] mt-2 leading-none">
             {wrap.monthLabel} review
           </h2>
         </div>
@@ -946,7 +946,7 @@ export function DossierPage() {
     // background and light mode renders white cards on black — which is
     // exactly what this looked like. GoalsOverview and DecisionsOverview
     // already set it; this route and Workflows were the two that didn't.
-    <div className={`relative min-h-screen w-full ${theme === 'light' ? 'v7-light' : ''}`} style={{ background: 'var(--v7-bg)', color: 'var(--v7-text)', fontFamily: 'var(--v7-font-round)' }}>
+    <div className={`relative min-h-[100dvh] w-full ${theme === 'light' ? 'v7-light' : ''}`} style={{ background: 'var(--v7-bg)', color: 'var(--v7-text)', fontFamily: 'var(--v7-font-round)' }}>
       {/* The wrap is a bento grid and needs room to be one; the company file
           is a reading column and gets worse as it widens. One container that
           changes width with the tab, rather than splitting the page in two. */}
@@ -972,7 +972,7 @@ export function DossierPage() {
             neither of those things. */}
         <div className="flex items-center gap-2.5 mb-1">
           <Fingerprint className="w-[22px] h-[22px] ve-dossier-mark" style={{ color: 'var(--v7-cyan)' }} />
-          <h1 className="text-[19px] font-extrabold">Dossier</h1>
+          <h1 className="text-[19px] font-semibold">Dossier</h1>
         </div>
         <p className="text-[13px] mb-6" style={{ color: 'var(--v7-text-mute)' }}>
           What Vera knows about your company, and what your company actually did.

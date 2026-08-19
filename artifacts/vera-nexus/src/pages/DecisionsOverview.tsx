@@ -245,7 +245,7 @@ export function DecisionsOverview() {
   const decisions = (data?.decisions ?? []).filter((d) => (isArchivedView ? d.archived : !d.archived));
 
   return (
-    <div className={`min-h-screen w-full ${theme === 'light' ? 'v7-light' : ''}`} style={{ background: 'var(--v7-bg)', color: 'var(--v7-text)', fontFamily: 'var(--v7-font-round)' }}>
+    <div className={`min-h-[100dvh] w-full ${theme === 'light' ? 'v7-light' : ''}`} style={{ background: 'var(--v7-bg)', color: 'var(--v7-text)', fontFamily: 'var(--v7-font-round)' }}>
       <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-6">
           <button
@@ -261,7 +261,7 @@ export function DecisionsOverview() {
 
         <div className="flex items-center gap-2 mb-1">
           <ListChecks className="w-4 h-4" style={{ color: 'var(--v7-cyan)' }} />
-          <h1 className="text-[19px] font-extrabold">Decisions</h1>
+          <h1 className="text-[19px] font-semibold">Decisions</h1>
         </div>
         <p className="text-[13px] mb-5" style={{ color: 'var(--v7-text-mute)' }}>
           Everything Vera has recommended, and what happened when you acted on it.

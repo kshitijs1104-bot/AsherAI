@@ -47,7 +47,7 @@ export function PrivacyGate() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="privacy-gate-title"
-      className="min-h-screen bg-[var(--bg)] flex items-center justify-center p-3 sm:p-6"
+      className="min-h-[100dvh] bg-[var(--bg)] flex items-center justify-center p-3 sm:p-6"
     >
       <div
         className="w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col"
@@ -62,7 +62,7 @@ export function PrivacyGate() {
           </div>
           <h1
             id="privacy-gate-title"
-            className="text-xl sm:text-2xl font-syne font-extrabold text-white mb-1.5"
+            className="text-xl sm:text-2xl font-syne font-semibold text-white mb-1.5"
           >
             What Vera does with your data
           </h1>

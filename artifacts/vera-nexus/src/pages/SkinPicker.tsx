@@ -76,38 +76,48 @@ export function SkinChoiceList() {
   );
 }
 
-const DISPLAY_STACK = '"Segoe UI Variable Display", "SF Pro Display", -apple-system, system-ui, sans-serif';
-const BODY_STACK = '"Segoe UI Variable Text", "SF Pro Text", -apple-system, system-ui, sans-serif';
+const DISPLAY_STACK = '"Instrument Sans", "Segoe UI Variable Display", "SF Pro Display", -apple-system, system-ui, sans-serif';
+const BODY_STACK = '"Instrument Sans", "Segoe UI Variable Text", "SF Pro Text", -apple-system, system-ui, sans-serif';
 
 // Swatches for the preview tiles. These are literal values rather than reads
 // of the live custom properties on purpose: a tile has to show what an
 // identity looks like while a *different* one is active, and a var() would
 // resolve to whichever is currently applied. They mirror the token blocks in
 // index.css — if those move, these move with them.
+// The ground is now IDENTICAL in every identity, in both themes. Only the
+// accent moves. So every row below repeats the same six neutrals on purpose:
+// that repetition is the design, and a preview that invented four different
+// grounds would be lying about what the choice actually changes.
 const PREVIEW: Record<
   VeraSkin,
   Record<'dark' | 'light', { ground: string; card: string; edge: string; text: string; dim: string; accent: string; accentInk: string }>
 > = {
+  classic: {
+    dark: { ground: '#070707', card: '#111111', edge: 'rgba(255,255,255,0.10)', text: '#F7F7F7', dim: '#949494', accent: '#F2F2F2', accentInk: '#0A0A0A' },
+    light: { ground: '#EDEDED', card: '#FDFDFD', edge: '#D9D9D9', text: '#161616', dim: '#646464', accent: '#161616', accentInk: '#FCFCFC' },
+  },
   deep: {
-    dark: { ground: '#06070D', card: '#0E1017', edge: 'rgba(230,235,245,0.10)', text: '#EDEFF5', dim: '#99A2B4', accent: '#7C88F0', accentInk: '#0B0E1C' },
-    light: { ground: '#F7F8FB', card: '#FFFFFF', edge: '#E1E5EE', text: '#10131C', dim: '#4B5265', accent: '#4149BE', accentInk: '#FFFFFF' },
+    dark: { ground: '#070707', card: '#111111', edge: 'rgba(255,255,255,0.10)', text: '#F7F7F7', dim: '#949494', accent: '#9B6EFF', accentInk: '#0A0A0A' },
+    light: { ground: '#EDEDED', card: '#FDFDFD', edge: '#D9D9D9', text: '#161616', dim: '#646464', accent: '#6921D8', accentInk: '#FCFCFC' },
   },
   midnight: {
-    dark: { ground: '#08090A', card: '#121314', edge: 'rgba(255,255,255,0.095)', text: '#F4F4F5', dim: '#A0A2A8', accent: '#7FB6C8', accentInk: '#06171C' },
-    light: { ground: '#FAFAFA', card: '#FFFFFF', edge: '#E4E4E5', text: '#0C0D0E', dim: '#4F5258', accent: '#27606F', accentInk: '#FFFFFF' },
+    dark: { ground: '#070707', card: '#111111', edge: 'rgba(255,255,255,0.10)', text: '#F7F7F7', dim: '#949494', accent: '#1ECAEF', accentInk: '#0A0A0A' },
+    light: { ground: '#EDEDED', card: '#FDFDFD', edge: '#D9D9D9', text: '#161616', dim: '#646464', accent: '#005F8A', accentInk: '#FCFCFC' },
   },
   nordic: {
-    dark: { ground: '#101614', card: '#18201D', edge: 'rgba(224,238,230,0.10)', text: '#E9EFEB', dim: '#9AA89F', accent: '#82B295', accentInk: '#08120E' },
-    light: { ground: '#F6F8F6', card: '#FFFFFF', edge: '#E0E7E2', text: '#101613', dim: '#49534C', accent: '#35604A', accentInk: '#FFFFFF' },
+    dark: { ground: '#070707', card: '#111111', edge: 'rgba(255,255,255,0.10)', text: '#F7F7F7', dim: '#949494', accent: '#59D38C', accentInk: '#0A0A0A' },
+    light: { ground: '#EDEDED', card: '#FDFDFD', edge: '#D9D9D9', text: '#161616', dim: '#646464', accent: '#00652F', accentInk: '#FCFCFC' },
   },
 };
 
-// All three identities share one type system, so the preview only varies the
-// radius — the one geometric thing that actually differs between them
-// (Midnight runs tighter corners than the other two).
+// Every identity now shares one type system AND one radius ladder. Midnight
+// used to run tighter corners; it no longer does, because geometry that
+// shifts under you when you change colour is the opposite of one interface
+// in four accents. The table stays so the preview reads from a single source.
 const PREVIEW_FONT: Record<VeraSkin, { display: string; body: string; radius: number; cardRadius: number }> = {
+  classic: { display: DISPLAY_STACK, body: BODY_STACK, radius: 8, cardRadius: 10 },
   deep: { display: DISPLAY_STACK, body: BODY_STACK, radius: 8, cardRadius: 10 },
-  midnight: { display: DISPLAY_STACK, body: BODY_STACK, radius: 6, cardRadius: 8 },
+  midnight: { display: DISPLAY_STACK, body: BODY_STACK, radius: 8, cardRadius: 10 },
   nordic: { display: DISPLAY_STACK, body: BODY_STACK, radius: 8, cardRadius: 10 },
 };
 
@@ -156,7 +166,7 @@ function SkinTile({
           border: `1px solid ${c.edge}`,
         }}
       >
-        <div style={{ fontFamily: f.display, fontSize: '17px', fontWeight: 650, color: c.text, letterSpacing: '-0.028em', lineHeight: 1.2 }}>
+        <div style={{ fontFamily: f.display, fontSize: '17px', fontWeight: 600, color: c.text, letterSpacing: '-0.028em', lineHeight: 1.2 }}>
           Four things need you
         </div>
         <div
@@ -289,7 +299,7 @@ export function SkinPicker() {
           </h2>
           <p style={{ fontSize: '14px', color: 'var(--v7-text-dim)', margin: 0, lineHeight: 1.55, maxWidth: '52ch' }}>
             Three designs, the same Vera underneath. Pick whichever you'd rather look
-            at all day — you can switch any time in Settings.
+            at all day. You can switch any time in Settings.
           </p>
         </div>
 

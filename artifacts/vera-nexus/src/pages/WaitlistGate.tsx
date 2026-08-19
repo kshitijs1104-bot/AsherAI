@@ -25,7 +25,7 @@ export function WaitlistGate({ declined }: { declined?: boolean }) {
   return (
     <div
       role="status"
-      className="min-h-screen w-full flex items-center justify-center p-6"
+      className="min-h-[100dvh] w-full flex items-center justify-center p-6"
       style={{ background: 'var(--bg)' }}
     >
       <div
@@ -55,7 +55,7 @@ export function WaitlistGate({ declined }: { declined?: boolean }) {
 
         {declined ? (
           <>
-            <h1 className="font-syne font-extrabold mb-3" style={{ fontSize: 22, color: 'var(--text)' }}>
+            <h1 className="font-syne font-semibold mb-3" style={{ fontSize: 22, color: 'var(--text)' }}>
               Vera isn't open to this account
             </h1>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.65, color: 'var(--muted)' }}>
@@ -65,7 +65,7 @@ export function WaitlistGate({ declined }: { declined?: boolean }) {
           </>
         ) : (
           <>
-            <h1 className="font-syne font-extrabold mb-3" style={{ fontSize: 22, color: 'var(--text)' }}>
+            <h1 className="font-syne font-semibold mb-3" style={{ fontSize: 22, color: 'var(--text)' }}>
               You're on the list
             </h1>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.65, color: 'var(--muted)' }}>

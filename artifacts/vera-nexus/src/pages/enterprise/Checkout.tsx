@@ -62,13 +62,13 @@ export function CheckoutGate() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center p-8">
+    <div className="min-h-[100dvh] bg-[var(--bg)] flex flex-col items-center justify-center p-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 bg-[var(--mint)]/10 border border-[var(--mint)]/30 px-4 py-1.5 rounded-full text-xs font-mono text-[var(--mint)] uppercase tracking-widest mb-6">
             Enterprise Access · Gate 4 of 4
           </div>
-          <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Billing isn't live yet</h1>
+          <h1 className="text-3xl font-syne font-semibold text-white mb-3">Billing isn't live yet</h1>
           <p className="text-sm text-[var(--muted)]">
             Vera isn't charging for access at this stage. You won't be asked for a card, and nothing will be
             billed to you today.
@@ -104,7 +104,7 @@ export function CheckoutGate() {
             disabled={continuing}
             className="w-full bg-[var(--mint)] text-black font-bold py-3.5 rounded-lg transition-colors text-sm uppercase tracking-wider disabled:opacity-70 flex items-center justify-center gap-2"
           >
-            {continuing ? 'Opening Vera...' : 'Continue to Vera →'}
+            {continuing ? 'Opening Vera…' : 'Continue to Vera →'}
           </button>
 
           <p className="text-[11px] text-center text-[var(--dim)] font-mono leading-relaxed">

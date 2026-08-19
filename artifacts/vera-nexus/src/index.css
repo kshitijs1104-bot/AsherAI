@@ -1042,565 +1042,430 @@
 }
 
 /* ==========================================================================
-   IDENTITIES — Deep Tech, Midnight Minimalist, Nordic Green
+   IDENTITIES — Classic, Deep Tech, Midnight Minimalist, Nordic Green
    ==========================================================================
 
-   Everything below is ADDITIVE: not one rule above this line was changed, so
-   the pre-redesign look is still fully described by the stylesheet. Nothing
-   reaches it any more, though — `lib/veraSkin.ts` always writes
-   `data-skin="deep" | "midnight" | "nordic"` onto <html>, with `deep` as the
-   default, so there is no state in which the product renders as its own
-   fallback. (The previous set had a third option, `classic`, defined as the
-   ABSENCE of the attribute. That made the unstyled original reachable, and it
-   is what most sessions actually saw.)
+   ONE GROUND, FOUR ACCENTS.
 
-   Two selector groups per identity, because the app applies its palettes at
-   two different levels:
+   Every skin shares the identical neutral ramp: the same near-black, the
+   same raised surfaces, the same hairlines, the same three ink tiers.
+   Nothing is tinted toward a hue. Switching skin changes the ACCENT and
+   nothing else, and the accent is what paints the things you press and the
+   things you read as data — New Chat, the send control, the week chart, the
+   magnitude bars, the active nav marker, the selected tab, the goal ring.
 
-     html[data-skin="X"], html[data-skin="X"] .dark   → dark values
-     html[data-skin="X"] .v7-light                    → light values
+   This replaces the previous arrangement, where each identity carried its
+   own tinted ground. That made the four skins read as four different
+   products in light mode and as four barely-distinguishable greys in dark,
+   because the only thing separating them was a hue shift too small to see
+   against a near-black page.
 
-   The second group in each pair is needed because Layout.tsx puts `.dark` on
-   a wrapper div and the four Vera routes put `.v7-light` on their own root
-   inside it. A custom property set on a descendant beats one inherited from
-   an ancestor regardless of specificity, so overriding only <html> would be
-   silently ignored for every token `.dark` also defines. Both selectors carry
-   higher specificity than the originals (0,2,1 vs 0,1,0), so these win.
+   --amber is the one semantic that outranks the accent: it means "this
+   needs a decision from you" and it is the same warm orange in all four
+   skins, because a semantic must not change meaning when you change skin.
 
-   Between them the mode-shared block and the six identity blocks define EVERY
-   token the originals define. A partially covered family would leave the
-   uncovered half showing through from `:root`, which is exactly the "three
-   parallel ramps" problem this replaces.
-   ---------------------------------------------------------------------- */
+   Two selector groups per identity, because the app applies palettes at two
+   levels: html[data-skin="X"] (+ .dark) for dark, and .v7-light for paper.
+   Both are needed — a custom property set on a descendant beats one
+   inherited from an ancestor regardless of specificity.
+   -------------------------------------------------------------------- */
 
-/* ---------- Mode-shared values ----------------------------------------
-   Semantic colours, the glow kill and the grain are the same in every
-   identity — they carry meaning (risk, success, caution) or they are
-   structural, and neither should drift between palettes. Only the ground
-   and the accent family are identity-specific, and those live in the six
-   blocks below. Splitting it this way is also what keeps the "every skin
-   defines every token" rule honest without writing the semantic ramp out
-   six times and letting one copy fall behind. */
-html[data-skin] {
-  --mint: #6FBE95;
-  --green: #C98A6A;
-  --amber: #D9A94F;
+/* ---------- The shared ground. Every skin, dark. ---------------------- */
+html[data-skin],
+html[data-skin] .dark {
+  --v7-bg: #070707;
+  --v7-bg-raised: #111111;
+  --v7-bg-raised-2: #1A1A1A;
+  --v7-border: rgba(255, 255, 255, 0.07);
+  --v7-border-strong: rgba(255, 255, 255, 0.20);
+  --v7-text: #F7F7F7;
+  --v7-text-dim: #BFBFBF;
+  --v7-text-mute: #949494;
+
+  --bg: #070707;
+  --surface: #111111;
+  --surface2: #1A1A1A;
+  --surface3: #232323;
+  --border: rgba(255, 255, 255, 0.07);
+  --border2: rgba(255, 255, 255, 0.20);
+  --text: #F7F7F7;
+  --muted: #BFBFBF;
+  --muted-text: #BFBFBF;
+  --dim: #949494;
+
+  --vera-card-bg: #111111;
+  --vera-card-border: rgba(255, 255, 255, 0.10);
+  --vera-inset-bg: #1A1A1A;
+  --vera-inset-border: rgba(255, 255, 255, 0.075);
+  --vera-label-color: #949494;
+
+  /* Semantics. Shared by every skin on purpose. --amber is "needs a
+     decision"; --red is danger; --mint and --green are settled/positive. */
+  --amber: #FFA04E;
   --red: #E5798A;
+  --mint: #6FBE95;
+  --green: #6FBE95;
 
-  /* The original stylesheet's hero blob and 3.4s breathing halo render
-     straight from these, so transparent values switch both off without
-     touching a component. */
+  /* Three tokens the app READS with a hardcoded fallback but nothing ever
+     defined, so they silently bypassed the theme: the at-risk streak marker,
+     the Dossier field-error colour, and one raised surface in settings. The
+     fallbacks were tuned for a dark ground and were unreadable on paper. */
+  --v7-amber: #FFA04E;
+  --v7-danger: #E5798A;
+  --v7-bg-raised-3: #232323;
+
+  --vera-grain-opacity: 0.026;
+  --vera-grain-blend: overlay;
+
+  /* The hero's emphasised word is an underline in the accent, never a
+     gradient. --vera-emph-bg: none switches the gradient off; the paired
+     --vera-emph-fg is set per identity below. */
+  --vera-emph-bg: none;
+
+  /* The old breathing halo. Transparent in every identity — a glow is the
+     loudest "AI template" tell there is. */
   --v7-glow-1: transparent;
   --v7-glow-2: transparent;
   --v7-glow-shadow-a: transparent;
   --v7-glow-shadow-b: transparent;
 
-  --vera-grain-opacity: 0.028;
-  --vera-grain-blend: overlay;
+  --background: 0 0% 3%;
+  --foreground: 0 0% 97%;
+  --card: 0 0% 7%;
+  --card-foreground: 0 0% 97%;
+  --card-border: 0 0% 16%;
+  --popover: 0 0% 7%;
+  --popover-foreground: 0 0% 97%;
+  --secondary: 0 0% 10%;
+  --secondary-foreground: 0 0% 97%;
+  --muted-foreground: 0 0% 58%;
+  --input: 0 0% 16%;
+
+  --vera-cc-bg: #070707;
+  --vera-cc-paper: #111111;
+  --vera-cc-paper-edge: #262626;
+  --vera-cc-line: rgba(255, 255, 255, 0.07);
+  --vera-cc-text: #F7F7F7;
+  --vera-cc-muted: #BFBFBF;
+  --vera-cc-faint: #949494;
+  --vera-cc-dogear: #070707;
 }
 
+/* ---------- The shared ground. Every skin, paper. --------------------- */
 html[data-skin] .v7-light {
-  --mint: #1F6B54;
-  --green: #8A4B22;
-  --amber: #78500F;
-  --red: #A32B3C;
+  --v7-bg: #EDEDED;
+  --v7-bg-raised: #FDFDFD;
+  --v7-bg-raised-2: #E3E3E3;
+  --v7-border: #D9D9D9;
+  --v7-border-strong: #B4B4B4;
+  --v7-text: #161616;
+  --v7-text-dim: #5C5C5C;
+  --v7-text-mute: #646464;
 
-  --vera-grain-opacity: 0.04;
+  --bg: #EDEDED;
+  --surface: #FDFDFD;
+  --surface2: #FDFDFD;
+  --surface3: #E3E3E3;
+  --border: #D9D9D9;
+  --border2: #C4C4C4;
+  --text: #161616;
+  --muted: #5C5C5C;
+  --muted-text: #5C5C5C;
+  --dim: #646464;
+
+  --vera-card-bg: #FDFDFD;
+  --vera-card-border: #D9D9D9;
+  --vera-inset-bg: #F4F4F4;
+  --vera-inset-border: #E2E2E2;
+  --vera-label-color: #646464;
+
+  --amber: #A73C00;
+  --red: #A32B3C;
+  --mint: #1F6B54;
+  --green: #1F6B54;
+
+  --v7-amber: #A73C00;
+  --v7-danger: #A32B3C;
+  --v7-bg-raised-3: #D6D6D6;
+
+  --vera-grain-opacity: 0.038;
   --vera-grain-blend: multiply;
+
+  --vera-emph-bg: none;
+
+  --v7-glow-1: transparent;
+  --v7-glow-2: transparent;
+  --v7-glow-shadow-a: transparent;
+  --v7-glow-shadow-b: transparent;
+
+  --background: 0 0% 93%;
+  --foreground: 0 0% 9%;
+  --card: 0 0% 99%;
+  --card-foreground: 0 0% 9%;
+  --card-border: 0 0% 85%;
+  --popover: 0 0% 99%;
+  --popover-foreground: 0 0% 9%;
+  --secondary: 0 0% 89%;
+  --secondary-foreground: 0 0% 9%;
+  --muted-foreground: 0 0% 39%;
+  --input: 0 0% 85%;
+
+  --vera-cc-bg: #E3E3E3;
+  --vera-cc-paper: #FDFDFD;
+  --vera-cc-paper-edge: #C9C9C9;
+  --vera-cc-line: rgba(0, 0, 0, 0.11);
+  --vera-cc-text: #161616;
+  --vera-cc-muted: #5C5C5C;
+  --vera-cc-faint: #646464;
+  --vera-cc-dogear: #E3E3E3;
+
+  /* The brand mark's ring. Its default is tuned for a dark ground and
+     vanishes on paper, leaving the V floating with no circle around it. */
+  --vera-mark-ring: rgba(22, 22, 22, 0.22);
 }
 
-/* ---------- DEEP TECH · dark ------------------------------------------
-   Slate near-black with indigo and violet light behind it. The default
-   identity, and the most atmospheric of the three. */
+/* ---------- CLASSIC · ink -------------------------------------------
+   The only identity with no colour at all. Its accent is the ink itself:
+   white on the dark ground, near-black on paper. */
+html[data-skin="classic"],
+html[data-skin="classic"] .dark {
+  --v7-cyan: #F2F2F2;
+  --v7-cyan-soft: rgba(255, 255, 255, 0.13);
+  --v7-cyan-strong: rgba(255, 255, 255, 0.42);
+  --v7-pink: #BFBFBF;
+  --v7-pink-soft: rgba(255, 255, 255, 0.10);
+  --v7-tint: #1A1A1A;
+  --v7-tint-border: #2E2E2E;
+  --indigo: #F2F2F2;
+  --indigo-light: #BFBFBF;
+  --vera-emph-fg: #F2F2F2;
+  --vera-unprompted: #FFA04E;
+  --vera-unprompted-soft: rgba(255, 160, 78, 0.13);
+  --vera-wash-1: rgba(255, 255, 255, 0.05);
+  --vera-wash-2: transparent;
+  --primary: 0 0% 95%;
+  --primary-foreground: 0 0% 4%;
+  --accent: 0 0% 95%;
+  --accent-foreground: 0 0% 4%;
+  --ring: 0 0% 95%;
+  --vera-cc-accent: #F2F2F2;
+  --vera-cc-accent-dim: rgba(255, 255, 255, 0.13);
+  --vera-cc-accent-border: rgba(255, 255, 255, 0.34);
+  --vera-cc-second: #BFBFBF;
+  --vera-cc-second-dim: rgba(255, 255, 255, 0.10);
+  --vera-cc-second-border: rgba(255, 255, 255, 0.26);
+  --vera-cc-rule: rgba(255, 255, 255, 0.26);
+}
+html[data-skin="classic"] .v7-light {
+  --v7-cyan: #161616;
+  --v7-cyan-soft: rgba(0, 0, 0, 0.07);
+  --v7-cyan-strong: rgba(0, 0, 0, 0.42);
+  --v7-pink: #5C5C5C;
+  --v7-pink-soft: rgba(0, 0, 0, 0.05);
+  --v7-tint: #E3E3E3;
+  --v7-tint-border: #C4C4C4;
+  --indigo: #161616;
+  --indigo-light: #5C5C5C;
+  --vera-emph-fg: #161616;
+  --vera-unprompted: #A73C00;
+  --vera-unprompted-soft: rgba(167, 60, 0, 0.09);
+  --vera-wash-1: rgba(0, 0, 0, 0.035);
+  --vera-wash-2: transparent;
+  --primary: 0 0% 9%;
+  --primary-foreground: 0 0% 99%;
+  --accent: 0 0% 9%;
+  --accent-foreground: 0 0% 99%;
+  --ring: 0 0% 9%;
+  --vera-cc-accent: #161616;
+  --vera-cc-accent-dim: rgba(0, 0, 0, 0.07);
+  --vera-cc-accent-border: rgba(0, 0, 0, 0.34);
+  --vera-cc-second: #5C5C5C;
+  --vera-cc-second-dim: rgba(0, 0, 0, 0.05);
+  --vera-cc-second-border: rgba(0, 0, 0, 0.24);
+  --vera-cc-rule: rgba(0, 0, 0, 0.26);
+}
+
+/* ---------- DEEP TECH · neon violet ---------------------------------
+   Hue 292 at real chroma. Pushed any further round it desaturates into
+   lilac, which is what made the earlier version read pink. Carries DARK
+   text: white on this violet measures 3.32, and darkening the violet
+   enough to carry white text kills the neon. */
 html[data-skin="deep"],
 html[data-skin="deep"] .dark {
-  --v7-bg: #06070D;
-  --v7-bg-raised: #0E1017;
-  --v7-bg-raised-2: #161923;
-  --v7-border: rgba(230, 235, 245, 0.085);
-  --v7-border-strong: rgba(230, 235, 245, 0.16);
-  --v7-text: #EDEFF5;
-  --v7-text-dim: #B6BDCC;
-  --v7-text-mute: #99A2B4;
-
-  --v7-cyan: #7C88F0;
-  --v7-cyan-soft: rgba(124, 136, 240, 0.14);
-  --v7-cyan-strong: rgba(124, 136, 240, 0.42);
-  --v7-pink: #A78BFA;
-  --v7-pink-soft: rgba(167, 139, 250, 0.13);
-
-  --v7-tint: #161923;
-  --v7-tint-border: #2A2F3E;
-  --vera-emph-fg: #7C88F0;
-  /* Reserved product-wide for one thing: Vera raising something you didn't
-     ask about. Warm on purpose — this identity's own accent and category
-     hues are both cool, so a third cool tone would be indistinguishable
-     from "some other kind of link". */
-  --vera-unprompted: #E0B37A;
-  --vera-unprompted-soft: rgba(224, 179, 122, 0.13);
-
-  --vera-wash-1: rgba(124, 136, 240, 0.16);
-  --vera-wash-2: rgba(139, 92, 246, 0.11);
-
-  --bg: #06070D;
-  --surface: #0E1017;
-  --surface2: #161923;
-  --surface3: #1E2231;
-  --border: rgba(230, 235, 245, 0.09);
-  --border2: rgba(230, 235, 245, 0.17);
-  --text: #EDEFF5;
-  --muted: #B6BDCC;
-  --muted-text: #B6BDCC;
-  --dim: #99A2B4;
-
-  --indigo: #7C88F0;
-  --indigo-light: #A78BFA;
-
-  --vera-card-bg: #0E1017;
-  --vera-card-border: rgba(230, 235, 245, 0.10);
-  --vera-inset-bg: #161923;
-  --vera-inset-border: rgba(230, 235, 245, 0.075);
-  --vera-label-color: #99A2B4;
-
-  --background: 231 40% 4%;
-  --foreground: 228 24% 95%;
-  --card: 228 22% 8%;
-  --card-foreground: 228 24% 95%;
-  --card-border: 228 18% 16%;
-  --popover: 228 22% 8%;
-  --popover-foreground: 228 24% 95%;
-  --primary: 234 79% 71%;
-  --primary-foreground: 235 45% 12%;
-  --secondary: 228 20% 13%;
-  --secondary-foreground: 228 24% 95%;
-  --muted-foreground: 225 14% 65%;
-  --accent: 234 79% 71%;
-  --accent-foreground: 235 45% 12%;
-  --input: 228 18% 16%;
-  --ring: 234 79% 71%;
-
-  --vera-cc-bg: #06070D;
-  --vera-cc-paper: #0E1017;
-  --vera-cc-paper-edge: #232838;
-  --vera-cc-line: rgba(230, 235, 245, 0.085);
-  --vera-cc-text: #EDEFF5;
-  --vera-cc-muted: #B6BDCC;
-  --vera-cc-faint: #99A2B4;
-  --vera-cc-accent: #7C88F0;
-  --vera-cc-accent-dim: rgba(124, 136, 240, 0.14);
-  --vera-cc-accent-border: rgba(124, 136, 240, 0.34);
-  --vera-cc-second: #A78BFA;
-  --vera-cc-second-dim: rgba(167, 139, 250, 0.13);
-  --vera-cc-second-border: rgba(167, 139, 250, 0.32);
-  --vera-cc-rule: rgba(167, 139, 250, 0.30);
-  --vera-cc-dogear: #06070D;
+  --v7-cyan: #9B6EFF;
+  --v7-cyan-soft: rgba(155, 110, 255, 0.18);
+  --v7-cyan-strong: rgba(155, 110, 255, 0.55);
+  --v7-pink: #BFBFBF;
+  --v7-pink-soft: rgba(255, 255, 255, 0.10);
+  --v7-tint: #1A1A1A;
+  --v7-tint-border: #2E2E2E;
+  --indigo: #9B6EFF;
+  --indigo-light: #BFBFBF;
+  --vera-emph-fg: #9B6EFF;
+  --vera-unprompted: #FFA04E;
+  --vera-unprompted-soft: rgba(255, 160, 78, 0.13);
+  --vera-wash-1: rgba(155, 110, 255, 0.10);
+  --vera-wash-2: rgba(120, 90, 220, 0.06);
+  --primary: 262 100% 72%;
+  --primary-foreground: 0 0% 4%;
+  --accent: 262 100% 72%;
+  --accent-foreground: 0 0% 4%;
+  --ring: 262 100% 72%;
+  --vera-cc-accent: #9B6EFF;
+  --vera-cc-accent-dim: rgba(155, 110, 255, 0.16);
+  --vera-cc-accent-border: rgba(155, 110, 255, 0.42);
+  --vera-cc-second: #BFBFBF;
+  --vera-cc-second-dim: rgba(255, 255, 255, 0.10);
+  --vera-cc-second-border: rgba(255, 255, 255, 0.26);
+  --vera-cc-rule: rgba(155, 110, 255, 0.34);
 }
-
-/* ---------- DEEP TECH · light ----------------------------------------- */
 html[data-skin="deep"] .v7-light {
-  --v7-bg: #F7F8FB;
-  --v7-bg-raised: #FFFFFF;
-  --v7-bg-raised-2: #EDF0F6;
-  --v7-border: #E1E5EE;
-  --v7-border-strong: #C7CDDC;
-  --v7-text: #10131C;
-  --v7-text-dim: #454C5E;
-  --v7-text-mute: #4B5265;
-
-  --v7-cyan: #4149BE;
-  --v7-cyan-soft: #E9EAF8;
-  --v7-cyan-strong: #4149BE;
-  --v7-pink: #6B3A7C;
-  --v7-pink-soft: #F1E9F4;
-
-  --v7-tint: #EDF0F6;
-  --v7-tint-border: #D5DBE8;
-  --vera-emph-fg: #4149BE;
-  --vera-unprompted: #8A5A14;
-  --vera-unprompted-soft: #F7EEDF;
-
-  --vera-wash-1: rgba(65, 73, 190, 0.09);
-  --vera-wash-2: rgba(120, 90, 190, 0.07);
-
-  --bg: #F7F8FB;
-  --surface: #FFFFFF;
-  --surface2: #EDF0F6;
-  --surface3: #E2E7F1;
-  --border: #E1E5EE;
-  --border2: #CFD6E4;
-  --text: #10131C;
-  --muted: #454C5E;
-  --muted-text: #454C5E;
-  --dim: #4B5265;
-
-  --indigo: #4149BE;
-  --indigo-light: #6B3A7C;
-
-  --vera-card-bg: #FFFFFF;
-  --vera-card-border: #E1E5EE;
-  --vera-inset-bg: #F4F6FA;
-  --vera-inset-border: #E4E8F1;
-  --vera-label-color: #4B5265;
-
-  --background: 228 40% 98%;
-  --foreground: 228 28% 9%;
-  --card: 0 0% 100%;
-  --card-foreground: 228 28% 9%;
-  --card-border: 222 26% 91%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 228 28% 9%;
-  --primary: 236 49% 50%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 225 38% 95%;
-  --secondary-foreground: 228 28% 9%;
-  --muted-foreground: 226 15% 35%;
-  --accent: 236 49% 50%;
-  --accent-foreground: 0 0% 100%;
-  --input: 222 26% 91%;
-  --ring: 236 49% 50%;
-
-  --vera-cc-bg: #EDF0F6;
-  --vera-cc-paper: #FFFFFF;
-  --vera-cc-paper-edge: #D5DBE8;
-  --vera-cc-line: rgba(16, 19, 28, 0.11);
-  --vera-cc-text: #10131C;
-  --vera-cc-muted: #454C5E;
-  --vera-cc-faint: #4B5265;
-  --vera-cc-accent: #4149BE;
-  --vera-cc-accent-dim: #E9EAF8;
-  --vera-cc-accent-border: #B9BDE8;
-  --vera-cc-second: #6B3A7C;
-  --vera-cc-second-dim: #F1E9F4;
-  --vera-cc-second-border: #D9C5E1;
-  --vera-cc-rule: rgba(107, 58, 124, 0.32);
-  --vera-cc-dogear: #EDF0F6;
+  --v7-cyan: #6921D8;
+  --v7-cyan-soft: rgba(105, 33, 216, 0.10);
+  --v7-cyan-strong: rgba(105, 33, 216, 0.55);
+  --v7-pink: #5C5C5C;
+  --v7-pink-soft: rgba(0, 0, 0, 0.05);
+  --v7-tint: #EDE7FB;
+  --v7-tint-border: #CBB8F2;
+  --indigo: #6921D8;
+  --indigo-light: #5C5C5C;
+  --vera-emph-fg: #6921D8;
+  --vera-unprompted: #A73C00;
+  --vera-unprompted-soft: rgba(167, 60, 0, 0.09);
+  --vera-wash-1: rgba(105, 33, 216, 0.06);
+  --vera-wash-2: rgba(120, 90, 220, 0.04);
+  --primary: 265 73% 49%;
+  --primary-foreground: 0 0% 99%;
+  --accent: 265 73% 49%;
+  --accent-foreground: 0 0% 99%;
+  --ring: 265 73% 49%;
+  --vera-cc-accent: #6921D8;
+  --vera-cc-accent-dim: rgba(105, 33, 216, 0.10);
+  --vera-cc-accent-border: rgba(105, 33, 216, 0.40);
+  --vera-cc-second: #5C5C5C;
+  --vera-cc-second-dim: rgba(0, 0, 0, 0.05);
+  --vera-cc-second-border: rgba(0, 0, 0, 0.24);
+  --vera-cc-rule: rgba(105, 33, 216, 0.34);
 }
 
-/* ---------- MIDNIGHT MINIMALIST · dark --------------------------------
-   Flat matte graphite. No wash to speak of, hairline rules, and a steel
-   blue that is the only saturated thing on the page. */
+/* ---------- MIDNIGHT MINIMALIST · steel ------------------------------ */
 html[data-skin="midnight"],
 html[data-skin="midnight"] .dark {
-  --v7-bg: #08090A;
-  --v7-bg-raised: #121314;
-  --v7-bg-raised-2: #1A1C1D;
-  --v7-border: rgba(255, 255, 255, 0.075);
-  --v7-border-strong: rgba(255, 255, 255, 0.15);
-  --v7-text: #F4F4F5;
-  --v7-text-dim: #B9BABE;
-  --v7-text-mute: #A0A2A8;
-
-  --v7-cyan: #7FB6C8;
-  --v7-cyan-soft: rgba(127, 182, 200, 0.12);
-  --v7-cyan-strong: rgba(127, 182, 200, 0.40);
-  --v7-pink: #8E9BA6;
-  --v7-pink-soft: rgba(142, 155, 166, 0.13);
-
-  --v7-tint: #1A1C1D;
-  --v7-tint-border: #2C2F31;
-  --vera-emph-fg: #7FB6C8;
-  --vera-unprompted: #C9A66B;
-  --vera-unprompted-soft: rgba(201, 166, 107, 0.13);
-
-  --vera-wash-1: rgba(127, 182, 200, 0.06);
+  --v7-cyan: #1ECAEF;
+  --v7-cyan-soft: rgba(30, 202, 239, 0.17);
+  --v7-cyan-strong: rgba(30, 202, 239, 0.50);
+  --v7-pink: #BFBFBF;
+  --v7-pink-soft: rgba(255, 255, 255, 0.10);
+  --v7-tint: #1A1A1A;
+  --v7-tint-border: #2E2E2E;
+  --indigo: #1ECAEF;
+  --indigo-light: #BFBFBF;
+  --vera-emph-fg: #1ECAEF;
+  --vera-unprompted: #FFA04E;
+  --vera-unprompted-soft: rgba(255, 160, 78, 0.13);
+  --vera-wash-1: rgba(30, 202, 239, 0.07);
   --vera-wash-2: transparent;
-
-  --bg: #08090A;
-  --surface: #121314;
-  --surface2: #1A1C1D;
-  --surface3: #232527;
-  --border: rgba(255, 255, 255, 0.08);
-  --border2: rgba(255, 255, 255, 0.16);
-  --text: #F4F4F5;
-  --muted: #B9BABE;
-  --muted-text: #B9BABE;
-  --dim: #A0A2A8;
-
-  --indigo: #7FB6C8;
-  --indigo-light: #8E9BA6;
-
-  --vera-card-bg: #121314;
-  --vera-card-border: rgba(255, 255, 255, 0.095);
-  --vera-inset-bg: #1A1C1D;
-  --vera-inset-border: rgba(255, 255, 255, 0.07);
-  --vera-label-color: #A0A2A8;
-
-  --background: 210 6% 4%;
-  --foreground: 240 5% 96%;
-  --card: 200 4% 7%;
-  --card-foreground: 240 5% 96%;
-  --card-border: 200 4% 15%;
-  --popover: 200 4% 7%;
-  --popover-foreground: 240 5% 96%;
-  --primary: 195 40% 64%;
-  --primary-foreground: 193 65% 7%;
-  --secondary: 200 4% 12%;
-  --secondary-foreground: 240 5% 96%;
-  --muted-foreground: 220 5% 64%;
-  --accent: 195 40% 64%;
-  --accent-foreground: 193 65% 7%;
-  --input: 200 4% 15%;
-  --ring: 195 40% 64%;
-
-  --vera-cc-bg: #08090A;
-  --vera-cc-paper: #121314;
-  --vera-cc-paper-edge: #2A2D2F;
-  --vera-cc-line: rgba(255, 255, 255, 0.075);
-  --vera-cc-text: #F4F4F5;
-  --vera-cc-muted: #B9BABE;
-  --vera-cc-faint: #A0A2A8;
-  --vera-cc-accent: #7FB6C8;
-  --vera-cc-accent-dim: rgba(127, 182, 200, 0.12);
-  --vera-cc-accent-border: rgba(127, 182, 200, 0.32);
-  --vera-cc-second: #8E9BA6;
-  --vera-cc-second-dim: rgba(142, 155, 166, 0.13);
-  --vera-cc-second-border: rgba(142, 155, 166, 0.30);
-  --vera-cc-rule: rgba(142, 155, 166, 0.28);
-  --vera-cc-dogear: #08090A;
+  --primary: 190 87% 53%;
+  --primary-foreground: 0 0% 4%;
+  --accent: 190 87% 53%;
+  --accent-foreground: 0 0% 4%;
+  --ring: 190 87% 53%;
+  --vera-cc-accent: #1ECAEF;
+  --vera-cc-accent-dim: rgba(30, 202, 239, 0.16);
+  --vera-cc-accent-border: rgba(30, 202, 239, 0.40);
+  --vera-cc-second: #BFBFBF;
+  --vera-cc-second-dim: rgba(255, 255, 255, 0.10);
+  --vera-cc-second-border: rgba(255, 255, 255, 0.26);
+  --vera-cc-rule: rgba(30, 202, 239, 0.32);
 }
-
-/* ---------- MIDNIGHT MINIMALIST · light -------------------------------- */
 html[data-skin="midnight"] .v7-light {
-  --v7-bg: #FAFAFA;
-  --v7-bg-raised: #FFFFFF;
-  --v7-bg-raised-2: #F1F1F2;
-  --v7-border: #E4E4E5;
-  --v7-border-strong: #C9CACB;
-  --v7-text: #0C0D0E;
-  --v7-text-dim: #46484D;
-  --v7-text-mute: #4F5258;
-
-  --v7-cyan: #27606F;
-  --v7-cyan-soft: #E6EFF2;
-  --v7-cyan-strong: #27606F;
-  --v7-pink: #4E6275;
-  --v7-pink-soft: #E9EDF1;
-
-  --v7-tint: #F1F1F2;
-  --v7-tint-border: #D8D9DA;
-  --vera-emph-fg: #27606F;
-  --vera-unprompted: #7A5310;
-  --vera-unprompted-soft: #F6EEDF;
-
-  --vera-wash-1: rgba(39, 96, 111, 0.06);
+  --v7-cyan: #005F8A;
+  --v7-cyan-soft: rgba(0, 95, 138, 0.10);
+  --v7-cyan-strong: rgba(0, 95, 138, 0.52);
+  --v7-pink: #5C5C5C;
+  --v7-pink-soft: rgba(0, 0, 0, 0.05);
+  --v7-tint: #E2EEF4;
+  --v7-tint-border: #B3D0DE;
+  --indigo: #005F8A;
+  --indigo-light: #5C5C5C;
+  --vera-emph-fg: #005F8A;
+  --vera-unprompted: #A73C00;
+  --vera-unprompted-soft: rgba(167, 60, 0, 0.09);
+  --vera-wash-1: rgba(0, 95, 138, 0.05);
   --vera-wash-2: transparent;
-
-  --bg: #FAFAFA;
-  --surface: #FFFFFF;
-  --surface2: #F1F1F2;
-  --surface3: #E7E7E8;
-  --border: #E4E4E5;
-  --border2: #D2D3D4;
-  --text: #0C0D0E;
-  --muted: #46484D;
-  --muted-text: #46484D;
-  --dim: #4F5258;
-
-  --indigo: #27606F;
-  --indigo-light: #4E6275;
-
-  --vera-card-bg: #FFFFFF;
-  --vera-card-border: #E4E4E5;
-  --vera-inset-bg: #F5F5F6;
-  --vera-inset-border: #E8E8E9;
-  --vera-label-color: #4F5258;
-
-  --background: 0 0% 98%;
-  --foreground: 210 8% 5%;
-  --card: 0 0% 100%;
-  --card-foreground: 210 8% 5%;
-  --card-border: 240 3% 90%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 210 8% 5%;
-  --primary: 193 48% 29%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 240 3% 95%;
-  --secondary-foreground: 210 8% 5%;
-  --muted-foreground: 225 6% 33%;
-  --accent: 193 48% 29%;
-  --accent-foreground: 0 0% 100%;
-  --input: 240 3% 90%;
-  --ring: 193 48% 29%;
-
-  --vera-cc-bg: #F1F1F2;
-  --vera-cc-paper: #FFFFFF;
-  --vera-cc-paper-edge: #D8D9DA;
-  --vera-cc-line: rgba(12, 13, 14, 0.11);
-  --vera-cc-text: #0C0D0E;
-  --vera-cc-muted: #46484D;
-  --vera-cc-faint: #4F5258;
-  --vera-cc-accent: #27606F;
-  --vera-cc-accent-dim: #E6EFF2;
-  --vera-cc-accent-border: #A9C6CF;
-  --vera-cc-second: #4E6275;
-  --vera-cc-second-dim: #E9EDF1;
-  --vera-cc-second-border: #C2CDD7;
-  --vera-cc-rule: rgba(78, 98, 117, 0.32);
-  --vera-cc-dogear: #F1F1F2;
+  --primary: 199 100% 27%;
+  --primary-foreground: 0 0% 99%;
+  --accent: 199 100% 27%;
+  --accent-foreground: 0 0% 99%;
+  --ring: 199 100% 27%;
+  --vera-cc-accent: #005F8A;
+  --vera-cc-accent-dim: rgba(0, 95, 138, 0.10);
+  --vera-cc-accent-border: rgba(0, 95, 138, 0.38);
+  --vera-cc-second: #5C5C5C;
+  --vera-cc-second-dim: rgba(0, 0, 0, 0.05);
+  --vera-cc-second-border: rgba(0, 0, 0, 0.24);
+  --vera-cc-rule: rgba(0, 95, 138, 0.32);
 }
 
-/* ---------- NORDIC GREEN · dark ---------------------------------------
-   A slate-stone canvas carrying a green undertone, with muted pine as the
-   action colour. The quietest of the three. */
+/* ---------- NORDIC GREEN · pine -------------------------------------- */
 html[data-skin="nordic"],
 html[data-skin="nordic"] .dark {
-  --v7-bg: #101614;
-  --v7-bg-raised: #18201D;
-  --v7-bg-raised-2: #1F2825;
-  --v7-border: rgba(224, 238, 230, 0.09);
-  --v7-border-strong: rgba(224, 238, 230, 0.17);
-  --v7-text: #E9EFEB;
-  --v7-text-dim: #B3C0B8;
-  --v7-text-mute: #9AA89F;
-
-  --v7-cyan: #82B295;
-  --v7-cyan-soft: rgba(130, 178, 149, 0.14);
-  --v7-cyan-strong: rgba(130, 178, 149, 0.40);
-  --v7-pink: #A3B8AC;
-  --v7-pink-soft: rgba(163, 184, 172, 0.13);
-
-  --v7-tint: #1F2825;
-  --v7-tint-border: #31403A;
-  --vera-emph-fg: #82B295;
-  --vera-unprompted: #C9A66B;
-  --vera-unprompted-soft: rgba(201, 166, 107, 0.13);
-
-  --vera-wash-1: rgba(94, 143, 115, 0.14);
-  --vera-wash-2: rgba(110, 130, 120, 0.08);
-
-  --bg: #101614;
-  --surface: #18201D;
-  --surface2: #1F2825;
-  --surface3: #29332E;
-  --border: rgba(224, 238, 230, 0.095);
-  --border2: rgba(224, 238, 230, 0.18);
-  --text: #E9EFEB;
-  --muted: #B3C0B8;
-  --muted-text: #B3C0B8;
-  --dim: #9AA89F;
-
-  --indigo: #82B295;
-  --indigo-light: #A3B8AC;
-
-  --vera-card-bg: #18201D;
-  --vera-card-border: rgba(224, 238, 230, 0.10);
-  --vera-inset-bg: #1F2825;
-  --vera-inset-border: rgba(224, 238, 230, 0.075);
-  --vera-label-color: #9AA89F;
-
-  --background: 160 18% 6%;
-  --foreground: 150 14% 93%;
-  --card: 156 14% 11%;
-  --card-foreground: 150 14% 93%;
-  --card-border: 156 12% 19%;
-  --popover: 156 14% 11%;
-  --popover-foreground: 150 14% 93%;
-  --primary: 144 24% 60%;
-  --primary-foreground: 150 40% 5%;
-  --secondary: 156 12% 15%;
-  --secondary-foreground: 150 14% 93%;
-  --muted-foreground: 145 8% 63%;
-  --accent: 144 24% 60%;
-  --accent-foreground: 150 40% 5%;
-  --input: 156 12% 19%;
-  --ring: 144 24% 60%;
-
-  --vera-cc-bg: #101614;
-  --vera-cc-paper: #18201D;
-  --vera-cc-paper-edge: #2C3833;
-  --vera-cc-line: rgba(224, 238, 230, 0.085);
-  --vera-cc-text: #E9EFEB;
-  --vera-cc-muted: #B3C0B8;
-  --vera-cc-faint: #9AA89F;
-  --vera-cc-accent: #82B295;
-  --vera-cc-accent-dim: rgba(130, 178, 149, 0.14);
-  --vera-cc-accent-border: rgba(130, 178, 149, 0.32);
-  --vera-cc-second: #A3B8AC;
-  --vera-cc-second-dim: rgba(163, 184, 172, 0.13);
-  --vera-cc-second-border: rgba(163, 184, 172, 0.30);
-  --vera-cc-rule: rgba(163, 184, 172, 0.28);
-  --vera-cc-dogear: #101614;
+  --v7-cyan: #59D38C;
+  --v7-cyan-soft: rgba(89, 211, 140, 0.17);
+  --v7-cyan-strong: rgba(89, 211, 140, 0.50);
+  --v7-pink: #BFBFBF;
+  --v7-pink-soft: rgba(255, 255, 255, 0.10);
+  --v7-tint: #1A1A1A;
+  --v7-tint-border: #2E2E2E;
+  --indigo: #59D38C;
+  --indigo-light: #BFBFBF;
+  --vera-emph-fg: #59D38C;
+  --vera-unprompted: #FFA04E;
+  --vera-unprompted-soft: rgba(255, 160, 78, 0.13);
+  --vera-wash-1: rgba(89, 211, 140, 0.08);
+  --vera-wash-2: transparent;
+  --primary: 147 58% 59%;
+  --primary-foreground: 0 0% 4%;
+  --accent: 147 58% 59%;
+  --accent-foreground: 0 0% 4%;
+  --ring: 147 58% 59%;
+  --vera-cc-accent: #59D38C;
+  --vera-cc-accent-dim: rgba(89, 211, 140, 0.16);
+  --vera-cc-accent-border: rgba(89, 211, 140, 0.40);
+  --vera-cc-second: #BFBFBF;
+  --vera-cc-second-dim: rgba(255, 255, 255, 0.10);
+  --vera-cc-second-border: rgba(255, 255, 255, 0.26);
+  --vera-cc-rule: rgba(89, 211, 140, 0.32);
 }
-
-/* ---------- NORDIC GREEN · light --------------------------------------- */
 html[data-skin="nordic"] .v7-light {
-  --v7-bg: #F6F8F6;
-  --v7-bg-raised: #FFFFFF;
-  --v7-bg-raised-2: #ECF1EE;
-  --v7-border: #E0E7E2;
-  --v7-border-strong: #C5CFC8;
-  --v7-text: #101613;
-  --v7-text-dim: #414B45;
-  --v7-text-mute: #49534C;
-
-  --v7-cyan: #35604A;
-  --v7-cyan-soft: #E6F0EA;
-  --v7-cyan-strong: #35604A;
-  --v7-pink: #4A5F52;
-  --v7-pink-soft: #E9EFEB;
-
-  --v7-tint: #ECF1EE;
-  --v7-tint-border: #D3DDD7;
-  --vera-emph-fg: #35604A;
-  --vera-unprompted: #7A5310;
-  --vera-unprompted-soft: #F6EEDF;
-
-  --vera-wash-1: rgba(53, 96, 74, 0.09);
-  --vera-wash-2: rgba(100, 120, 110, 0.06);
-
-  --bg: #F6F8F6;
-  --surface: #FFFFFF;
-  --surface2: #ECF1EE;
-  --surface3: #E1E8E4;
-  --border: #E0E7E2;
-  --border2: #CDD7D1;
-  --text: #101613;
-  --muted: #414B45;
-  --muted-text: #414B45;
-  --dim: #49534C;
-
-  --indigo: #35604A;
-  --indigo-light: #4A5F52;
-
-  --vera-card-bg: #FFFFFF;
-  --vera-card-border: #E0E7E2;
-  --vera-inset-bg: #F3F7F4;
-  --vera-inset-border: #E4EBE7;
-  --vera-label-color: #49534C;
-
-  --background: 140 20% 97%;
-  --foreground: 156 18% 7%;
-  --card: 0 0% 100%;
-  --card-foreground: 156 18% 7%;
-  --card-border: 145 15% 90%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 156 18% 7%;
-  --primary: 149 29% 29%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 145 18% 94%;
-  --secondary-foreground: 156 18% 7%;
-  --muted-foreground: 150 8% 30%;
-  --accent: 149 29% 29%;
-  --accent-foreground: 0 0% 100%;
-  --input: 145 15% 90%;
-  --ring: 149 29% 29%;
-
-  --vera-cc-bg: #ECF1EE;
-  --vera-cc-paper: #FFFFFF;
-  --vera-cc-paper-edge: #D3DDD7;
-  --vera-cc-line: rgba(16, 22, 19, 0.11);
-  --vera-cc-text: #101613;
-  --vera-cc-muted: #414B45;
-  --vera-cc-faint: #49534C;
-  --vera-cc-accent: #35604A;
-  --vera-cc-accent-dim: #E6F0EA;
-  --vera-cc-accent-border: #AFC9BA;
-  --vera-cc-second: #4A5F52;
-  --vera-cc-second-dim: #E9EFEB;
-  --vera-cc-second-border: #C3D0C8;
-  --vera-cc-rule: rgba(74, 95, 82, 0.32);
-  --vera-cc-dogear: #ECF1EE;
+  --v7-cyan: #00652F;
+  --v7-cyan-soft: rgba(0, 101, 47, 0.10);
+  --v7-cyan-strong: rgba(0, 101, 47, 0.52);
+  --v7-pink: #5C5C5C;
+  --v7-pink-soft: rgba(0, 0, 0, 0.05);
+  --v7-tint: #E2EFE7;
+  --v7-tint-border: #B2D4C0;
+  --indigo: #00652F;
+  --indigo-light: #5C5C5C;
+  --vera-emph-fg: #00652F;
+  --vera-unprompted: #A73C00;
+  --vera-unprompted-soft: rgba(167, 60, 0, 0.09);
+  --vera-wash-1: rgba(0, 101, 47, 0.05);
+  --vera-wash-2: transparent;
+  --primary: 148 100% 20%;
+  --primary-foreground: 0 0% 99%;
+  --accent: 148 100% 20%;
+  --accent-foreground: 0 0% 99%;
+  --ring: 148 100% 20%;
+  --vera-cc-accent: #00652F;
+  --vera-cc-accent-dim: rgba(0, 101, 47, 0.10);
+  --vera-cc-accent-border: rgba(0, 101, 47, 0.38);
+  --vera-cc-second: #5C5C5C;
+  --vera-cc-second-dim: rgba(0, 0, 0, 0.05);
+  --vera-cc-second-border: rgba(0, 0, 0, 0.24);
+  --vera-cc-rule: rgba(0, 101, 47, 0.32);
 }
+
 
 /* ---------- Geometry, elevation and type, per skin ---------------------
    `--radius` is what Tailwind's rounded-sm/md/lg/xl all derive from (see the
@@ -1640,19 +1505,29 @@ html[data-skin] {
   --vera-card-pad: 18px;
   --vera-block-pad: 12px;
 
-  --vera-font-display: "Segoe UI Variable Display", "SF Pro Display", -apple-system,
-                       BlinkMacSystemFont, system-ui, sans-serif;
-  --app-font-sans: "Segoe UI Variable Text", "SF Pro Text", -apple-system,
-                   BlinkMacSystemFont, system-ui, sans-serif;
-  --v7-font-round: "Segoe UI Variable Text", "SF Pro Text", -apple-system,
-                   BlinkMacSystemFont, system-ui, sans-serif;
-  --v7-font-small: "Segoe UI Variable Small", "SF Pro Text", -apple-system,
-                   BlinkMacSystemFont, system-ui, sans-serif;
-  --v7-font-mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono",
-                  "JetBrains Mono", Menlo, Consolas, monospace;
-  --app-font-mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono",
-                   "JetBrains Mono", Menlo, Consolas, monospace;
-  --vera-display-weight: 650;
+  /* One family carries the whole product. Instrument Sans is a contemporary
+     grotesque that holds tight tracking at display size and stays legible at
+     12px, which is the range a dense product UI actually lives in. The
+     platform variable faces stay as the metric-adjacent fallback so an
+     offline or blocked webfont degrades to something cut for UI rather than
+     to Arial. IBM Plex Mono is the data face and is capped at 13px: figures,
+     units, timestamps, state words and tabular columns only, never a heading
+     and never an eyebrow. */
+  --vera-font-display: "Instrument Sans", "Segoe UI Variable Display", "SF Pro Display",
+                       -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --app-font-sans: "Instrument Sans", "Segoe UI Variable Text", "SF Pro Text",
+                   -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --v7-font-round: "Instrument Sans", "Segoe UI Variable Text", "SF Pro Text",
+                   -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --v7-font-small: "Instrument Sans", "Segoe UI Variable Small", "SF Pro Text",
+                   -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --v7-font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", SFMono-Regular,
+                  "Cascadia Mono", Menlo, Consolas, monospace;
+  --app-font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", SFMono-Regular,
+                   "Cascadia Mono", Menlo, Consolas, monospace;
+  /* Instrument Sans is a static family, so the 650 the platform variable
+     faces resolved would synthesise a fake bold. 600 is a real cut. */
+  --vera-display-weight: 600;
   --vera-display-tracking: -0.028em;
 
   --vera-hero-size: 34px;
@@ -1672,19 +1547,9 @@ html[data-skin] {
   --shadow-2xl: 0 32px 68px -26px rgba(0, 0, 0, 0.85);
 }
 
-/* Midnight's one divergence. Tighter corners across the whole ladder, and a
-   flatter shadow set — it is the identity that is supposed to look machined
-   rather than lit. */
-html[data-skin="midnight"] {
-  --radius: 0.375rem;          /* 6px → sm 2 · md 4 · lg 6 · xl 10 */
-  --vera-r-panel: 8px;
-  --vera-r-card: 8px;
-  --vera-r-inset: 5px;
-
-  --vera-e1: 0 1px 2px rgba(0, 0, 0, 0.55);
-  --vera-e1-bevel: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  --vera-e2: 0 10px 26px -12px rgba(0, 0, 0, 0.85);
-}
+/* Midnight used to diverge on radius and shadow. It no longer does: the four
+   identities are one interface in four accents, and geometry that shifts
+   under you when you change colour is the opposite of that. */
 
 /* On paper, elevation cannot come from the face stepping up the ramp — a
    white card has nowhere lighter to go — so it comes from shadow instead.
@@ -2167,7 +2032,7 @@ html[data-skin] .vera-t-data {
    any `data-skin`, not just Alloy), so it showed up regardless of which
    skin or theme was active. Do not reintroduce this as a global rule; if a
    center-axis motif is wanted again, scope it to one named skin explicitly
-   (`html[data-skin="alloy"]`) and preview it in both light and dark first.
+   (`html[data-skin="alloy"]`) and preview it in both light and dark first. */
 
 /* ---------- Recomposition ---------------------------------------------
    Tablet and mobile are their own compositions, not a reflow. */
@@ -2457,4 +2322,40 @@ html[data-skin] .vera-newchat {
   justify-content: center;
   font-size: 13.5px;
   padding: 11px 15px;
+}
+/* ==========================================================================
+   INTERACTION FLOOR
+   ==========================================================================
+
+   Before this block the whole product had exactly two :focus-visible rules,
+   on .vera-key and .vera-suggest, and no Tailwind focus utilities at all.
+   Sidebar rows, tabs, period pills, card collapse toggles, every icon
+   button and the copy/download/save row had no visible focus state, so a
+   keyboard user could not see where they were. One rule covers all of it.
+   -------------------------------------------------------------------- */
+:where(button, [role='button'], a[href], summary, [role='tab'],
+       input, textarea, select, [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 2px solid var(--v7-cyan, currentColor);
+  outline-offset: 2px;
+  border-radius: var(--vera-r-inset, 6px);
+}
+
+/* Grouped controls light as a unit rather than only on the inner field. */
+:where(form, label):focus-within {
+  --vera-focus-within: 1;
+}
+
+/* Double-tapping a control zoomed the page, and every tap flashed the UA's
+   blue-grey box. Both are chrome the design never asked for. */
+:where(button, [role='button'], a, summary, label, [role='tab']) {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* On phones a control has to be reachable, not merely present. The glyph
+   sizes are untouched; only the hit area grows. */
+@media (max-width: 767px) {
+  :where(button, [role='button'], a[href], [role='tab']):not(.vera-inline-control) {
+    min-height: 44px;
+  }
 }

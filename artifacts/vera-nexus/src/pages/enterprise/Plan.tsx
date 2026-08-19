@@ -73,13 +73,13 @@ export function PlanGate() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center py-12 px-4">
+    <div className="min-h-[100dvh] bg-[var(--bg)] flex flex-col items-center py-12 px-4">
       <div className="w-full max-w-4xl">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 bg-[var(--mint)]/10 border border-[var(--mint)]/30 px-4 py-1.5 rounded-full text-xs font-mono text-[var(--mint)] uppercase tracking-widest mb-6">
             Step 3 of 4
           </div>
-          <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Your Plan</h1>
+          <h1 className="text-3xl font-syne font-semibold text-white mb-3">Your Plan</h1>
           <p className="text-sm text-[var(--muted)]">
             One plan, free while Vera is in beta. Everything below is live today — nothing here is coming soon.
           </p>
@@ -112,7 +112,7 @@ export function PlanGate() {
         <div className="flex justify-center">
           <button
             onClick={handleContinue}
-            className="px-12 py-3.5 font-bold text-sm uppercase tracking-wider rounded-lg transition-all bg-[var(--mint)] text-black hover:bg-opacity-90"
+            className="px-12 py-3.5 font-bold text-sm uppercase tracking-wider rounded-lg transition-[transform,opacity,background-color,border-color] bg-[var(--mint)] text-black hover:bg-opacity-90"
           >
             Continue →
           </button>

@@ -276,14 +276,14 @@ export function AccountCard() {
             ) : (
               // Initial, not a stock avatar silhouette — a placeholder person
               // is worse than no person.
-              <span className="font-extrabold" style={{ fontSize: 22, color: 'var(--v7-text-dim)' }}>
+              <span className="font-semibold" style={{ fontSize: 22, color: 'var(--v7-text-dim)' }}>
                 {(profile?.name ?? profile?.email ?? '?').trim().charAt(0).toUpperCase()}
               </span>
             )}
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="truncate font-extrabold" style={{ fontSize: 17, color: 'var(--v7-text)' }}>
+            <div className="truncate font-semibold" style={{ fontSize: 17, color: 'var(--v7-text)' }}>
               {profile?.name ?? 'Unnamed'}
             </div>
             {/* Email is Clerk's and is NOT editable here. Changing the address

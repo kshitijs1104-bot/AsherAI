@@ -29,7 +29,7 @@ function NodeBox({ icon: Icon, label, ghost }: { icon: typeof Mail; label: strin
   return (
     <div className="flex flex-col items-center gap-1.5 shrink-0" style={{ width: '76px' }}>
       <div
-        className="w-11 h-11 rounded-2xl flex items-center justify-center transition-all duration-300"
+        className="w-11 h-11 rounded-2xl flex items-center justify-center transition-[transform,opacity,background-color,border-color] duration-300"
         style={{
           background: ghost ? 'transparent' : 'var(--v7-cyan-soft)',
           border: `1.5px ${ghost ? 'dashed' : 'solid'} ${ghost ? 'var(--v7-border, rgba(255,255,255,0.16))' : 'var(--v7-cyan-strong)'}`,
@@ -81,7 +81,7 @@ function WorkflowCard({ template, workflow }: { template: WorkflowTemplate; work
 
   return (
     <div
-      className="rounded-2xl p-4 transition-all duration-300"
+      className="rounded-2xl p-4 transition-[transform,opacity,background-color,border-color] duration-300"
       style={{
         background: isGhost ? 'transparent' : 'var(--v7-bg-raised)',
         border: `1px ${isGhost ? 'dashed' : 'solid'} ${isGhost ? 'var(--v7-border, rgba(255,255,255,0.16))' : 'var(--v7-border, rgba(255,255,255,0.08))'}`,
@@ -178,7 +178,7 @@ function WorkflowCard({ template, workflow }: { template: WorkflowTemplate; work
       </div>
       {runNow.isSuccess && runNow.data && (
         <div className="text-[11px] mt-2" style={{ color: 'var(--v7-text-mute)' }}>
-          {runNow.data.created > 0 ? `Created ${runNow.data.created} queue item${runNow.data.created === 1 ? '' : 's'}.` : 'Ran — nothing new to surface.'}
+          {runNow.data.created > 0 ? `Created ${runNow.data.created} queue item${runNow.data.created === 1 ? '' : 's'}.` : 'Ran. Nothing new to surface.'}
         </div>
       )}
     </div>
@@ -274,7 +274,7 @@ export function WorkflowsPage() {
     // Same omission the Dossier route had: without an explicit background
     // the page falls through to <body>'s dark colour and light mode renders
     // as light cards on a black page.
-    <div className={`relative min-h-screen w-full ${theme === 'light' ? 'v7-light' : ''}`} style={{ background: 'var(--v7-bg)', color: 'var(--v7-text)', fontFamily: 'var(--v7-font-round)' }}>
+    <div className={`relative min-h-[100dvh] w-full ${theme === 'light' ? 'v7-light' : ''}`} style={{ background: 'var(--v7-bg)', color: 'var(--v7-text)', fontFamily: 'var(--v7-font-round)' }}>
       <style>{`
         @keyframes ve-flow-dash { from { background-position: 0 0; } to { background-position: 20px 0; } }
         @keyframes ve-drift-a { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, 20px); } }
@@ -299,10 +299,10 @@ export function WorkflowsPage() {
 
         <div className="flex items-center gap-2 mb-1">
           <WorkflowIcon className="w-4 h-4" style={{ color: 'var(--v7-cyan)' }} />
-          <h1 className="text-[19px] font-extrabold">Workflows</h1>
+          <h1 className="text-[19px] font-semibold">Workflows</h1>
         </div>
         <p className="text-[13px] mb-6" style={{ color: 'var(--v7-text-mute)' }}>
-          Activate a template and Vera runs it on schedule — results show up in your queue.
+          Activate a template and Vera runs it on schedule. Results show up in your queue.
         </p>
 
         {isLoading && <div className="text-[13px]" style={{ color: 'var(--v7-text-mute)' }}>Loading…</div>}

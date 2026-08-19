@@ -109,8 +109,8 @@ const EXAMPLE_PROMPTS: { text: string; Icon: typeof Target }[] = [
   { text: "What's my biggest risk right now and how do I fix it?", Icon: ShieldAlert },
   { text: 'Build me a 6-month roadmap based on similar companies at my stage', Icon: MapIcon },
   { text: 'Find 3 failed companies most similar to mine and why they failed', Icon: TrendingDown },
-  { text: 'Run an investor-fit analysis — which VCs are most likely to fund us?', Icon: Landmark },
-  { text: "Pressure-test my pricing — where am I leaving money on the table?", Icon: Tag },
+  { text: 'Run an investor-fit analysis. Which VCs are most likely to fund us?', Icon: Landmark },
+  { text: "Pressure-test my pricing. Where am I leaving money on the table?", Icon: Tag },
 ];
 
 interface CompanyReportSnapshot {
@@ -244,7 +244,7 @@ function AttachmentChip({ fileName, previewUrl, uploading, error, onRemove }: { 
       >
         <AlertCircle className="w-3.5 h-3.5 shrink-0" />
         <span className="truncate max-w-[260px]">{error}</span>
-        <button onClick={onRemove} title="Dismiss">
+        <button onClick={onRemove} title="Dismiss" aria-label="Dismiss upload error">
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -275,7 +275,7 @@ function AttachmentChip({ fileName, previewUrl, uploading, error, onRemove }: { 
         </div>
         <span className="truncate max-w-[180px]">{uploading ? 'Uploading…' : fileName}</span>
         {!uploading && (
-          <button onClick={onRemove} title="Remove attachment" className="shrink-0">
+          <button onClick={onRemove} title="Remove attachment" aria-label="Remove attachment" className="shrink-0">
             <X className="w-3.5 h-3.5" />
           </button>
         )}
@@ -291,7 +291,7 @@ function AttachmentChip({ fileName, previewUrl, uploading, error, onRemove }: { 
       {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
       <span className="truncate max-w-[220px]">{uploading ? 'Uploading…' : fileName}</span>
       {!uploading && (
-        <button onClick={onRemove} title="Remove attachment">
+        <button onClick={onRemove} title="Remove attachment" aria-label="Remove attachment">
           <X className="w-3.5 h-3.5" />
         </button>
       )}
@@ -818,7 +818,7 @@ export function VenusPage() {
 
   const handleSaveResponse = (msg: ChatMessage) => {
     const type = detectAnalysisType(msg.content ?? '', msg.cards);
-    const title = typeLabel(type) + ' — ' + new Date().toLocaleDateString();
+    const title = typeLabel(type) + ', ' + new Date().toLocaleDateString();
     saveAnalysis({
       type,
       title,
@@ -975,7 +975,7 @@ export function VenusPage() {
 
   return (
     <div
-      className={`vera-ground flex h-screen w-full overflow-hidden ${theme === 'light' ? 'v7-light' : ''}`}
+      className={`vera-ground flex h-[100dvh] w-full overflow-hidden ${theme === 'light' ? 'v7-light' : ''}`}
       style={{
         background: 'var(--v7-bg)',
         color: 'var(--v7-text)',
@@ -987,12 +987,13 @@ export function VenusPage() {
           doesn't reset back open on the next visit. */}
       {railMode ? (
         <div
-          className="w-[44px] flex flex-col items-center gap-1 shrink-0 sticky top-0 h-screen"
+          className="w-[44px] flex flex-col items-center gap-1 shrink-0 sticky top-0 h-[100dvh]"
           style={{ background: 'var(--v7-bg-raised)', borderRight: '1px solid var(--v7-border)', paddingTop: '20px' }}
         >
           <button
             onClick={toggleSidebar}
             title="Expand sidebar"
+            aria-label="Expand sidebar"
             className="p-1.5 rounded-lg"
             style={{ color: 'var(--v7-text-mute)' }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--v7-text-dim)')}
@@ -1014,7 +1015,7 @@ export function VenusPage() {
         />
       )}
       <aside
-        className={`w-[260px] flex flex-col shrink-0 h-screen ${asideFloats ? 'fixed inset-y-0 left-0 z-50' : 'sticky top-0'}`}
+        className={`w-[260px] flex flex-col shrink-0 h-[100dvh] ${asideFloats ? 'fixed inset-y-0 left-0 z-50' : 'sticky top-0'}`}
         style={{
           background: 'var(--v7-bg-raised)',
           borderRight: '1px solid var(--v7-border)',
@@ -1033,7 +1034,7 @@ export function VenusPage() {
             >
               <VeraMark size={14} />
             </div>
-            <span className="font-extrabold text-[15px]" style={{ letterSpacing: '-0.01em' }}>Vera</span>
+            <span className="font-semibold text-[15px]" style={{ letterSpacing: '-0.01em' }}>Vera</span>
           </div>
           <div
             className="flex items-center gap-[5px] font-medium text-[9px] uppercase"
@@ -1046,7 +1047,9 @@ export function VenusPage() {
               padding: '3px 8px 3px 7px',
             }}
           >
-            <span className="w-[4px] h-[4px] rounded-full" style={{ background: 'var(--v7-cyan)', boxShadow: '0 0 6px var(--v7-cyan)' }}></span>
+            {/* The glowing dot that used to sit here encoded nothing. It was a
+                neon halo next to a tier label that already says the tier, and a
+                decorative status dot is the loudest template tell there is. */}
             Enterprise
           </div>
         </div>
@@ -1071,6 +1074,7 @@ export function VenusPage() {
             <button
               onClick={toggleSidebar}
               title="Collapse sidebar"
+              aria-label="Collapse sidebar"
               className="p-1.5 rounded-lg shrink-0"
               style={{ color: 'var(--v7-text-mute)' }}
               onMouseEnter={e => (e.currentTarget.style.color = 'var(--v7-text-dim)')}
@@ -1093,7 +1097,7 @@ export function VenusPage() {
           className={
             skinned
               ? 'vera-key vera-key-1 vera-newchat mb-[10px]'
-              : 'flex items-center gap-[9px] font-bold text-[13.5px] transition-all mb-[10px]'
+              : 'flex items-center gap-[9px] font-bold text-[13.5px] transition-[transform,opacity,background-color,border-color] mb-[10px]'
           }
           style={
             skinned
@@ -1227,7 +1231,7 @@ export function VenusPage() {
           </button>
           {/* Used to expand an inline panel right here — Connectors plus the
               Appearance list pushed the bottom of this fixed-height,
-              non-scrolling sidebar (`h-screen`, no overflow-y-auto) past the
+              non-scrolling sidebar (`h-[100dvh]`, no overflow-y-auto) past the
               viewport, with no way back to it short of zooming the whole
               page out. A centered popup isn't laid out inside this column at
               all, so nothing it contains can push anything else off-frame. */}
@@ -1344,7 +1348,7 @@ export function VenusPage() {
                       mark now, from components/VeraMark. */}
                   <VeraMark size={30} />
                 </div>
-                <span className="font-extrabold" style={{ fontSize: '28px', letterSpacing: '-0.01em', color: 'var(--v7-text)' }}>Vera</span>
+                <span className="font-semibold" style={{ fontSize: '28px', letterSpacing: '-0.01em', color: 'var(--v7-text)' }}>Vera</span>
               </div>
 
               <div
@@ -1359,7 +1363,7 @@ export function VenusPage() {
                   Instrument Serif at 400 reads visibly smaller than 34px of
                   Archivo at 600. Classic's original values are the
                   fallbacks. */}
-              <h1 className="font-extrabold mb-[14px]" style={{ fontSize: 'var(--vera-hero-size, 34px)', lineHeight: 'var(--vera-hero-leading, 1.28)', letterSpacing: '-0.01em', color: 'var(--v7-text)' }}>
+              <h1 className="font-semibold mb-[14px]" style={{ fontSize: 'var(--vera-hero-size, 34px)', lineHeight: 'var(--vera-hero-leading, 1.28)', letterSpacing: '-0.01em', color: 'var(--v7-text)' }}>
                 The cause behind<br />every{' '}
                 {/* Routed through two custom properties so a skin can retire
                     the gradient without this file knowing which skin is
@@ -1408,7 +1412,7 @@ export function VenusPage() {
               )}
               <form
                 onSubmit={e => { e.preventDefault(); handleSend(); }}
-                className="flex items-center gap-[10px] w-full transition-all mb-8"
+                className="flex items-center gap-[10px] w-full transition-[transform,opacity,background-color,border-color] mb-8"
                 style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border-strong)', borderRadius: '16px', padding: '5px 5px 5px 18px' }}
                 onFocus={e => { e.currentTarget.style.borderColor = 'var(--v7-cyan-strong)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--v7-cyan-soft)'; }}
                 onBlur={e => { e.currentTarget.style.borderColor = 'var(--v7-border-strong)'; e.currentTarget.style.boxShadow = 'none'; }}
@@ -1431,7 +1435,7 @@ export function VenusPage() {
                 <button
                   type="submit"
                   disabled={(!input.trim() && !pendingAttachment) || analyzeMutation.isPending}
-                  className={`w-[38px] h-[38px] shrink-0 flex items-center justify-center transition-all disabled:opacity-40 ${skinned ? 'vera-key vera-key-1' : ''}`}
+                  className={`w-[38px] h-[38px] shrink-0 flex items-center justify-center transition-[transform,opacity,background-color,border-color] disabled:opacity-40 ${skinned ? 'vera-key vera-key-1' : ''}`}
                   style={{ borderRadius: 'var(--vera-key-r, 12px)', border: 'none', background: 'var(--v7-cyan)', padding: 0 }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--v7-bg)" strokeWidth="2.3">
@@ -1445,7 +1449,7 @@ export function VenusPage() {
                   <button
                     key={prompt}
                     onClick={() => handleSend(prompt)}
-                    className={`ve-row-in text-left flex items-start gap-3 transition-all group ${skinned ? 'vera-suggest' : ''}`}
+                    className={`ve-row-in text-left flex items-start gap-3 transition-[transform,opacity,background-color,border-color] group ${skinned ? 'vera-suggest' : ''}`}
                     style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border)', borderRadius: 'var(--vera-r-card, 16px)', padding: '16px 17px', animationDelay: `${i * 45}ms` }}
                     {...(skinned
                       ? {}
@@ -1634,7 +1638,7 @@ export function VenusPage() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                placeholder="Ask Vera for unvarnished analysis..."
+                placeholder="Why did trial conversion drop in March?"
                 rows={1}
                 className="flex-1 bg-transparent border-none outline-none resize-none min-h-[44px] py-3 px-4 text-sm text-[var(--text)] placeholder-[var(--dim)]"
               />
@@ -1886,7 +1890,7 @@ function VenusMessage({ content, confidence }: { content: string; confidence?: '
           return <h2 key={i} className="text-sm font-syne font-bold text-[var(--text)] pt-3 first:pt-0">{line.slice(3)}</h2>;
         }
         if (line.startsWith('# ')) {
-          return <h1 key={i} className="text-base font-syne font-extrabold text-[var(--text)] pt-2 first:pt-0">{line.slice(2)}</h1>;
+          return <h1 key={i} className="text-base font-syne font-semibold text-[var(--text)] pt-2 first:pt-0">{line.slice(2)}</h1>;
         }
         if (line.startsWith('- ') || line.startsWith('* ')) {
           return (
@@ -2034,8 +2038,8 @@ function getCompetitorLabel(competitor: unknown): string {
   const name = typeof competitor.name === 'string' ? competitor.name.trim() : '';
   const description = typeof competitor.description === 'string' ? competitor.description.trim() : '';
   const marketShare = competitor.marketShare != null ? String(competitor.marketShare) : '';
-  if (name && description) return `${name} — ${description}`;
-  if (name && marketShare) return `${name} — ${marketShare}`;
+  if (name && description) return `${name}: ${description}`;
+  if (name && marketShare) return `${name}, ${marketShare}`;
   return name || 'Unknown competitor';
 }
 
@@ -2149,9 +2153,9 @@ function formatCompetitor(competitor: Record<string, unknown>): string {
         ? competitor.notes.trim()
         : '';
   const marketShare = competitor.marketShare != null ? String(competitor.marketShare) : '';
-  if (description && marketShare) return `${name} — ${description} (${marketShare})`;
-  if (description) return `${name} — ${description}`;
-  if (marketShare) return `${name} — ${marketShare}`;
+  if (description && marketShare) return `${name}: ${description} (${marketShare})`;
+  if (description) return `${name}: ${description}`;
+  if (marketShare) return `${name}, ${marketShare}`;
   return name;
 }
 
@@ -2616,7 +2620,7 @@ function cardPreviewLine(type: string, content: Record<string, any>): string {
       case 'analysis': return first(content.points, (p) => p.label ?? p.value);
       case 'risk': return first(content.risks, (r) => r.name);
       case 'roadmap': return first(content.phases ?? content.milestones, (m) => m.title ?? m.goal ?? m.period);
-      case 'precedent': return first(content.precedents, (p) => p.company ? `${p.company} — ${p.lesson ?? ''}` : p.lesson);
+      case 'precedent': return first(content.precedents, (p) => p.company ? `${p.company}: ${p.lesson ?? ''}` : p.lesson);
       case 'market': return content.whitespace ? String(content.whitespace) : first(content.competitors, (c) => c.name);
       case 'decision': return content.recommendation ? String(content.recommendation) : first(content.options, (o) => o.name);
       case 'funnel': return first(content.stages ?? content.steps, (s) => s.stage_title ?? s.title ?? s.name);
@@ -2972,14 +2976,14 @@ function cardToText(card: any): string {
     case 'risk':
       (c.risks ?? []).forEach((raw: unknown) => {
         const r = asItem(raw);
-        lines.push(`• ${r.name} (${r.impact}${r.probability != null ? `, ${r.probability}%` : ''}) — ${r.mitigation}`);
+        lines.push(`• ${r.name} (${r.impact}${r.probability != null ? `, ${r.probability}%` : ''}): ${r.mitigation}`);
       });
       break;
     case 'roadmap':
       (c.milestones ?? c.phases ?? []).forEach((raw: unknown) => {
         const m = asItem(raw);
         const head = m.period ?? m.phase ?? '';
-        const title = m.title ? ` — ${m.title}` : '';
+        const title = m.title ? `: ${m.title}` : '';
         const summary = m.goal ?? m.description;
         lines.push(`• ${head}${title}${summary ? `: ${summary}` : ''}`);
         (m.actions ?? []).forEach((a: unknown) => {
@@ -2991,7 +2995,7 @@ function cardToText(card: any): string {
       break;
     case 'market':
       if (c.tam || c.sam || c.som || c.growth)
-        lines.push(`TAM ${c.tam ?? '—'} · SAM ${c.sam ?? '—'} · SOM ${c.som ?? '—'} · Growth ${c.growth ?? '—'}`);
+        lines.push(`TAM ${c.tam ?? 'n/a'} · SAM ${c.sam ?? 'n/a'} · SOM ${c.som ?? 'n/a'} · Growth ${c.growth ?? 'n/a'}`);
       (c.competitors ?? []).forEach((x: unknown) => lines.push(`• ${actionText(x)}`));
       if (c.whitespace) lines.push(`Whitespace: ${c.whitespace}`);
       break;
@@ -3024,7 +3028,7 @@ function messageToText(msg: ChatMessage): string {
   (msg.cards ?? []).forEach((card: any) => {
     parts.push(cardToText(card), '');
   });
-  parts.push('—', `Generated by Vera · ${new Date().toLocaleString()}`);
+  parts.push('---', `Generated by Vera · ${new Date().toLocaleString()}`);
   return parts.join('\n');
 }
 
@@ -3071,15 +3075,15 @@ function VenusResponseActions({ msg, onSave }: { msg: ChatMessage; onSave: () =>
   // just quiet until you reach for it.
   return (
     <div className="flex items-center gap-1 pt-1 -ml-2">
-      <button onClick={handleCopy} className={btn} title="Copy">
+      <button onClick={handleCopy} className={btn} title="Copy" aria-label="Copy this answer">
         {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         {copied ? 'Copied' : 'Copy'}
       </button>
-      <button onClick={handleDownload} className={btn} title="Download">
+      <button onClick={handleDownload} className={btn} title="Download" aria-label="Download this answer">
         <Download className="w-3 h-3" />
         Download
       </button>
-      <button onClick={handleSave} className={btn} title="Save to library">
+      <button onClick={handleSave} className={btn} title="Save to library" aria-label="Save this answer to your library">
         <Check className={`w-3 h-3 ${saved ? 'text-[var(--mint)]' : ''}`} />
         {saved ? 'Saved' : `Save as ${typeLabel(detectAnalysisType(msg.content ?? '', msg.cards))}`}
       </button>

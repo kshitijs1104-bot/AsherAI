@@ -164,7 +164,7 @@ function MiniVera({
         )}
         {analyze.isError && (
           <div style={{ fontSize: '11.5px', color: palette.coral }}>
-            {analyze.error instanceof Error ? analyze.error.message : 'That failed — try again.'}
+            {analyze.error instanceof Error ? analyze.error.message : 'That failed. Try again.'}
           </div>
         )}
         <div ref={endRef} />
@@ -174,7 +174,7 @@ function MiniVera({
         {atLimit ? (
           <div>
             <p style={{ fontSize: '12.5px', color: palette.text, margin: '0 0 8px', lineHeight: 1.5 }}>
-              That's as far as this goes here — let's continue properly in a new chat, where Vera keeps the full thread.
+              That's as far as this goes here. Let's continue properly in a new chat, where Vera keeps the full thread.
             </p>
             <button
               type="button"

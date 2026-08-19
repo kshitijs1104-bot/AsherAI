@@ -93,7 +93,7 @@ function AuthTokenBridge() {
 function AuthPending() {
   return (
     <div
-      className="min-h-screen w-full flex items-center justify-center bg-[var(--bg)] text-[var(--muted)]"
+      className="min-h-[100dvh] w-full flex items-center justify-center bg-[var(--bg)] text-[var(--muted)]"
       role="status"
       aria-live="polite"
     >
@@ -314,7 +314,7 @@ function PrivacyStep() {
   if (accepted) return <Redirect to="/vera" />;
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] flex flex-col">
+    <div className="min-h-[100dvh] bg-[var(--bg)] flex flex-col">
       <div className="flex-1">
         <PrivacyGate />
       </div>

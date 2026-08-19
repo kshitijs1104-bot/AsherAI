@@ -127,7 +127,7 @@ export function getPresenceNote(streak = 0, now = new Date()): PresenceNote | nu
       kind: 'return',
       text:
         unfinished > 0
-          ? `It's been ${gap} days. You left ${unfinished === 1 ? 'a conversation' : `${unfinished} conversations`} unfinished — everything's still here.`
+          ? `It's been ${gap} days. You left ${unfinished === 1 ? 'a conversation' : `${unfinished} conversations`} unfinished. Everything is still here.`
           : `It's been ${gap} days. Everything's still here.`,
     };
   }

@@ -61,7 +61,7 @@ export function SettingsPage() {
     // stays a centred 3xl column. <Layout>'s wrapper used to provide the
     // former; folding both onto a single div would paint the background only
     // behind the column.
-    <div className="dark min-h-screen bg-[var(--bg)] text-[var(--text)]">
+    <div className="dark min-h-[100dvh] bg-[var(--bg)] text-[var(--text)]">
       <div className="p-8 max-w-3xl mx-auto space-y-12">
       <Link
         href="/vera"
@@ -106,7 +106,7 @@ export function SettingsPage() {
                 onChange={e => setFormData(p => ({...p, stage: e.target.value}))}
                 className="w-full bg-[var(--surface2)] border border-[var(--border)] rounded px-4 py-2 text-sm text-white focus:border-[var(--indigo)] outline-none"
               >
-                <option value="">Select Stage...</option>
+                <option value="">Select Stage…</option>
                 <option value="pre-seed">Pre-Seed</option>
                 <option value="seed">Seed</option>
                 <option value="series-a">Series A</option>
@@ -149,7 +149,7 @@ export function SettingsPage() {
               disabled={saveOnboardingMutation.isPending}
               className="bg-white text-black hover:bg-gray-200 disabled:opacity-50 font-bold uppercase text-xs tracking-wider px-6 py-2.5 rounded transition-colors"
             >
-              {saveOnboardingMutation.isPending ? 'Saving...' : 'Save Context'}
+              {saveOnboardingMutation.isPending ? 'Saving…' : 'Save Context'}
             </button>
           </div>
         </form>
@@ -163,7 +163,7 @@ export function SettingsPage() {
         <section className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8">
           <h2 className="text-lg font-syne font-bold text-white mb-1">What Vera Knows</h2>
           <p className="text-xs text-[var(--muted)] mb-6">
-            Captured automatically from your conversations — this is what Vera factors into every answer, beyond the context above.
+            Captured automatically from your conversations. This is what Vera factors into every answer, beyond the context above.
           </p>
           <ul className="space-y-2">
             {facts.map((fact) => (

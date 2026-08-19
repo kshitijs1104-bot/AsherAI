@@ -51,7 +51,7 @@ export function StatsStrip({ stats }: { stats: DailyBriefStats }) {
           className="ve-tile rounded-xl px-3.5 py-2.5 flex-1 min-w-[92px]"
           style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border)' }}
         >
-          <div className="text-[20px] font-extrabold leading-none tracking-[-0.02em]" style={{ color: 'var(--v7-text)' }}>
+          <div className="text-[20px] font-semibold leading-none tracking-[-0.02em]" style={{ color: 'var(--v7-text)' }}>
             {item.value}
           </div>
           <div className="text-[11px] mt-1.5 leading-tight" style={{ color: 'var(--v7-text-mute)' }}>
@@ -333,7 +333,7 @@ export function TodayCard() {
     }
     if (brief.assumptionChange) {
       const text = brief.assumptionChange.previousText
-        ? `Was "${brief.assumptionChange.previousText}" — now "${brief.assumptionChange.currentText}"`
+        ? `Was "${brief.assumptionChange.previousText}", now "${brief.assumptionChange.currentText}"`
         : brief.assumptionChange.currentText;
       items.push({ key: 'assumption', label: 'Changed', text });
     }
@@ -411,7 +411,7 @@ export function TodayCard() {
             <GreetingIcon className="w-[18px] h-[18px]" style={{ color: 'var(--v7-pink)' }} />
           </span>
           <div className="min-w-0">
-            <div className="text-[16px] font-extrabold leading-tight tracking-[-0.01em]" style={{ color: 'var(--v7-text)' }}>
+            <div className="text-[16px] font-semibold leading-tight tracking-[-0.01em]" style={{ color: 'var(--v7-text)' }}>
               {greetingText}
             </div>
             <div className="text-[12px] mt-0.5" style={{ color: 'var(--v7-text-mute)' }}>
@@ -525,7 +525,7 @@ export function TodayCard() {
               style={{ background: 'var(--v7-pink-soft)', color: 'var(--v7-pink)' }}
             >
               <Check className="w-3.5 h-3.5" />
-              Got it — clear for today
+              Got it, clear for today
             </button>
           )}
         </Section>

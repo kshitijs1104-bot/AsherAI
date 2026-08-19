@@ -126,13 +126,13 @@ export function OnboardingGate() {
   const continueAnyway = () => navigate('/enterprise/plan');
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center p-8">
+    <div className="min-h-[100dvh] bg-[var(--bg)] flex flex-col items-center justify-center p-8">
       <div className="w-full max-w-lg">
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 bg-[var(--mint)]/10 border border-[var(--mint)]/30 px-4 py-1.5 rounded-full text-xs font-mono text-[var(--mint)] uppercase tracking-widest mb-6">
             Step 2 of 4
           </div>
-          <h1 className="text-3xl font-syne font-extrabold text-white mb-3">Tell Vera About You</h1>
+          <h1 className="text-3xl font-syne font-semibold text-white mb-3">Tell Vera About You</h1>
           <p className="text-sm text-[var(--muted)]">Vera calibrates every analysis to your company, stage, and goals.</p>
         </div>
 

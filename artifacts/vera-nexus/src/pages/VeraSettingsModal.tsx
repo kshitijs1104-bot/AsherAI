@@ -11,7 +11,7 @@ type Tab = 'account' | 'general' | 'connectors' | 'appearance';
 /**
  * Vera's sidebar Settings button used to expand an inline panel at the
  * bottom of the 260px-wide, fixed-height aside — which has no scroll
- * container of its own (`h-screen`, no `overflow-y-auto`). Connectors plus
+ * container of its own (`h-[100dvh]`, no `overflow-y-auto`). Connectors plus
  * the three-row Appearance list pushed the panel's bottom past the
  * viewport with nothing to scroll it back into view; the only way to reach
  * "Classic" at the bottom of the list was to zoom the whole page out.
