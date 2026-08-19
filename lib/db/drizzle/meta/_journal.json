@@ -43,6 +43,13 @@
       "when": 1786997273561,
       "tag": "0005_arrival_reason",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787160782145,
+      "tag": "0006_shiny_proteus",
+      "breakpoints": true
     }
   ]
 }

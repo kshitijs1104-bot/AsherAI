@@ -32,6 +32,10 @@ export * from "./usage_daily";
 // that somebody ASKED for access, and survives them never getting an account.
 // It is keyed on email rather than a Clerk user id for exactly that reason.
 export * from "./access_requests";
+// Which Stripe customer/subscription a Vera account maps to. Stripe is the
+// system of record for the actual billing history; this is deleted (not
+// anonymised) on account deletion — see dataDeletion.ts.
+export * from "./subscriptions";
 // What Vera has already nudged each founder about. See the header in
 // nudge_state.ts for why the nudges themselves are derived and only the
 // "have they been told / did they say no" part is stored.

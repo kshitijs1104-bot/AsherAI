@@ -75,6 +75,25 @@ export function resetGate() {
     localStorage.removeItem(STAGE_KEY);
     localStorage.removeItem(SIGNUP_KEY);
     localStorage.removeItem(ONBOARDING_KEY);
+    localStorage.removeItem(SELECTED_TIER_KEY);
+  } catch {}
+}
+
+const SELECTED_TIER_KEY = 've_gate_selected_tier';
+
+/** Which paid tier Plan.tsx sent the founder to Checkout for. Null means "the free tier". */
+export function getSelectedTier(): string | null {
+  try {
+    return localStorage.getItem(SELECTED_TIER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setSelectedTier(tierKey: string | null) {
+  try {
+    if (tierKey) localStorage.setItem(SELECTED_TIER_KEY, tierKey);
+    else localStorage.removeItem(SELECTED_TIER_KEY);
   } catch {}
 }
 

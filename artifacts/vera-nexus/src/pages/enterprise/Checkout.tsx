@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { completeGate } from '../../lib/enterpriseGate';
+import { useEffect, useState, type ReactNode } from 'react';
+import { completeGate, getSelectedTier, setSelectedTier } from '../../lib/enterpriseGate';
 import { useLocation } from 'wouter';
 import { GateProgress } from './Signup';
 
@@ -38,29 +38,152 @@ import { GateProgress } from './Signup';
 // DOM at all. Either way this component's job shrinks to "start a session on
 // the server and send the browser there".
 //
-// Until that exists, the honest screen is this one: state plainly that
-// billing is not live, that no card is required and nothing will be charged,
-// and let the founder through. See BILLING_NOT_LIVE below — that constant is
-// the switch this whole screen hangs off, so wiring Stripe means replacing
-// this file, not editing copy around a form.
+// UPDATE: Stripe Checkout now exists (routes/billing.ts), and this is what
+// wiring it looked like — replacing this file's job, not adding a form to it.
+// When a paid tier is chosen on /enterprise/plan, this screen calls
+// POST /api/billing/checkout and sends the browser to the URL Stripe returns.
+// That URL is Stripe's own hosted page, on Stripe's own domain — the one and
+// only place a card number is ever typed. This component never sees it, never
+// renders a field for it, and never receives it back. It only receives a
+// success or a cancel redirect afterwards.
+//
+// While billing is off (BILLING_ENABLED unset, or this page reached with no
+// tier chosen — a stale link, a bookmark, back-button after billing was
+// turned off) the honest screen from before is still what renders: billing
+// isn't live, no card needed, continue through.
 //
 // DO NOT reintroduce a card field here, not even disabled, not even behind a
 // feature flag, and not "just for the demo video". The price shown on
-// /enterprise/plan is likewise display copy only — when it becomes a real
-// charge, the amount must come from the server (a price ID resolved
-// server-side), never from a number typed into this bundle, or the client
-// gets to name its own price.
+// /enterprise/plan is read from Stripe at request time (see lib/stripe.ts) —
+// never a number typed into either bundle — and the checkout endpoint
+// re-resolves the price server-side from a fixed set of known price ids, so
+// the client names which tier, never what it costs.
+
+type Phase = 'not-live' | 'redirecting' | 'confirming' | 'confirmed' | 'error';
 
 export function CheckoutGate() {
   const [, navigate] = useLocation();
   const [continuing, setContinuing] = useState(false);
+  const [phase, setPhase] = useState<Phase>('not-live');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const sessionId = new URLSearchParams(window.location.search).get('session_id');
+  const tierKey = getSelectedTier();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    // Returning from Stripe. This takes priority over starting a new checkout
+    // even if a stale tier is still in storage — the browser already has an
+    // answer from Stripe, so the job here is to confirm it, not repeat it.
+    if (sessionId) {
+      setPhase('confirming');
+      let attempts = 0;
+      const poll = () => {
+        fetch('/api/billing/status')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            if (cancelled) return;
+            if (data?.plan && data.plan !== 'free') {
+              setPhase('confirmed');
+            } else if (attempts < 5) {
+              // The webhook that turns a completed session into a subscription
+              // row can land a beat after Stripe redirects the browser back —
+              // short poll rather than a hard fail on the founder's first look.
+              attempts++;
+              setTimeout(poll, 1500);
+            } else {
+              setPhase('confirmed');
+            }
+          })
+          .catch(() => !cancelled && setPhase('confirmed'));
+      };
+      poll();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // A tier was chosen on /enterprise/plan — start a real Stripe Checkout
+    // session and leave the app entirely. Nothing renders here for long: this
+    // either redirects within a second or drops to the error state below.
+    if (tierKey) {
+      setPhase('redirecting');
+      fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tierKey }),
+      })
+        .then(async (r) => {
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok || !data.url) throw new Error(data.error || 'Could not start checkout');
+          window.location.href = data.url;
+        })
+        .catch((err: Error) => {
+          if (cancelled) return;
+          setPhase('error');
+          setErrorMessage(err.message);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Neither — billing is off, or this was reached with nothing selected
+    // (a bookmark, back-button after a free choice). 'not-live' is the
+    // default and needs no effect.
+    return undefined;
+  }, [sessionId, tierKey]);
 
   const handleContinue = () => {
     setContinuing(true);
+    setSelectedTier(null);
     completeGate();
-    navigate('/vera');
+    // Consent is always the last gate, paid or free — see Plan.tsx's
+    // handleContinueFree, which this mirrors on purpose.
+    navigate('/enterprise/privacy');
   };
 
+  if (phase === 'redirecting') {
+    return (
+      <GateStatus title="Opening secure payment…" body="Taking you to Stripe's own payment page. Nothing is charged until you complete it there." />
+    );
+  }
+
+  if (phase === 'confirming') {
+    return <GateStatus title="Confirming your payment…" body="This takes a few seconds." />;
+  }
+
+  if (phase === 'error') {
+    return (
+      <GateStatus title="Couldn't start checkout" body={errorMessage || 'Something went wrong — try again.'}>
+        <button
+          type="button"
+          onClick={() => navigate('/enterprise/plan')}
+          className="w-full bg-[var(--mint)] text-black font-bold py-3.5 rounded-lg transition-colors text-sm uppercase tracking-wider"
+        >
+          Back to plans
+        </button>
+      </GateStatus>
+    );
+  }
+
+  if (phase === 'confirmed') {
+    return (
+      <GateStatus title="You're all set" body="Your payment went through — one more step before Vera opens.">
+        <button
+          type="button"
+          onClick={handleContinue}
+          disabled={continuing}
+          className="w-full bg-[var(--mint)] text-black font-bold py-3.5 rounded-lg transition-colors text-sm uppercase tracking-wider disabled:opacity-70"
+        >
+          {continuing ? 'Continuing…' : 'Continue →'}
+        </button>
+      </GateStatus>
+    );
+  }
+
+  // phase === 'not-live'
   return (
     <div className="min-h-[100dvh] bg-[var(--bg)] flex flex-col items-center justify-center p-8">
       <div className="w-full max-w-md">
@@ -112,8 +235,18 @@ export function CheckoutGate() {
             one.
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
 
-
+function GateStatus({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
+  return (
+    <div className="min-h-[100dvh] bg-[var(--bg)] flex flex-col items-center justify-center p-8">
+      <div className="w-full max-w-md text-center">
+        <h1 className="text-2xl font-syne font-semibold text-white mb-3">{title}</h1>
+        <p className="text-sm text-[var(--muted)] mb-8">{body}</p>
+        {children}
       </div>
     </div>
   );

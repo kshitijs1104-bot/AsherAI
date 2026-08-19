@@ -21,10 +21,12 @@ import {
   userStatusTable,
   auditEventsTable,
   nudgeStateTable,
+  subscriptionsTable,
 } from "@workspace/db";
 import { sidecarKey } from "./attachmentIngest";
 import { deleteObject, type StorageDriver } from "./storage";
 import { logger } from "./logger";
+import { stripe } from "./stripe";
 
 /* ---------------------------------------------------------------------------
    Deletion, for real.
@@ -79,6 +81,7 @@ export interface DeletionReport {
   usage?: number;
   status?: number;
   nudges?: number;
+  subscriptions?: number;
   auditEventsAnonymised?: number;
 }
 
@@ -339,6 +342,30 @@ export async function deleteAllUserData(userId: string): Promise<DeletionReport>
   // row would protect.
   report.status = await del("user_status", () =>
     db.delete(userStatusTable).where(eq(userStatusTable.userId, userId)).returning({ id: userStatusTable.id }),
+  );
+
+  // Subscription mapping. Stripe remains the system of record for the actual
+  // billing/invoice history — this row is only "which Stripe customer is this
+  // account", so deleting it (rather than anonymising, unlike audit_events)
+  // does not erase any financial record, only our pointer to one. The
+  // subscription itself is cancelled at Stripe first, best-effort: a deleted
+  // Vera account must not go on being charged for a product it can no longer
+  // reach. Never allowed to abort the rest of deletion — same reasoning as
+  // removeAttachmentFiles never throwing.
+  const [subscriptionRow] = await db
+    .select({ stripeSubscriptionId: subscriptionsTable.stripeSubscriptionId })
+    .from(subscriptionsTable)
+    .where(eq(subscriptionsTable.userId, userId))
+    .limit(1);
+  if (subscriptionRow?.stripeSubscriptionId && stripe) {
+    try {
+      await stripe.subscriptions.cancel(subscriptionRow.stripeSubscriptionId);
+    } catch (err) {
+      logger.error({ err, userId }, "Could not cancel the Stripe subscription during account deletion — cancel it manually");
+    }
+  }
+  report.subscriptions = await del("subscriptions", () =>
+    db.delete(subscriptionsTable).where(eq(subscriptionsTable.userId, userId)).returning({ id: subscriptionsTable.id }),
   );
 
   // ---- audit_events is ANONYMISED, not deleted, and that is deliberate ----
