@@ -53,7 +53,7 @@ function SidebarNavRow({ icon: Icon, label, onClick, badgeCount, skinned }: { ic
       {!!badgeCount && badgeCount > 0 && (
         <span
           className="ml-auto flex items-center justify-center rounded-full text-[9px] font-bold"
-          style={{ minWidth: '15px', height: '15px', padding: '0 4px', background: 'var(--red, #e5555c)', color: '#fff', lineHeight: 1 }}
+          style={{ minWidth: '15px', height: '15px', padding: '0 4px', background: 'var(--red-fill, #DC2626)', color: '#fff', lineHeight: 1 }}
         >
           {badgeCount > 9 ? '9+' : badgeCount}
         </span>
@@ -2583,7 +2583,7 @@ function ImpactPill({ impact }: { impact?: unknown }) {
   const level = /high|critical|severe/i.test(raw) ? 'high' : /med|moderate/i.test(raw) ? 'medium' : 'low';
   const style =
     level === 'high'
-      ? { background: 'var(--red)', color: '#fff', border: '1px solid var(--red)' }
+      ? { background: 'var(--red-fill, #DC2626)', color: '#fff', border: '1px solid var(--red-fill, #DC2626)' }
       : level === 'medium'
         ? { background: 'color-mix(in srgb, var(--amber) 14%, transparent)', color: 'var(--amber)', border: '1px solid color-mix(in srgb, var(--amber) 45%, transparent)' }
         : { background: 'transparent', color: 'var(--dim)', border: '1px solid var(--border2)' };

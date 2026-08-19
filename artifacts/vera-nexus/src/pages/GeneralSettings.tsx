@@ -179,7 +179,7 @@ function DeleteAccountSection() {
           disabled={typed !== CONFIRM_WORD || deleteAccount.isPending}
           onClick={handleConfirm}
           className="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: 'var(--red, #e5555c)', color: '#fff' }}
+          style={{ background: 'var(--red-fill, #DC2626)', color: '#fff' }}
         >
           {deleteAccount.isPending ? 'Deleting…' : 'Permanently delete my account'}
         </button>

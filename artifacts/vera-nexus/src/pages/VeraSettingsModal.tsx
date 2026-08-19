@@ -78,7 +78,11 @@ export function VeraSettingsModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: '420px',
+          // Was 420px. At that width four tabs (flex:1 each, icon + label)
+          // gave "Connectors" and "Appearance" ~95px, which is less than
+          // the text alone needs at 12.5px/600. The label spilled past
+          // its pill's rounded edge rather than wrapping or clipping.
+          maxWidth: '468px',
           maxHeight: 'min(600px, 85vh)',
           display: 'flex',
           flexDirection: 'column',
@@ -153,12 +157,17 @@ export function VeraSettingsModal({
                 onClick={() => setTab(id)}
                 style={{
                   flex: 1,
+                  // Lets the text-overflow rule below actually clip instead
+                  // of the flex item refusing to shrink past its content's
+                  // intrinsic width, which is what was pushing the label
+                  // outside the pill in the first place.
+                  minWidth: 0,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
-                  padding: '8px 10px',
-                  fontSize: '12.5px',
+                  gap: '4px',
+                  padding: '8px 6px',
+                  fontSize: '12px',
                   fontWeight: 600,
                   borderRadius: '7px',
                   border: 'none',
@@ -169,8 +178,13 @@ export function VeraSettingsModal({
                   transition: 'color 140ms ease, background 140ms ease',
                 }}
               >
-                <Icon className="w-3.5 h-3.5" />
-                {label}
+                <Icon className="w-3 h-3 shrink-0" />
+                {/* Fits at every width down to a real phone now that the
+                    modal is wider and the tab is tighter; this is the
+                    fallback if a longer translation ever doesn't. */}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {label}
+                </span>
               </button>
             );
           })}

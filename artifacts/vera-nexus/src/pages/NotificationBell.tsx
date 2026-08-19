@@ -68,7 +68,7 @@ export function NotificationBell({ className = '', onOpenCommandCenter }: { clas
               minWidth: '13px',
               height: '13px',
               padding: '0 3px',
-              background: 'var(--red, #e5555c)',
+              background: 'var(--red-fill, #DC2626)',
               color: '#fff',
               lineHeight: 1,
             }}

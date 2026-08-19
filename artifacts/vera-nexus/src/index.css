@@ -1114,6 +1114,17 @@ html[data-skin] .dark {
   --v7-danger: #E5798A;
   --v7-bg-raised-3: #232323;
 
+  /* --red is tuned to read as TEXT on a dark ground, a light coral, bright
+     against near-black. That is the wrong direction for a SOLID fill
+     carrying white text (the unread-count badge, the delete-account
+     button): white-on-light-coral is a weak ~2:1, which is the exact
+     "faded dot" the badge was flagged for. --red-fill is a genuinely deep,
+     saturated red built for that one job, and white text on it clears 4.8:1.
+     One value in both modes on purpose: a fill's contrast is set against
+     the fixed white text on top of it, not against the page ground behind
+     it, so there is nothing for a light/dark pair to solve here. */
+  --red-fill: #DC2626;
+
   --vera-grain-opacity: 0.026;
   --vera-grain-blend: overlay;
 
@@ -1187,6 +1198,11 @@ html[data-skin] .v7-light {
   --v7-amber: #A73C00;
   --v7-danger: #A32B3C;
   --v7-bg-raised-3: #D6D6D6;
+
+  /* Same deep red as the dark block, same reasoning: a fill's contrast is
+     against the white text sitting on it, not against the page ground, so
+     one value serves both themes. See the dark block for the full note. */
+  --red-fill: #DC2626;
 
   --vera-grain-opacity: 0.038;
   --vera-grain-blend: multiply;
@@ -1567,6 +1583,23 @@ html[data-skin] .v7-light {
   --shadow-lg: 0 12px 28px -12px rgba(20, 26, 40, 0.20), 0 2px 4px rgba(20, 26, 40, 0.08);
   --shadow-xl: 0 22px 46px -20px rgba(20, 26, 40, 0.24), 0 4px 8px -2px rgba(20, 26, 40, 0.10);
   --shadow-2xl: 0 32px 64px -26px rgba(20, 26, 40, 0.28);
+}
+
+/* Light-mode legibility. The same 400-weight body copy that reads cleanly
+   against near-black in dark mode goes thin on a bright white ground,
+   with less surrounding contrast to carry the stroke. This is an inherited
+   property, not a token, so it only touches text that was relying on the
+   browser default: the causal-chain answer paragraph, card body prose,
+   mono labels, sidebar chat titles. Anything that already sets its own
+   weight is unaffected, so headings stay 600/700, nav items stay 500 and
+   .vera-t-data stays 500. The existing hierarchy holds, it just reads
+   heavier at every step of it. */
+html[data-skin] .v7-light {
+  font-weight: 500;
+}
+html[data-skin] .v7-light .vera-t-body,
+html[data-skin] .v7-light .vera-t-support {
+  font-weight: 500;
 }
 
 /* ---------- Ground ------------------------------------------------------
