@@ -44,6 +44,19 @@ import { resetGate } from './enterpriseGate';
 
 const LAST_USER_ID_KEY = 've_last_user_id';
 
+// This guard didn't exist before it shipped, which means "no ve_last_user_id
+// recorded yet" is ambiguous: it's the ordinary case for a genuinely fresh
+// browser, but it's ALSO exactly the state of a browser that had already been
+// used by more than one account before this fix went out — content is
+// already mixed together in localStorage right now, and the normal "nothing
+// to compare against, do nothing" path below would leave it there forever,
+// because by the time any two DIFFERENT accounts load the app post-fix, the
+// first one to load already "claims" whatever was sitting in storage as its
+// own. MIGRATION_KEY forces exactly one unconditional purge, the first time
+// this code ever runs in a given browser, before the normal switch-detection
+// logic takes over. Runs once ever per browser, not once per switch.
+const MIGRATION_KEY = 've_account_isolation_migrated';
+
 // Keys that hold real content or business context rather than device
 // cosmetics. ve_gate_* is handled separately via resetGate() so this list and
 // enterpriseGate.ts's own key names never have to be kept in sync by hand.
@@ -101,10 +114,24 @@ export function guardAccountIdentity(userId: string | null | undefined): boolean
   if (!userId) return false;
 
   let lastUserId: string | null;
+  let migrated: string | null;
   try {
     lastUserId = localStorage.getItem(LAST_USER_ID_KEY);
+    migrated = localStorage.getItem(MIGRATION_KEY);
   } catch {
     return false;
+  }
+
+  // See MIGRATION_KEY above — this must run before the ordinary comparison
+  // below, and unconditionally, precisely because a browser already
+  // contaminated pre-fix looks identical to a brand new one from here.
+  if (!migrated) {
+    clearContentKeys();
+    try {
+      localStorage.setItem(MIGRATION_KEY, '1');
+      localStorage.setItem(LAST_USER_ID_KEY, userId);
+    } catch {}
+    return true;
   }
 
   if (lastUserId === userId) return false;
