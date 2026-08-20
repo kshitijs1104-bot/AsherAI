@@ -12,6 +12,7 @@ import { DossierPage } from "@/pages/Dossier";
 import { GoalsOverview } from "@/pages/GoalsOverview";
 import { DecisionsOverview } from "@/pages/DecisionsOverview";
 import { SettingsPage } from "@/pages/Settings";
+import { AccessRequestsPage } from "@/pages/AccessRequests";
 import { SkinPicker } from "@/pages/SkinPicker";
 import { LandingPage } from "@/pages/landing/Landing";
 // ---- The design prototype is a DEVELOPMENT-ONLY surface ----
@@ -491,6 +492,12 @@ function Router() {
             {/* Settings is Vera's own — the business context attached to every
                 request, and the read-only company memory. */}
             <Route path="/settings" component={SettingsPage} />
+
+            {/* Operator-only in practice (the page itself checks whoami and
+                explains what's missing if you're not one) — same "reachable
+                by URL, not in the nav" precedent as /settings above. See
+                pages/AccessRequests.tsx. */}
+            <Route path="/enterprise/access" component={AccessRequestsPage} />
 
             {/* Reached only by a signed-in user with a bad path. A signed-out
                 one never gets here — RequireAuth sent them to Clerk. */}

@@ -790,3 +790,64 @@ export function useAccessState() {
     retry: false,
   });
 }
+
+// ---- Operator: who's waiting, and letting specific emails in ----
+//
+// The backend (routes/access.ts, routes/operator.ts) has always had this —
+// approve or decline a specific email, pre-approve someone before they've
+// even signed up, same idea as pasting an address into a Drive share dialog.
+// There was just no page that called it; an operator had to run a fetch() in
+// devtools. This is that page's data layer. Every call here 404s for a
+// non-operator (see requireOperator in middlewares/auth.ts) rather than 403 —
+// AccessRequestsPage reads that as "you're not an operator" rather than
+// treating it as a real error.
+
+export interface OperatorWhoami {
+  operator: true;
+  userId: string;
+}
+
+/** Hit this first: confirms OPERATOR_USER_IDS actually contains the
+ *  signed-in account. 404 (surfaced here as isError) means it doesn't. */
+export function useOperatorWhoami() {
+  return useQuery({
+    queryKey: ['/api/operator/whoami'],
+    queryFn: () => apiFetch<OperatorWhoami>('/api/operator/whoami'),
+    retry: false,
+  });
+}
+
+export interface AccessRequestRow {
+  id: number;
+  email: string;
+  name: string | null;
+  company: string | null;
+  status: 'pending' | 'approved' | 'declined';
+  requestedAt: string | null;
+  decidedAt: string | null;
+  claimedAt: string | null;
+}
+
+export function useAccessRequests() {
+  return useQuery({
+    queryKey: ['/api/operator/access-requests'],
+    queryFn: () => apiFetch<{ mode: SignupMode; requests: AccessRequestRow[] }>('/api/operator/access-requests'),
+    retry: false,
+  });
+}
+
+export type SignupMode = 'open' | 'waitlist';
+
+export function useDecideAccessRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { email: string; decision: 'approve' | 'decline' }) =>
+      apiFetch<{ ok: boolean; email: string; status: string }>('/api/operator/access-requests/decide', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/operator/access-requests'] });
+    },
+  });
+}
