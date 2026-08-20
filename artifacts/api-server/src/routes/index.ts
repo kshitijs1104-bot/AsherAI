@@ -19,7 +19,6 @@ import operatorRouter from "./operator";
 import profileRouter from "./profile";
 import nudgesRouter from "./nudges";
 import accessRouter from "./access";
-import billingRouter from "./billing";
 
 // ---- Every route registered here is reachable from the live product ----
 //
@@ -82,10 +81,5 @@ router.use(nudgesRouter);
 // VERA_SIGNUP_MODE=waitlist, in which case new accounts are captured and told
 // where they stand rather than silently blocked. See routes/access.ts.
 router.use(accessRouter);
-// GET /billing/plans, /billing/status, POST /billing/checkout. The webhook
-// half of billing.ts is NOT here — it is mounted directly in app.ts ahead of
-// the JSON parser and CSRF check, since Stripe calls it server-to-server. See
-// the comment there for why.
-router.use(billingRouter);
 
 export default router;

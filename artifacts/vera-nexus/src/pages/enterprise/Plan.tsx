@@ -1,26 +1,7 @@
 import { useLocation } from 'wouter';
-import { setGateStage, setSelectedTier } from '../../lib/enterpriseGate';
+import { setGateStage } from '../../lib/enterpriseGate';
 import { GateProgress } from './Signup';
-import { useEffect, useState } from 'react';
-
-interface PlanTier {
-  key: string;
-  name: string;
-  priceId: string;
-  amount: number;
-  currency: string;
-  interval: string;
-}
-
-function formatAmount(tier: PlanTier): string {
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: tier.currency.toUpperCase(), maximumFractionDigits: 0 }).format(
-      tier.amount / 100,
-    );
-  } catch {
-    return `${tier.amount / 100} ${tier.currency.toUpperCase()}`;
-  }
-}
+import { useState } from 'react';
 
 /* ---------------------------------------------------------------------------
    WHAT THIS SCREEN USED TO CLAIM, AND WHY IT IS GONE.
@@ -47,18 +28,14 @@ function formatAmount(tier: PlanTier): string {
    does not depend on anyone being fooled, and it is worse here because it sits
    in the purchase flow.
 
-   WHAT IT SAYS NOW: everyone is on the free plan by default, and the one
-   limit that is real (and enforced per-user in Postgres — see the
-   api-server's middlewares/usageLimit.ts) is stated as a number.
+   WHAT IT SAYS NOW: everyone is on one free plan, and the one limit that is
+   real (and now genuinely enforced per-user in Postgres — see the api-server's
+   middlewares/usageLimit.ts) is stated as a number.
 
-   PAID TIERS, WHEN THEY EXIST, FOLLOW THE RULE ABOVE RATHER THAN BREAKING IT.
-   The `tiers` state below is empty unless GET /api/billing/plans says
-   BILLING_ENABLED is on AND returns tiers — each one's price came from
-   stripe.prices.retrieve() on the server (lib/stripe.ts), never a constant
-   here. No feature-comparison row exists for them: a paid tier differs from
-   free only in what routes/billing.ts and usageLimit.ts actually enforce,
-   which today is nothing beyond the checkout itself, so none is claimed.
-   Read the header comment in Checkout.tsx for what happens after "Choose".
+   WHEN BILLING IS REAL: write the tiers again from what the server actually
+   enforces, read the price from a server-resolved Stripe price id rather than a
+   constant in this bundle, and do not restore a comparison row until the
+   feature it names exists. Read the header comment in Checkout.tsx too.
 --------------------------------------------------------------------------- */
 
 // The real usage ceiling, kept in sync with DAILY_CALL_BUDGET / COOLDOWN_MS in
@@ -79,47 +56,20 @@ const INCLUDED: string[] = [
 export function PlanGate() {
   const [, navigate] = useLocation();
 
-  // Empty until (if ever) the server says billing is live — see lib/stripe.ts.
-  // Nothing here is guessed or hardcoded: both whether paid tiers exist at all
-  // and what they cost are read from /api/billing/plans, which itself reads
-  // amounts off Stripe's own Price objects. While this stays empty (the
-  // correct state for beta users today) the screen below is pixel-identical
-  // to what shipped before paid tiers existed.
-  const [tiers, setTiers] = useState<PlanTier[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/billing/plans')
-      .then((r) => (r.ok ? r.json() : { enabled: false, tiers: [] }))
-      .then((data) => {
-        if (!cancelled && data?.enabled) setTiers(data.tiers ?? []);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+  // No tier state: there is one plan, so there is nothing to choose. When paid
+  // tiers are real this is where the choice goes, and a non-free choice routes
+  // to checkout before consent — see the header comment for what must be true
+  // first (a server-resolved price id, Stripe owning the card field).
+  //
   // Ends at the CONSENT step, not at /vera. Consent was previously a modal that
   // appeared once the founder thought they were finished, which made it read as
   // an obstacle bolted onto the end rather than part of setting up. It is the
   // fourth gate now and is numbered as one. RequireConsent still wraps every
   // route as the backstop for anyone who did not arrive through this funnel —
   // an existing account after a policy version bump, a deep link, a shared URL.
-  const handleContinueFree = () => {
-    setSelectedTier(null);
+  const handleContinue = () => {
     setGateStage('complete');
     navigate('/enterprise/privacy');
-  };
-
-  // A paid choice does NOT set gate stage 'complete' here — Checkout does that
-  // only after Stripe confirms the payment. Between this click and that
-  // confirmation the founder is not yet enterprise-unlocked, which is what
-  // stops a paid tier being chosen and Vera opening anyway if they navigate
-  // straight to /vera in another tab mid-checkout.
-  const handleChoosePaid = (tierKey: string) => {
-    setSelectedTier(tierKey);
-    navigate('/enterprise/checkout');
   };
 
   return (
@@ -131,14 +81,14 @@ export function PlanGate() {
           </div>
           <h1 className="text-3xl font-syne font-semibold text-white mb-3">Your Plan</h1>
           <p className="text-sm text-[var(--muted)]">
-            Free during beta — ₹999/mo value, on us while we're building this with founders like you.
+            One plan, free while Vera is in beta. Everything below is live today — nothing here is coming soon.
           </p>
           <p className="text-xs text-[var(--dim)] mt-3">
-            No card, no trial clock. If that ever changes, you'll be told before anything's charged.
+            No card, no trial clock, no tiers. If paid plans arrive, you'll be told before anything changes.
           </p>
         </div>
 
-        {/* What is actually included. One column, because there is one free plan. */}
+        {/* What is actually included. One column, because there is one plan. */}
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl overflow-hidden mb-8">
           <div className="bg-[var(--surface2)] border-b border-[var(--border)] p-4 flex items-baseline justify-between gap-4">
             <span className="text-xs font-mono text-[var(--dim)] uppercase tracking-wider">Included</span>
@@ -159,37 +109,14 @@ export function PlanGate() {
           ))}
         </div>
 
-        <div className="flex justify-center mb-4">
+        <div className="flex justify-center">
           <button
-            onClick={handleContinueFree}
+            onClick={handleContinue}
             className="px-12 py-3.5 font-bold text-sm uppercase tracking-wider rounded-lg transition-[transform,opacity,background-color,border-color] bg-[var(--mint)] text-black hover:bg-opacity-90"
           >
-            Continue free →
+            Continue →
           </button>
         </div>
-
-        {/* Paid tiers — rendered only once the server confirms billing is live
-            and returns real, Stripe-backed prices. Empty (today's default)
-            means this whole block simply does not render. */}
-        {tiers.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 mt-8 mb-4">
-            {tiers.map((tier) => (
-              <div key={tier.key} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 flex flex-col gap-3">
-                <span className="text-xs font-mono text-[var(--dim)] uppercase tracking-wider">{tier.name}</span>
-                <span className="text-2xl font-syne font-semibold text-white">
-                  {formatAmount(tier)}
-                  <span className="text-xs text-[var(--muted)] font-sans"> /{tier.interval}</span>
-                </span>
-                <button
-                  onClick={() => handleChoosePaid(tier.key)}
-                  className="mt-2 px-6 py-2.5 font-bold text-xs uppercase tracking-wider rounded-lg border border-[var(--mint)] text-[var(--mint)] hover:bg-[var(--mint)]/10 transition-colors"
-                >
-                  Choose {tier.name} →
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
 
         <GateProgress current={2} />
       </div>

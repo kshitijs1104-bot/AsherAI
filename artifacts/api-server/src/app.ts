@@ -11,7 +11,6 @@ import { clerkMiddleware, operatorCount } from "./middlewares/auth";
 import { sameOriginOnly } from "./middlewares/csrf";
 import { dailyUsageLimit } from "./middlewares/usageLimit";
 import { recordAuditEvent } from "./lib/auditLog";
-import { stripeWebhookHandler } from "./routes/billing";
 
 // ---- Every credential this process cannot run without, checked at boot ----
 //
@@ -53,8 +52,6 @@ const REQUIRED_ENV: { name: string; why: string }[] = [
 const OPTIONAL_ENV: { name: string; whatBreaks: string }[] = [
   { name: "GROQ_API_KEY", whatBreaks: "all AI answers fall back to the canned no-model response" },
   { name: "FRONTEND_URL", whatBreaks: "OAuth connector callbacks redirect to a relative path and land nowhere" },
-  { name: "STRIPE_SECRET_KEY", whatBreaks: "billing stays off — the product runs free-only, which is the correct default until BILLING_ENABLED is a deliberate decision" },
-  { name: "STRIPE_WEBHOOK_SECRET", whatBreaks: "Stripe webhook events are rejected, so a completed checkout never updates the subscription row" },
 ];
 
 const missingRequired = REQUIRED_ENV.filter((v) => !process.env[v.name]?.trim());
@@ -178,22 +175,6 @@ app.use(
     },
   }),
 );
-
-// ---- Stripe webhook: registered before CORS, CSRF and the JSON body parser ----
-//
-// THREE THINGS THAT WOULD EACH BREAK THIS IF IT WERE MOUNTED WITH EVERYTHING
-// ELSE. Stripe calls this server-to-server, so it sends no Origin header
-// sameOriginOnly would accept and no Authorization Bearer token either — it
-// would be rejected as a forged cross-site write by the same guard that
-// protects every other POST. It also sends a body whose exact bytes must
-// survive to stripe.webhooks.constructEvent() for the signature check;
-// express.json() parses and re-serialising it would not reproduce what Stripe
-// actually signed. So this route gets its own raw-body parser and is
-// registered ahead of both — the signature check inside stripeWebhookHandler
-// is what authenticates the caller instead, and it is a stronger guarantee
-// than an Origin check: it proves the body is unmodified Stripe output, not
-// just that the request came from an allowed page.
-app.post("/api/billing/webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
 
 // CORS must be registered before any routes so preflight (OPTIONS) requests are
 // handled for every endpoint, including the AI POST routes.
