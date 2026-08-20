@@ -544,7 +544,15 @@ function classifyContextConfirmationReply(message: string): "new" | "same" | "un
   if (/\bnew\b|\bdifferent\b|\bseparate business\b|\banother (business|company|one)\b|\bstarting (over|fresh)\b|\bforget (the |any )?(old|earlier|previous)\b/.test(normalized)) {
     return "new";
   }
-  if (/\bsame\b|\bcontinuing\b|\brelated\b/.test(normalized)) {
+  // Widened past the original three words for the same reason as the "new"
+  // pattern above: "earlier"/"previous" are the obvious, natural way to
+  // answer a question phrased as "the business you told me about earlier",
+  // and a plain yes/yeah/correct is the obvious way to answer any yes/no
+  // question — none of those matched before, so every one of them fell
+  // through to "unclear" and re-triggered this exact question again.
+  // Confirmed live: a founder replying "earlier" got asked this question a
+  // third time in the same thread.
+  if (/\bsame\b|\bcontinuing\b|\brelated\b|\bearlier\b|\bprevious\b|\byes\b|\byeah\b|\byep\b|\bcorrect\b/.test(normalized)) {
     return "same";
   }
   return "unclear";
