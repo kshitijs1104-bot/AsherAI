@@ -1414,8 +1414,6 @@ export function VenusPage() {
                 onSubmit={e => { e.preventDefault(); handleSend(); }}
                 className="flex items-center gap-[10px] w-full transition-[transform,opacity,background-color,border-color] mb-8"
                 style={{ background: 'var(--v7-bg-raised)', border: '1px solid var(--v7-border-strong)', borderRadius: '16px', padding: '5px 5px 5px 18px' }}
-                onFocus={e => { e.currentTarget.style.borderColor = 'var(--v7-cyan-strong)'; e.currentTarget.style.boxShadow = '0 0 0 3px var(--v7-cyan-soft)'; }}
-                onBlur={e => { e.currentTarget.style.borderColor = 'var(--v7-border-strong)'; e.currentTarget.style.boxShadow = 'none'; }}
               >
                 <AttachMenu
                   onPickFiles={() => fileInputRef.current?.click()}
@@ -1626,7 +1624,7 @@ export function VenusPage() {
             )}
             <form
               onSubmit={e => { e.preventDefault(); handleSend(); }}
-              className="flex items-end gap-2 bg-[var(--surface2)] border border-[var(--border)] rounded-xl p-2 focus-within:border-[var(--indigo)] transition-colors max-w-4xl mx-auto"
+              className="flex items-end gap-2 bg-[var(--surface2)] border border-[var(--border)] rounded-xl p-2 transition-colors max-w-4xl mx-auto"
             >
               <AttachMenu
                 onPickFiles={() => fileInputRef.current?.click()}
