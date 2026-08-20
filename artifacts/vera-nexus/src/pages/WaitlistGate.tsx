@@ -1,4 +1,5 @@
 import { useClerk } from '@clerk/clerk-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { VeraMark } from '../components/VeraMark';
 
@@ -21,6 +22,7 @@ import { VeraMark } from '../components/VeraMark';
 export function WaitlistGate({ declined }: { declined?: boolean }) {
   const { signOut } = useClerk();
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
 
   return (
     <div
@@ -78,10 +80,28 @@ export function WaitlistGate({ declined }: { declined?: boolean }) {
           </>
         )}
 
+        {/* THE BUTTON THAT WAS MISSING, and its absence was half of "I approved
+            them and it still didn't work". Access is answered once and cached;
+            somebody sitting on this screen when their approval lands holds the
+            stale answer, and had no way to ask again — only "sign out", which
+            reads as giving up rather than as the fix. Clearing the cached
+            answer re-runs the check in place: an approved person lands in the
+            product without touching anything else. */}
+        {!declined && (
+          <button
+            type="button"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/access/me'] })}
+            className="mt-7 w-full rounded-lg py-2.5 text-[12.5px] font-semibold transition-colors"
+            style={{ background: 'var(--indigo)', border: '1px solid var(--indigo)', color: '#fff' }}
+          >
+            Check again
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => signOut(() => navigate('/'))}
-          className="mt-7 w-full rounded-lg py-2.5 text-[12.5px] font-semibold transition-colors"
+          className={`w-full rounded-lg py-2.5 text-[12.5px] font-semibold transition-colors ${declined ? 'mt-7' : 'mt-2.5'}`}
           style={{
             background: 'var(--surface2)',
             border: '1px solid var(--border)',

@@ -7,7 +7,7 @@ import { db, attachmentsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { requireAuth, requireUserId } from "../middlewares/auth";
 import { ingestInBackground } from "../lib/attachmentIngest";
-import { activeDriver, ensureLocalDirs, getObject, putFromTempFile, UPLOAD_TMP_DIR, type StorageDriver } from "../lib/storage";
+import { activeDriver, ensureLocalDirs, getObject, putFromTempFile, storageUnavailableReason, UPLOAD_TMP_DIR, type StorageDriver } from "../lib/storage";
 import { recordAuditEvent } from "../lib/auditLog";
 
 const router = Router();
@@ -158,6 +158,16 @@ router.post("/attachments", requireAuth, async (req, res) => {
       storageDriver = await putFromTempFile(req.file.filename, req.file.path, mimeType);
     } catch (err) {
       req.log.error({ err, driver: activeDriver }, "Attachment upload could not be stored");
+      // A misconfigured bucket is not a transient failure and must not be
+      // reported as one — "try again in a moment" sends the founder into a
+      // retry loop against a problem only a Secrets edit can fix. 503 with the
+      // real reason, which names the missing variable. Every other storage
+      // failure keeps the 502 and the honest "try again".
+      if (storageUnavailableReason) {
+        return res.status(503).json({
+          error: "File uploads are switched off right now — the rest of Vera works. (Storage isn't configured on the server.)",
+        });
+      }
       return res.status(502).json({ error: "That file couldn't be stored just now — try again in a moment." });
     }
 

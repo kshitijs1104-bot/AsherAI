@@ -774,7 +774,16 @@ export function useDismissNudge() {
 export interface AccessState {
   mode: 'open' | 'waitlist';
   allowed: boolean;
-  status: 'open' | 'approved' | 'pending' | 'declined' | 'no-email' | 'check-failed';
+  status: 'open' | 'operator' | 'existing' | 'approved' | 'pending' | 'declined' | 'no-email' | 'check-failed';
+  /** True when this account is in OPERATOR_USER_IDS. Lets a screen say "you
+   *  are the operator" without a second round trip to /operator/whoami. */
+  operator?: boolean;
+  /** The address the SERVER matched on — which is the one an approval has to
+   *  be granted to. Surfaced because the single most confusing way for a
+   *  whitelist to "not work" is approving a different address from the one
+   *  Clerk holds for that person (a work alias vs. the Google account they
+   *  actually signed in with). Showing it turns that into something visible. */
+  email?: string | null;
 }
 
 // Checked once per session at the app gate. In open mode (the default) the
@@ -784,7 +793,15 @@ export function useAccessState() {
   return useQuery({
     queryKey: ['/api/access/me'],
     queryFn: () => apiFetch<AccessState>('/api/access/me'),
-    staleTime: 10 * 60 * 1000,
+    // WAS 10 MINUTES, AND THAT WAS THE WHOLE BUG BEHIND "I APPROVED THEM AND
+    // IT STILL DOESN'T WORK". Someone sitting on the waiting-room screen holds
+    // the cached "pending" answer for the full stale window; approving them
+    // changes nothing they can see, and the screen offered no way to re-ask.
+    // So the operator approves, the person says it still doesn't work, and
+    // both conclude the whitelist is broken when it worked immediately.
+    // Thirty seconds costs one trivial request and makes an approval feel like
+    // what it is.
+    staleTime: 30 * 1000,
     // Never retry into a lockout: if this fails the server already fails open
     // (see routes/access.ts), and hammering it would just delay the app.
     retry: false,
@@ -848,6 +865,57 @@ export function useDecideAccessRequest() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/operator/access-requests'] });
+    },
+  });
+}
+
+// ---- Operator: revoking access from an account that already has it ----
+//
+// Declining a waitlist row and suspending an account are two different
+// controls and the difference matters when you actually need one. Declining
+// closes the FRONT DOOR: it only decides what happens the next time an
+// unapproved person signs in, and it does nothing to somebody who is already
+// inside — in waitlist mode an already-onboarded founder is grandfathered past
+// it entirely (see routes/access.ts). Suspension is the one that STOPS them:
+// requireAuth checks it on every authenticated request, so it bites within
+// seconds on every route at once.
+//
+// So "revoke this person's access" means suspend, and it needs their Clerk
+// user id, which is what the search below is for. The server requires a
+// written reason of at least ten characters — that requirement is deliberate
+// and is not worked around here.
+
+export interface OperatorUserRow {
+  userId: string;
+  email: string | null;
+  createdAt: number | null;
+  lastSignInAt: number | null;
+  clerkBanned: boolean;
+  veraStatus: 'active' | 'suspended' | string;
+  veraStatusReason: string | null;
+}
+
+/** Search Clerk for an account. `q` empty lists the most recent signups,
+ *  which is the common case right after someone reports a problem. */
+export function useOperatorUsers(q: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['/api/operator/users', q],
+    queryFn: () => apiFetch<{ users: OperatorUserRow[] }>(`/api/operator/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useSetAccountSuspended() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { userId: string; suspend: boolean; reason: string }) =>
+      apiFetch<{ userId: string; status: string }>(
+        `/api/operator/users/${encodeURIComponent(input.userId)}/${input.suspend ? 'suspend' : 'unsuspend'}`,
+        { method: 'POST', body: JSON.stringify({ reason: input.reason }) },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/operator/users'] });
     },
   });
 }

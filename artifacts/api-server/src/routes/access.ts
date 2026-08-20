@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { z } from "zod/v4";
 import { clerkClient, getAuth } from "@clerk/express";
-import { db, accessRequestsTable } from "@workspace/db";
+import { db, accessRequestsTable, settingsTable } from "@workspace/db";
 import { desc, eq, sql } from "drizzle-orm";
-import { requireAuth, requireOperator, requireUserId } from "../middlewares/auth";
+import { isOperator, requireAuth, requireOperator, requireUserId } from "../middlewares/auth";
 import { recordAuditEvent } from "../lib/auditLog";
 import { logger } from "../lib/logger";
 
@@ -46,17 +46,48 @@ function normaliseEmail(email: string): string {
 /**
  * Whether this signed-in person may use the product.
  *
- * Open mode: everyone. Waitlist mode: only an approved row — plus anyone who
- * signed up BEFORE the switch was flipped, which is the important subtlety.
- * Existing users are recognised by having completed onboarding already; without
- * that carve-out, turning on waitlist mode would lock out every founder
- * currently using Vera, which is the opposite of what the switch is for.
+ * Open mode: everyone. Waitlist mode: an operator, or an approved row, or
+ * anyone who signed up BEFORE the switch was flipped.
+ *
+ * ---- TWO CARVE-OUTS, BOTH OF WHICH WERE DESCRIBED HERE BEFORE THEY EXISTED ----
+ *
+ * OPERATORS ARE ALWAYS ALLOWED. Without this the product had a bootstrap
+ * deadlock, and it is worth naming exactly because it is the kind that looks
+ * like a broken deployment rather than a design gap. Flipping
+ * VERA_SIGNUP_MODE=waitlist gates every signed-in account that has no approved
+ * row — including the founder's own. The screen that grants the first approval
+ * (/enterprise/access) lives behind that same gate, so the one person able to
+ * let anybody in was shown the waiting room instead, and the only way out was
+ * a hand-written SQL INSERT or a fetch() in devtools. That is precisely the
+ * situation the Access Requests page was built to remove, so the page must not
+ * be reachable only by people who do not need it.
+ *
+ * Operator status is read from OPERATOR_USER_IDS — an environment allowlist
+ * that nothing inside the application can write to (see middlewares/auth.ts) —
+ * so this carve-out cannot be granted by a database row, which is what makes
+ * it safe to be unconditional.
+ *
+ * ALREADY-ONBOARDED ACCOUNTS ARE ALLOWED. The comment on this handler has
+ * always claimed that existing founders keep working when the switch is
+ * flipped. It was never implemented: the code checked only for an approved
+ * row, so turning on waitlist mode locked out every founder already using
+ * Vera — the exact opposite of what the switch is for, and indistinguishable
+ * from the product breaking. `settings.onboardingCompleted` is the signal,
+ * because it is the one flag that is only ever set by having actually gone
+ * through the funnel.
  */
 router.get("/access/me", requireAuth, async (req, res) => {
   const mode = signupMode();
+  const operator = isOperator(getAuth(req)?.userId);
 
   if (mode === "open") {
-    return res.json({ mode, allowed: true, status: "open" });
+    return res.json({ mode, allowed: true, status: "open", operator });
+  }
+
+  // Before any lookup that can fail: an operator locked out by a database
+  // problem cannot fix the database problem through this product either.
+  if (operator) {
+    return res.json({ mode, allowed: true, status: "operator", operator });
   }
 
   try {
@@ -71,7 +102,7 @@ router.get("/access/me", requireAuth, async (req, res) => {
       // configuration must not be locked out of a product they may already be
       // paying attention to, over a gate that exists to slow growth.
       logger.warn({ userId }, "Access check found no email on the Clerk account — allowing");
-      return res.json({ mode, allowed: true, status: "no-email" });
+      return res.json({ mode, allowed: true, status: "no-email", operator, email: null });
     }
 
     const [row] = await db
@@ -79,6 +110,29 @@ router.get("/access/me", requireAuth, async (req, res) => {
       .from(accessRequestsTable)
       .where(eq(accessRequestsTable.email, email))
       .limit(1);
+
+    // The grandfather clause. Checked BEFORE `declined` so that flipping the
+    // switch can never retroactively evict somebody who was already working in
+    // Vera — an existing founder is a decision already made, and a waitlist is
+    // for people who have not been decided on yet. Declining an existing
+    // account is still possible, it is just done by suspending it
+    // (/operator/users/:id/suspend), which is the control that actually stops
+    // them using the API rather than one that only hides the front door.
+    if (row?.status !== "approved") {
+      // `sessionId` is the Clerk user id despite the name — the column predates
+      // real identity and every other caller (routes/profile.ts) keys off it
+      // the same way. Matched here rather than renamed, because a rename is a
+      // migration and this is a bug fix.
+      const [existing] = await db
+        .select({ onboarded: settingsTable.onboardingCompleted })
+        .from(settingsTable)
+        .where(eq(settingsTable.sessionId, userId))
+        .limit(1);
+
+      if (existing?.onboarded) {
+        return res.json({ mode, allowed: true, status: "existing", operator, email });
+      }
+    }
 
     if (row?.status === "approved") {
       // Record the first actual sign-in against the approval, so the operator
@@ -90,11 +144,11 @@ router.get("/access/me", requireAuth, async (req, res) => {
           .where(eq(accessRequestsTable.id, row.id))
           .catch(() => {});
       }
-      return res.json({ mode, allowed: true, status: "approved" });
+      return res.json({ mode, allowed: true, status: "approved", operator, email });
     }
 
     if (row?.status === "declined") {
-      return res.json({ mode, allowed: false, status: "declined" });
+      return res.json({ mode, allowed: false, status: "declined", operator, email });
     }
 
     // No row yet — capture the request rather than just refusing. This is the
@@ -118,12 +172,12 @@ router.get("/access/me", requireAuth, async (req, res) => {
       });
     }
 
-    return res.json({ mode, allowed: false, status: "pending" });
+    return res.json({ mode, allowed: false, status: "pending", operator, email });
   } catch (err) {
     req.log.error(err);
     // Fails OPEN, same reasoning as above — a broken gate must not be an
     // outage for people who already have access.
-    return res.json({ mode, allowed: true, status: "check-failed" });
+    return res.json({ mode, allowed: true, status: "check-failed", operator });
   }
 });
 
