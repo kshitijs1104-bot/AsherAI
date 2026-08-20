@@ -98,10 +98,30 @@ const isProduction = process.env.NODE_ENV === "production";
 // development it falls back to the usual local Vite ports.
 const DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5000", "http://127.0.0.1:5000"];
 
-const allowedOrigins = (process.env.ALLOWED_ORIGIN ?? "")
+function originOfUrl(value: string | undefined): string | null {
+  if (!value?.trim()) return null;
+  try {
+    return new URL(value.trim()).origin;
+  } catch {
+    return null;
+  }
+}
+
+const explicitAllowedOrigins = (process.env.ALLOWED_ORIGIN ?? "")
   .split(",")
   .map((o) => o.trim().replace(/\/$/, ""))
   .filter(Boolean);
+
+// FRONTEND_URL already has to point at the real frontend origin, or OAuth
+// connector callbacks (routes/connectors.ts) and the daily-digest email link
+// (lib/dailyDigest.ts) land nowhere. Folding its origin into the CORS/CSRF
+// allowlist means there is one place to update when the frontend moves to a
+// new domain, instead of two secrets that must be changed together — and
+// silently drift apart when only one is, which is exactly what turns every
+// write on the site into "origin not allowed" while reads keep working.
+const frontendOrigin = originOfUrl(process.env.FRONTEND_URL);
+
+const allowedOrigins = Array.from(new Set([...explicitAllowedOrigins, ...(frontendOrigin ? [frontendOrigin] : [])]));
 
 if (isProduction && allowedOrigins.length === 0) {
   throw new Error(
