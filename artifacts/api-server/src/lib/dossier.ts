@@ -1,7 +1,7 @@
 import type Groq from "groq-sdk";
 import { db, companyDossiersTable, type CompanyDossier } from "@workspace/db";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
-import { callGroqJSON, NAMED_ENTITY_GUARD } from "./groq";
+import { callGroqJSON, estimateTokens, tpmLimitForModel, NAMED_ENTITY_GUARD, TPM_SAFETY_MARGIN } from "./groq";
 
 // ---- The Dossier: intake, gap-finding, and the company file ----
 //
@@ -118,19 +118,67 @@ export function readAnswers(dossier: CompanyDossier): Record<string, string> {
   return parseJsonColumn<Record<string, string>>(dossier.answersJson, {});
 }
 
-// Truncated hard before it ever reaches a prompt. A pasted deck can be
-// enormous, and this call shares the same TPM pool as the chat the founder
-// is using — see groq.ts's budget math for why that matters here.
-const MAX_SOURCE_CHARS = 16_000;
+/* ---------------------------------------------------------------------------
+   HOW MUCH OF THE FOUNDER'S DOCUMENT ACTUALLY GOES TO THE MODEL.
 
-export async function extractDossier(groq: Groq, sourceText: string): Promise<DossierExtraction | null> {
-  const source = sourceText.slice(0, MAX_SOURCE_CHARS);
+   WAS A FLAT 16,000 CHARS, which is ~4,000 tokens — and that number was
+   chosen against no particular budget. On the free tier the whole per-minute
+   allowance is 8,000 tokens, of which this call must also reserve its own
+   `max_tokens` (Groq charges TPM on prompt PLUS the requested completion, and
+   reserves the completion up front). So a full-size deck went out as roughly
+   4,000 + 300 + 1,600 = 5,900 tokens, in the same minute as the chat request
+   the founder had just made, plus generateGapQuestions immediately after it.
+   Three calls, one 8,000-token minute.
+
+   The result was a 429 that `callGroqJSON` retried, failed again, and
+   returned as a null — which this route then reported as
+   "Couldn't build the file from that — try again, or paste a bit more
+   detail." That sentence blames the DOCUMENT for a RATE LIMIT, which is why
+   it looked like no document ever worked: a founder who swaps in a different
+   deck and gets the identical message concludes the feature is broken, when
+   what they actually needed was to wait sixty seconds.
+
+   Sized off the real budget now, with room reserved for the completion and
+   the system prompt. Still generous — this is the first ~2,500 words of the
+   material, which for a deck or a one-pager is nearly all of it.
+--------------------------------------------------------------------------- */
+const DOSSIER_MODEL = "openai/gpt-oss-120b";
+const EXTRACT_MAX_TOKENS = 1600;
+
+// generateGapQuestions runs immediately after extractDossier, against the SAME
+// per-minute pool. Sizing the extract call to fill the whole minute on its own
+// guarantees the second call 429s — which is the failure the founder actually
+// experienced, since a dossier with no questions is not a dossier. So the
+// sibling call's cost is reserved here rather than discovered at runtime:
+// its own max_tokens plus roughly the extracted fields and its system prompt.
+const QUESTIONS_CALL_RESERVE_TOKENS = 1400 + 750;
+
+function sourceCharBudget(): number {
+  const budget = Math.floor(tpmLimitForModel(DOSSIER_MODEL) * TPM_SAFETY_MARGIN);
+  const overhead = estimateTokens(EXTRACT_SYSTEM_PROMPT) + 400; // + field list & framing
+  const availableTokens = budget - overhead - EXTRACT_MAX_TOKENS - QUESTIONS_CALL_RESERVE_TOKENS;
+  // Never below a floor worth sending, and never above the old ceiling. On the
+  // paid tier the ceiling is what binds, so this reverts to the old behaviour
+  // with no code change — the reserve only bites when the budget is genuinely
+  // this tight.
+  return Math.max(3_000, Math.min(16_000, availableTokens * 4));
+}
+
+/** `errorType` distinguishes "this document is unusable" from "we were rate
+ *  limited" — the two need completely different sentences shown to the
+ *  founder, and collapsing them into `null` is what made every document look
+ *  like a bad document. */
+export async function extractDossier(
+  groq: Groq,
+  sourceText: string,
+): Promise<{ extraction: DossierExtraction | null; errorType?: "parse" | "transient" }> {
+  const source = sourceText.slice(0, sourceCharBudget());
   const fieldList = DOSSIER_FIELDS.map((f) => `- ${f.key}: ${f.label}`).join("\n");
 
-  const { parsed } = await callGroqJSON(
+  const { parsed, errorType } = await callGroqJSON(
     groq,
     {
-      model: "openai/gpt-oss-120b",
+      model: DOSSIER_MODEL,
       messages: [
         { role: "system", content: EXTRACT_SYSTEM_PROMPT },
         {
@@ -143,12 +191,12 @@ export async function extractDossier(groq: Groq, sourceText: string): Promise<Do
         },
       ],
       temperature: 0.1,
-      max_tokens: 1600,
+      max_tokens: EXTRACT_MAX_TOKENS,
     },
     "dossier/extract",
   );
 
-  if (!parsed) return null;
+  if (!parsed) return { extraction: null, errorType };
 
   // Normalised against DOSSIER_FIELDS rather than trusting the model's array:
   // a missing key would silently drop a field from the file, and an invented
@@ -161,13 +209,15 @@ export async function extractDossier(groq: Groq, sourceText: string): Promise<Do
   }
 
   return {
-    companyName: typeof parsed.companyName === "string" && parsed.companyName.trim() ? parsed.companyName.trim() : null,
-    oneLine: typeof parsed.oneLine === "string" && parsed.oneLine.trim() ? parsed.oneLine.trim() : null,
-    fields: DOSSIER_FIELDS.map((f) => {
-      const raw = byKey.get(f.key);
-      const value = typeof raw === "string" && raw.trim() && raw.trim().toLowerCase() !== "null" ? raw.trim() : null;
-      return { key: f.key, label: f.label, value };
-    }),
+    extraction: {
+      companyName: typeof parsed.companyName === "string" && parsed.companyName.trim() ? parsed.companyName.trim() : null,
+      oneLine: typeof parsed.oneLine === "string" && parsed.oneLine.trim() ? parsed.oneLine.trim() : null,
+      fields: DOSSIER_FIELDS.map((f) => {
+        const raw = byKey.get(f.key);
+        const value = typeof raw === "string" && raw.trim() && raw.trim().toLowerCase() !== "null" ? raw.trim() : null;
+        return { key: f.key, label: f.label, value };
+      }),
+    },
   };
 }
 
@@ -276,7 +326,46 @@ export async function getDossier(userId: string, profileId: number | null): Prom
       )
       .orderBy(desc(companyDossiersTable.updatedAt))
       .limit(1);
-    return row ?? null;
+    if (row) return row;
+
+    /* ----------------------------------------------------------------------
+       THE ORPHANED COMPANY FILE — why Vera kept asking a founder who they are.
+
+       A dossier is keyed to the profile that was active when it was built.
+       The active profile can CHANGE underneath it: routes/ai.ts treats a
+       message that reads like a business description as a possible new
+       business, and when findMatchingProfile does not recognise it, it
+       creates a fresh profile and switches to it. Nothing moves the dossier.
+
+       From that moment the exact-match lookup above returns nothing. The
+       company file is still in the database, still shown on the Dossier page
+       — and completely absent from every prompt. Vera asks what the business
+       does, the founder answers, that answer reads as a business description
+       too, and the loop is stable. This is the single most damaging failure
+       the product has, because unified memory is the whole promise.
+
+       So: falling back to this founder's most recent dossier rather than
+       treating a profile mismatch as "no company file exists". The exact
+       match above still wins whenever it exists, which is what keeps a
+       genuine multi-business account correct — a second business gets its own
+       dossier and that dossier is what matches. The fallback only fires when
+       the active profile has NO file of its own, where the choice is between
+       the founder's real (if slightly mis-filed) company file and nothing at
+       all. Nothing is the worse answer every time.
+    ---------------------------------------------------------------------- */
+    const [fallback] = await db
+      .select()
+      .from(companyDossiersTable)
+      .where(eq(companyDossiersTable.userId, userId))
+      .orderBy(desc(companyDossiersTable.updatedAt))
+      .limit(1);
+
+    if (fallback) {
+      console.error(
+        `[dossier] no file for profile ${profileId ?? "null"} — falling back to the most recent one (id=${fallback.id}, profile=${fallback.profileId ?? "null"}). A profile switch has orphaned it.`,
+      );
+    }
+    return fallback ?? null;
   } catch (err) {
     // Same degrade-gracefully posture as every other memory read in this
     // codebase: a missing migration or a DB hiccup must never break the chat

@@ -2100,6 +2100,137 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
     // of the dynamic tail and cuts from the end on a 413 retry. Attachments
     // sit near the front because losing that block means the model silently
     // reverts to assuming it can read a file it has never opened.
+    /* ------------------------------------------------------------------
+       PRE-FLIGHT BUDGET ENFORCEMENT — fit the request BEFORE sending it.
+
+       WHY THIS EXISTS, AND WHY THE TPM WALL CAME BACK AFTER BEING FIXED.
+       The per-request prompt assembly (buildVenusPrompt, added 2026-08-14)
+       fixed the STATIC half of this problem and still works. But measured
+       against the real free-tier budget of 6,800 tokens:
+
+         strategy, static ....................... 5,849 t
+         strategy + the memory rule blocks
+         (ownHistory + openSession + crossChat) . 6,421 t
+         ...and MIN_USABLE_MAX_TOKENS on top ..... 7,621 t  ← over, alone
+
+       Strategy mode was always sitting at ~86% of the entire budget before
+       any context existed. Worse, Groq charges TPM on prompt tokens PLUS the
+       requested completion, so the 1,200-token answer reservation counts too:
+       5,849 + 1,200 = 7,049 is ALREADY over 6,800 with zero context, zero
+       dossier, zero precedents and an empty message. Full strategy mode does
+       not fit the free tier at all, and no arrangement of the founder's data
+       makes it fit — see groq.budget.test.mjs, which pins that fact.
+
+       What held before was that the classifier routed most messages to the
+       lighter modes, and the memory blocks were EMPTY.
+
+       Cross-chat memory shipped 2026-08-17. It does not add tokens on the
+       day it ships — it adds them once the founder HAS other chats to
+       recall. Same for ownHistory, openSession, goals and the dossier: every
+       one of them is empty for a new account and grows as the product gets
+       used. So the budget regressed WITHOUT ANY CODE CHANGE, which is
+       exactly why this felt like it "went back on its own". A realistic
+       strategy request for a founder with real history now measures ~10,240
+       tokens against 6,800 — over by ~3,440.
+
+       WHAT WAS MISSING. The budget was already MEASURED here (fileBudgetFor
+       above) but only ACTED ON when the request carried an attachment.
+       Without one, an over-budget request was simply sent: Groq 413s,
+       shrinkMessages cuts blocks blindly from the end, and the founder pays
+       a wasted round trip to get a thinner answer — or "Vera couldn't answer
+       that right now".
+
+       WHAT THIS DOES. Sheds optional blocks in a defined order until the
+       request fits, before it is sent. Same lever shrinkMessages pulls, one
+       round trip earlier and with the priorities stated rather than implied
+       by array position.
+
+       WHAT IS NEVER SHED, and this is the important half: the dossier and
+       the business context. They are the answer to "who is this founder",
+       and dropping them is what makes Vera ask a founder what their business
+       does for the fourth time. Precedents and third-party examples go
+       first; the founder's own identity goes last. If everything optional is
+       gone and it still does not fit, the REASONING STACK yields — the same
+       trade the attachment path already makes above, for the same reason: an
+       answer grounded in this founder's real business beats a richer
+       scaffold applied to a business Vera has forgotten.
+    ------------------------------------------------------------------ */
+    type Sheddable = { name: string; text: string };
+    // Ordered LEAST valuable first — this is the order they are given up in.
+    const optionalBlocks: Sheddable[] = [
+      { name: "goals", text: goalBlock },
+      { name: "openSession", text: openSessionBlock },
+      { name: "ownHistory", text: ownHistoryBlock },
+      { name: "precedents", text: isNone ? "" : precedentBlock },
+      { name: "memory", text: memoryBlock },
+      { name: "crossChat", text: crossChatBlock },
+      { name: "webSearch", text: webSearchBlock },
+    ];
+    const shed = new Set<string>();
+    const keptText = (name: string, text: string) => (shed.has(name) ? "" : text);
+
+    // Everything that is NOT sheddable, plus the answer we have to leave room
+    // for. Groq charges TPM on prompt tokens PLUS the requested max_tokens.
+    const fixedTokens = () =>
+      estimateTokens(venusPromptForTier) +
+      estimateTokens(attachmentBlock) +
+      estimateTokens(followUpInstruction) +
+      estimateTokens(decisionRoutingInstruction) +
+      estimateTokens(isNone ? noPrecedentInstruction : "") +
+      estimateTokens(groundingInstructions) +
+      estimateTokens(dossierBlock) +
+      estimateTokens(effectiveBusinessContext ?? "") +
+      estimateTokens(shadowModeInstructions) +
+      estimateTokens(body.data.message) +
+      historyTokenEstimate +
+      MIN_USABLE_MAX_TOKENS;
+
+    const currentTotal = () =>
+      fixedTokens() + optionalBlocks.reduce((sum, b) => sum + estimateTokens(keptText(b.name, b.text)), 0);
+
+    const startingTotal = currentTotal();
+    for (const block of optionalBlocks) {
+      if (currentTotal() <= tpmBudgetTokens) break;
+      if (!block.text) continue;
+      shed.add(block.name);
+    }
+
+    // Last resort: the reasoning stack itself. Only when shedding every
+    // optional block was still not enough — which on the free tier means the
+    // static strategy prompt (5,849 t) plus this founder's own context
+    // genuinely cannot coexist. open_ended keeps Vera answering as Vera
+    // (~2,036 t) rather than dropping to the near-bare document mode.
+    let downgradedFrom: string | null = null;
+    if (currentTotal() > tpmBudgetTokens && responseMode === "strategy") {
+      const leaner = buildPromptFor("open_ended");
+      const leanerForTier = (isModerate ? `${leaner}${MODERATE_TIER_PRECEDENT_NOTE}` : leaner) + correctionInstruction;
+      if (estimateTokens(leanerForTier) < estimateTokens(venusPromptForTier)) {
+        downgradedFrom = responseMode;
+        responseMode = "open_ended";
+        venusPromptBase = leaner;
+        venusPromptForTier = leanerForTier;
+        // Shedding is re-run: the freed ~3,800 tokens may buy back blocks
+        // that were given up a moment ago, and grounding is worth more than
+        // a scaffold. Cheapest-first this time, so the most valuable
+        // survivors are reinstated.
+        shed.clear();
+        for (const block of optionalBlocks) {
+          if (currentTotal() <= tpmBudgetTokens) break;
+          if (!block.text) continue;
+          shed.add(block.name);
+        }
+      }
+    }
+
+    if (shed.size > 0 || downgradedFrom) {
+      console.error(
+        `[promptBudget] session=${sessionId} start=${startingTotal}t final=${currentTotal()}t budget=${tpmBudgetTokens}t` +
+          `${downgradedFrom ? ` downgraded=${downgradedFrom}->${responseMode}` : ""}` +
+          `${shed.size ? ` shed=${[...shed].join(",")}` : ""}` +
+          ` (free-tier TPM; set GROQ_PAID_TIER=true once billing is live to stop shedding)`,
+      );
+    }
+
     const systemPrompt =
       [
         venusPromptForTier,
@@ -2108,7 +2239,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         decisionRoutingInstruction,
         isNone ? noPrecedentInstruction : "",
         groundingInstructions,
-        webSearchBlock,
+        keptText("webSearch", webSearchBlock),
         dossierBlock,
         // Kept alongside the dossier rather than replaced by it: the blob
         // still carries anything said in chat since the file was last
@@ -2122,15 +2253,15 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
         // case studies — on a recall question, losing this block turns the
         // answer into the exact "I have no record of that" denial this exists
         // to end, while losing a precedent costs one supporting example.
-        crossChatBlock,
-        isNone ? "" : precedentBlock,
-        ownHistoryBlock,
-        openSessionBlock,
-        goalBlock,
+        keptText("crossChat", crossChatBlock),
+        keptText("precedents", isNone ? "" : precedentBlock),
+        keptText("ownHistory", ownHistoryBlock),
+        keptText("openSession", openSessionBlock),
+        keptText("goals", goalBlock),
       ]
         .filter(Boolean)
         .join("\n\n") +
-      memoryBlock +
+      keptText("memory", memoryBlock) +
       shadowModeInstructions; // appended LAST — see shrinkMessages: least protected, first cut on a shrink retry
 
     const messages: { role: "system" | "user" | "assistant"; content: string }[] = [
