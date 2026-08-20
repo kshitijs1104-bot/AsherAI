@@ -3,7 +3,7 @@
 
    `SignupGate` rendered a name + work-email form, wrote both to localStorage,
    and moved the visitor to onboarding. It had not been reachable for some time:
-   `/enterprise/signup` routes to `SignupEntry` in App.tsx, which hands the
+   `/enterprise/signup` routes to `SignUpEntry` in App.tsx, which hands the
    visitor to Clerk's real sign-up. So this was a second, fake front door with
    no account behind it — it collected an email nobody read and produced a
    "signed up" state that no server had heard of.

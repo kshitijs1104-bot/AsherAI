@@ -45,8 +45,9 @@ import { PrivacyGate } from "@/pages/legal/PrivacyGate";
 import { PrivacyPolicyPage } from "@/pages/legal/PrivacyPolicyPage";
 import { CookieBanner } from "@/pages/legal/CookieBanner";
 import { usePrivacyAccepted, refreshFromServer } from "@/lib/privacyConsent";
-import { useAccessState } from "@/lib/venusApi";
+import { useAccessState, useProfile } from "@/lib/venusApi";
 import { repairServerProfile } from "@/lib/enterpriseGate";
+import { guardAccountIdentity } from "@/lib/accountIsolation";
 import { WaitlistGate } from "@/pages/WaitlistGate";
 
 const queryClient = new QueryClient();
@@ -132,7 +133,27 @@ function currentPath(): string {
 // Both are set because a visitor with no account will switch to the sign-up
 // tab on Clerk's screen, and should be returned to the same place afterwards.
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, userId } = useAuth();
+
+  // Synchronous, directly in the render body, and BEFORE the two early
+  // returns below — see lib/accountIsolation.ts for the bug this closes (one
+  // account's chats leaking into a different account that signs in on the
+  // same browser). It must complete before `children` gets its own first
+  // render, which is exactly where a page like Venus.tsx reads localStorage
+  // synchronously (getSessions()); a useEffect placed after the returns would
+  // fire one render too late for that. Safe to call on every render of this
+  // component (including the `!isLoaded`/`!isSignedIn` ones, where userId is
+  // null and it no-ops): it is pure Web Storage I/O, and after the one render
+  // where an account switch is detected it immediately records the new id, so
+  // every render after that is a cheap no-op comparison.
+  const switchedAccount = guardAccountIdentity(userId);
+
+  // The one part of the guard that touches React state (every active query
+  // observer) — kept in an effect, not the render body above, so it can't run
+  // while some other component is mid-render.
+  useEffect(() => {
+    if (switchedAccount) queryClient.clear();
+  }, [switchedAccount]);
 
   if (!isLoaded) return <AuthPending />;
 
@@ -263,31 +284,76 @@ function CookieBannerHost() {
   return <CookieBanner />;
 }
 
-// /enterprise/signup used to render a form that took a name and an email,
+// ---- Where "Sign in" and "Start Analysis" actually lead ----
+//
+// Both landing-page CTAs used to link straight to `/vera` or straight to
+// `/enterprise/onboarding`, and the destination was decided by WHICH BUTTON
+// was clicked rather than by what the account had actually done. That broke
+// in both directions: "Start Analysis" sent an already-onboarded returning
+// founder through the company/plan funnel again on every click, while "Sign
+// in" sent anyone — including a brand new identity Clerk had just created —
+// straight into the product with no company on file.
+//
+// The fix is one rule instead of two buttons' worth of assumptions: after
+// Clerk resolves (sign in OR sign up — see EntryResume below), check whether
+// THIS account has completed onboarding server-side
+// (`settings.onboardingCompleted`, the same flag routes/profile.ts sets) and
+// route on that alone. A first-time visitor who happens to use "Sign in" — or
+// whose OAuth provider silently created an account, which is normal Clerk
+// behaviour for "continue with Google" on a new identity, not a bug to work
+// around — still lands in onboarding, because the account has never
+// completed it. A returning founder lands straight in `/vera` regardless of
+// which button they clicked, because the account already has.
+function EntryResume() {
+  const { data, isLoading } = useProfile();
+
+  if (isLoading) return <AuthPending />;
+
+  if (data && !data.onboardingCompleted) return <Redirect to="/enterprise/onboarding" />;
+
+  return <Redirect to="/vera" />;
+}
+
+// `/enterprise/signup` used to render a form that took a name and an email,
 // wrote them to localStorage, and moved the visitor to the next "gate". It
 // created no account. Anyone could walk the whole four-step funnel without
 // ever authenticating, arrive at a screen that said they were set up, and only
 // then be stopped by Clerk on /vera — having been told they had signed up.
 //
 // Signing up now means signing up: a signed-out visitor goes to Clerk's real
-// sign-up screen, and comes back to the onboarding step with an actual
-// account behind them. Someone who already has an account has no "create your
-// account" step to do, so they skip straight to onboarding.
-function SignupEntry() {
+// sign-up screen (biased toward the sign-up tab, though Clerk still lets them
+// switch), and comes back through EntryResume, which is what actually decides
+// onboarding vs. straight-to-product.
+function SignUpEntry() {
   const { isLoaded, isSignedIn } = useAuth();
 
   if (!isLoaded) return <AuthPending />;
 
   if (!isSignedIn) {
     return (
-      <RedirectToSignUp
-        signUpFallbackRedirectUrl="/enterprise/onboarding"
-        signInFallbackRedirectUrl="/enterprise/onboarding"
-      />
+      <RedirectToSignUp signUpFallbackRedirectUrl="/enterprise/entry" signInFallbackRedirectUrl="/enterprise/entry" />
     );
   }
 
-  return <Redirect to="/enterprise/onboarding" />;
+  return <Redirect to="/enterprise/entry" />;
+}
+
+// The "Sign in" counterpart — biased toward Clerk's sign-in tab instead, for
+// a visitor who already knows they have an account. Lands on the exact same
+// EntryResume check as SignUpEntry: which Clerk screen someone used never
+// decides the destination, only whether the account has onboarded.
+function SignInEntry() {
+  const { isLoaded, isSignedIn } = useAuth();
+
+  if (!isLoaded) return <AuthPending />;
+
+  if (!isSignedIn) {
+    return (
+      <RedirectToSignIn signInFallbackRedirectUrl="/enterprise/entry" signUpFallbackRedirectUrl="/enterprise/entry" />
+    );
+  }
+
+  return <Redirect to="/enterprise/entry" />;
 }
 
 // ---- Gate 4: consent, as a funnel step rather than an ambush ----
@@ -366,10 +432,12 @@ function Router() {
         </Route>
       )}
 
-      {/* Public because it is the way IN, but it no longer renders a form of
-          its own — it hands the visitor to Clerk's real sign-up. See
-          SignupEntry. */}
-      <Route path="/enterprise/signup" component={SignupEntry} />
+      {/* Public because it is the way IN, but neither renders a form of its
+          own — they hand the visitor to Clerk's real sign-up/sign-in. See
+          SignUpEntry / SignInEntry, and EntryResume for what actually decides
+          the post-auth destination. */}
+      <Route path="/enterprise/signup" component={SignUpEntry} />
+      <Route path="/enterprise/signin" component={SignInEntry} />
 
       {/* The privacy policy, same text every account is shown and has to accept
           before it can use anything (see RequireConsent). Public on purpose: a
@@ -381,6 +449,11 @@ function Router() {
       <Route>
         <RequireAuth>
           <Switch>
+            {/* Where SignUpEntry/SignInEntry send an authenticated visitor —
+                decides onboarding vs. straight-to-product from the server
+                profile alone. See EntryResume above. */}
+            <Route path="/enterprise/entry" component={EntryResume} />
+
             {/* The rest of the enterprise funnel. These are post-account steps,
                 so they now sit behind auth: previously a signed-out visitor
                 could walk onboarding -> plan -> checkout and be told they were

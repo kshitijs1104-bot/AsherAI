@@ -75,7 +75,7 @@ function Nav() {
           </nav>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Link href="/vera" className="lp-btn lp-btn--ghost lp-btn--sm lp-nav-signin">
+            <Link href="/enterprise/signin" className="lp-btn lp-btn--ghost lp-btn--sm lp-nav-signin">
               Sign in
             </Link>
             <Link href="/enterprise/signup" className="lp-btn lp-btn--primary lp-btn--sm">
@@ -118,7 +118,7 @@ function Hero() {
 
             <Reveal delay={0.72} y={12}>
               <div className="lp-hero-ctas" style={{ marginTop: 34 }}>
-                <Link href="/vera" className="lp-btn lp-btn--primary">
+                <Link href="/enterprise/signup" className="lp-btn lp-btn--primary">
                   Start Analysis
                   <ArrowRight size={15} strokeWidth={2} className="lp-btn-arrow" />
                 </Link>
