@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "python-3.11"]
+modules = ["nodejs-24", "python-3.11", "postgresql-16"]
 
 [deployment]
 router = "application"
@@ -32,3 +32,4 @@ VITE_CLERK_PUBLISHABLE_KEY = "pk_test_cmFyZS1wbGF0eXB1cy03MS5jbGVyay5hY2NvdW50cy
 
 [nix]
 packages = ["psmisc"]
+channel = "stable-25_05"

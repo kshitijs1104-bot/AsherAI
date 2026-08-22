@@ -1,0 +1,37 @@
+Two separate, unrelated tasks in this session. Treat them independently — do not mix the two, and do not touch anything outside what's described below.
+
+=====================================================
+TASK 1 — Add a scope guardrail to the system prompt
+=====================================================
+
+WHERE: Add to the existing system prompt in artifacts/api-server/src/lib/groq.ts (the same VENUS_PROMPT_SECTIONS / VENUS_SYSTEM_PROMPT structure already used for the "Asher" identity text). Do not create a new file or new AI call — add as an additional instruction block within the existing system prompt construction, alongside the existing identity text (do not modify the identity text itself).
+
+INSTRUCTION TO ADD (adapt wording to match the existing prompt's tone, keep it natural):
+
+"You are a business advisor scoped to the founder's company, strategy, and operations. If a user asks about religion, race, gender, sexism, feminism, or other social/political/identity topics unrelated to their business, do not answer the substance of the question. Instead, briefly and naturally let them know this is outside what you help with, and suggest they search the web or ask something else you can help with. Vary your phrasing naturally each time rather than repeating the same fixed sentence — keep the same meaning (out of scope, suggest web search or another business-related question) but don't sound scripted. Do not moralize, lecture, or explain why the topic is off-limits — just redirect briefly and move on. This does not apply to business-relevant policy questions (e.g. tax law, regulation, tariffs) — only to identity/social/political topics with no business relevance."
+
+RULES FOR TASK 1:
+- System prompt text addition ONLY. No other logic, routes, database, or unrelated code.
+- Show me the exact text and where (file + line) before adding it.
+
+=====================================================
+TASK 2 — Fix stale "Vera" text in already-stored notifications
+=====================================================
+
+Old notification/nudge records in the database still show "Vera" text (e.g. "Vera drafted or found these"), created before the code was fixed. The code that generates NEW nudges already correctly says "Asher" — this is a data-only fix for old rows, no code changes needed here.
+
+1. Find where nudge/notification records are stored (likely referenced by queue.ts or nudges.ts) — tell me the table and the column(s) holding title/body text.
+2. Show me a read-only SELECT query that finds rows where that text contains the literal word "Vera". Run it and show me the results (how many rows, what they contain). Do NOT run any UPDATE/DELETE yet.
+3. Once I review and confirm, write an UPDATE query that replaces "Vera" with "Asher" ONLY within the title/body text columns of those matched rows — no other column, no IDs, no timestamps, no unrelated data.
+4. Show me the exact UPDATE query and wait for my explicit go-ahead before running it.
+5. No schema changes. No other tables touched.
+
+=====================================================
+RULES FOR BOTH TASKS
+=====================================================
+- Do not touch any file, table, or setting not explicitly named above.
+- Do not refactor, rename, or "clean up" anything else you come across.
+- Do not run migrations.
+- Do not modify config, env vars, or package files.
+- Show me your findings/plan for BOTH tasks and wait for my confirmation before making ANY change (code edit for Task 1, or UPDATE query for Task 2).
+- Do not commit or push anything.
