@@ -1,0 +1,57 @@
+[1mdiff --git a/artifacts/api-server/src/middlewares/auth.ts b/artifacts/api-server/src/middlewares/auth.ts[m
+[1mdeleted file mode 100644[m
+[1mindex eaa1024..0000000[m
+[1m--- a/artifacts/api-server/src/middlewares/auth.ts[m
+[1m+++ /dev/null[m
+[36m@@ -1,51 +0,0 @@[m
+[31m-import type { NextFunction, Request, Response } from "express";[m
+[31m-import { clerkMiddleware, getAuth } from "@clerk/express";[m
+[31m-import { logger } from "../lib/logger";[m
+[31m-[m
+[31m-// This file replaces the old `(req.headers["x-session-id"] as string) || req.ip[m
+[31m-// || "default"` pattern that every /ai/* route used for identity. That pattern[m
+[31m-// was never real identity — req.ip changes across NAT/mobile-network/VPN[m
+[31m-// hops, and two people behind the same IP (same office wifi, same campus)[m
+[31m-// silently shared a "session": each other's decision history, roadmap cards,[m
+[31m-// and (once built) Goal state. x-session-id was sent by exactly one frontend[m
+[31m-// file (ArticleDrawer.tsx) and never by Venus.tsx itself, so in practice the[m
+[31m-// header was almost always absent and every Venus user fell through to IP.[m
+[31m-//[m
+[31m-// clerkMiddleware() reads the session token from the Authorization header[m
+[31m-// (or __session cookie) on every request and, if present and valid, attaches[m
+[31m-// auth info to the request via getAuth(req). It does NOT reject unauthenticated[m
+[31m-// requests by itself — that's what requireAuth below is for. Mounting[m
+[31m-// clerkMiddleware globally (see app.ts) is what makes getAuth(req) available[m
+[31m-// everywhere, including public routes that want to optionally recognize a[m
+[31m-// signed-in user without requiring it.[m
+[31m-export { clerkMiddleware };[m
+[31m-[m
+[31m-// Route guard for anything that needs a real, verified user — this is what[m
+[31m-// /ai/* and future /goals endpoints should use instead of the old inline[m
+[31m-// sessionId fallback line. Responds 401 if there's no valid Clerk session[m
+[31m-// rather than silently degrading to an IP-derived identity.[m
+[31m-export function requireAuth(req: Request, res: Response, next: NextFunction) {[m
+[31m-  const auth = getAuth(req);[m
+[31m-  if (!auth?.userId) {[m
+[31m-    logger.warn({ path: req.path }, "Rejected request with no verified Clerk session");[m
+[31m-    res.status(401).json({ error: "Authentication required" });[m
+[31m-    return;[m
+[31m-  }[m
+[31m-  next();[m
+[31m-}[m
+[31m-[m
+[31m-// Convenience accessor so route handlers can do `const userId = requireUserId(req)`[m
+[31m-// instead of re-deriving it. Only safe to call after requireAuth has run[m
+[31m-// (i.e. inside a route mounted behind it) — throws otherwise so a missing[m
+[31m-// requireAuth() on some future route fails loudly in dev instead of quietly[m
+[31m-// resolving to undefined and re-opening the IP-fallback-style bug this file[m
+[31m-// exists to close.[m
+[31m-export function requireUserId(req: Request): string {[m
+[31m-  const auth = getAuth(req);[m
+[31m-  if (!auth?.userId) {[m
+[31m-    throw new Error([m
+[31m-      "requireUserId() called on a request with no verified session — this route is missing the requireAuth middleware.",[m
+[31m-    );[m
+[31m-  }[m
+[31m-  return auth.userId;[m
+[31m-}[m

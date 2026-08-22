@@ -21,3 +21,14 @@ timeoutMs = 20000
 
 [[ports]]
 localPort = 8080
+
+[[ports]]
+localPort = 8081
+
+[userenv]
+
+[userenv.shared]
+VITE_CLERK_PUBLISHABLE_KEY = "pk_test_cmFyZS1wbGF0eXB1cy03MS5jbGVyay5hY2NvdW50cy5kZXYk"
+
+[nix]
+packages = ["psmisc"]
