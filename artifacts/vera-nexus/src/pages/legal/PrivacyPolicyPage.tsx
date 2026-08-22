@@ -50,7 +50,7 @@ export function PrivacyPolicyPage() {
             style={{ color: 'var(--lp-text-2)', display: 'inline-flex', gap: 8 }}
           >
             <VeraMark size={18} />
-            Vera
+            Asher
           </Link>
 
           <h1 className="lp-h2" style={{ marginTop: 34 }}>
@@ -95,7 +95,7 @@ export function PrivacyPolicyPage() {
           <div style={{ marginTop: 46 }}>
             <Link href="/" className="lp-btn lp-btn--ghost lp-btn--sm">
               <ArrowLeft size={14} strokeWidth={2} />
-              Back to Vera
+              Back to Asher
             </Link>
           </div>
         </div>

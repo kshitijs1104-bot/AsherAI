@@ -85,7 +85,7 @@ function Intake({ onDone }: { onDone: () => void }) {
       </div>
       <p className="text-[13px] mb-4 leading-relaxed" style={{ color: 'var(--v7-text-mute)' }}>
         Paste anything that describes the business — your deck, a one-pager, your
-        about page, a P&amp;L export, or just write it out. Vera reads it, builds a
+        about page, a P&amp;L export, or just write it out. Asher reads it, builds a
         structured file, then asks you only about what it couldn't find.
       </p>
 
@@ -154,7 +154,7 @@ function Intake({ onDone }: { onDone: () => void }) {
           dead end is a SCANNED PDF, which has no text layer and isn't sent as
           an image either, and that's the one case worth naming. */}
       <p className="text-[11.5px] mt-3" style={{ color: 'var(--v7-text-mute)' }}>
-        PDF, Word, Excel, CSV, text — or a screenshot or photo, which Vera reads
+        PDF, Word, Excel, CSV, text — or a screenshot or photo, which Asher reads
         too. A scanned PDF has no text in it; send a photo of the pages instead.
       </p>
       {text.trim().length > 0 && text.trim().length < 40 && (
@@ -188,7 +188,7 @@ function GapQuestionsComplete() {
       >
         <Check className="w-5 h-5" style={{ color: 'var(--v7-cyan)' }} />
       </motion.div>
-      <p className="text-[13.5px] font-semibold">That's everything Vera asked</p>
+      <p className="text-[13.5px] font-semibold">That's everything Asher asked</p>
       <p className="text-[12px] mt-1" style={{ color: 'var(--v7-text-mute)' }}>
         Folding your answers into the file…
       </p>
@@ -277,7 +277,7 @@ function GapQuestions({ dossier }: { dossier: Dossier }) {
             ) : (
               <>
                 <div className="flex items-baseline justify-between mb-1.5 gap-3">
-                  <h2 className="text-[15px] font-bold">What Vera still needs to ask you</h2>
+                  <h2 className="text-[15px] font-bold">What Asher still needs to ask you</h2>
                   <span className="text-[11.5px] shrink-0" style={{ color: 'var(--v7-text-mute)' }}>
                     {answeredCount}/{dossier.questions.length} answered
                   </span>
@@ -378,7 +378,7 @@ function GapQuestions({ dossier }: { dossier: Dossier }) {
  * exact same answers store as a guided question (saveDossierAnswers keys
  * answers by question id OR, when there's no matching question, the field
  * key itself — see mergeAnswersIntoFields in lib/dossier.ts on the server),
- * so it moves into "known" and into what Vera reasons from the moment it's
+ * so it moves into "known" and into what Asher reasons from the moment it's
  * saved, same as anything answered above.
  * ---------------------------------------------------------------------- */
 
@@ -582,12 +582,12 @@ function CompanyFile({ dossier, onRebuild }: { dossier: Dossier; onRebuild: () =
           </div>
           {/* Answers the question this number always raises once every asked
               question is answered but the bar isn't at 100: it's not stuck,
-              it's counting against Vera's full 16-field profile, and only
+              it's counting against Asher's full 16-field profile, and only
               5-8 of those become questions in any one round (see
               generateGapQuestions) — the rest just weren't asked yet. */}
           {unknown.length > 0 && (
             <p className="text-[11px] mt-1.5 leading-relaxed" style={{ color: 'var(--v7-text-mute)' }}>
-              {known.length} of {dossier.fields.length} things Vera tracks about every company are filled
+              {known.length} of {dossier.fields.length} things Asher tracks about every company are filled
               in. Answering everything asked above can still leave this under 100% — the rest weren't
               covered by your material or by this round's questions.
             </p>
@@ -618,7 +618,7 @@ function CompanyFile({ dossier, onRebuild }: { dossier: Dossier; onRebuild: () =
                 most valuable gaps do), so without this they'd stay blank
                 forever no matter how thoroughly the founder answers. */}
             <p className="text-[12px] mb-2.5 leading-relaxed" style={{ color: 'var(--v7-text-mute)' }}>
-              Fill in any of these and Vera stores it the same as everything else here.
+              Fill in any of these and Asher stores it the same as everything else here.
             </p>
             <UnknownFields dossierId={dossier.id} fields={unknown} />
           </div>
@@ -724,7 +724,7 @@ function WrapView({ wrap, companyName }: { wrap: MonthlyWrap; companyName: strin
         <h2 className="text-[16px] font-bold mb-2">{wrap.monthLabel} was quiet</h2>
         <p className="text-[13px] leading-relaxed max-w-md mx-auto" style={{ color: 'var(--v7-text-mute)' }}>
           There isn't enough in {wrap.monthLabel} to tell you anything real about it yet.
-          Ask Vera a few things this month and this fills itself in — no invented highlights.
+          Ask Asher a few things this month and this fills itself in — no invented highlights.
         </p>
       </Panel>
     );
@@ -961,7 +961,7 @@ export function DossierPage() {
             style={{ color: 'var(--v7-text-mute)' }}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Back to Vera
+            Back to Asher
           </button>
           <VenusThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>
@@ -975,7 +975,7 @@ export function DossierPage() {
           <h1 className="text-[19px] font-semibold">Dossier</h1>
         </div>
         <p className="text-[13px] mb-6" style={{ color: 'var(--v7-text-mute)' }}>
-          What Vera knows about your company, and what your company actually did.
+          What Asher knows about your company, and what your company actually did.
         </p>
 
         <div className="flex gap-1 mb-5 p-1 rounded-xl" style={{ background: 'var(--v7-bg-raised, rgba(255,255,255,0.03))', width: 'fit-content' }}>

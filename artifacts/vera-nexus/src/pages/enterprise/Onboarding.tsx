@@ -104,8 +104,8 @@ export function OnboardingGate() {
       console.error('[onboarding] could not save profile to the server', err);
       setServerWarning(
         err instanceof Error
-          ? `Vera couldn't save this to its server — ${err.message}`
-          : "Vera couldn't save this to its server.",
+          ? `Asher couldn't save this to its server — ${err.message}`
+          : "Asher couldn't save this to its server.",
       );
       // Stops here rather than navigating on. Setting a warning and then
       // immediately leaving the page would show it to nobody, and carrying on
@@ -132,8 +132,8 @@ export function OnboardingGate() {
           <div className="inline-flex items-center gap-2 bg-[var(--mint)]/10 border border-[var(--mint)]/30 px-4 py-1.5 rounded-full text-xs font-mono text-[var(--mint)] uppercase tracking-widest mb-6">
             Step 2 of 4
           </div>
-          <h1 className="text-3xl font-syne font-semibold text-white mb-3">Tell Vera About You</h1>
-          <p className="text-sm text-[var(--muted)]">Vera calibrates every analysis to your company, stage, and goals.</p>
+          <h1 className="text-3xl font-syne font-semibold text-white mb-3">Tell Asher About You</h1>
+          <p className="text-sm text-[var(--muted)]">Asher calibrates every analysis to your company, stage, and goals.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8 space-y-5">
@@ -145,7 +145,7 @@ export function OnboardingGate() {
             <div className="bg-[var(--red)]/10 border border-[var(--red)]/30 rounded p-3">
               <p className="text-[var(--red)] text-xs leading-relaxed m-0">{serverWarning}</p>
               <p className="text-[var(--muted)] text-[11px] leading-relaxed mt-1.5 mb-2">
-                Your answers are saved on this device. Try again, or carry on — Vera just won't be able
+                Your answers are saved on this device. Try again, or carry on — Asher just won't be able
                 to use them until this saves.
               </p>
               <button
@@ -218,7 +218,7 @@ export function OnboardingGate() {
           </div>
 
           <div>
-            <label className="block text-xs font-mono text-[var(--dim)] uppercase tracking-wider mb-2">How did you hear about Vera? <span className="text-[var(--red)]">*</span></label>
+            <label className="block text-xs font-mono text-[var(--dim)] uppercase tracking-wider mb-2">How did you hear about Asher? <span className="text-[var(--red)]">*</span></label>
             <select
               value={form.referralSource}
               onChange={e => setForm(f => ({ ...f, referralSource: e.target.value }))}

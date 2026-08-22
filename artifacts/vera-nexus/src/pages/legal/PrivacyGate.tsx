@@ -64,10 +64,10 @@ export function PrivacyGate() {
             id="privacy-gate-title"
             className="text-xl sm:text-2xl font-syne font-semibold text-white mb-1.5"
           >
-            What Vera does with your data
+            What Asher does with your data
           </h1>
           <p className="text-[13px] text-[var(--muted)] leading-relaxed">
-            Vera works by remembering your business, so it holds a great deal about it. Read this
+            Asher works by remembering your business, so it holds a great deal about it. Read this
             before you type anything into it.{' '}
             <span className="text-[var(--dim)] font-mono text-[11px]">
               Updated {POLICY_META.lastUpdated}

@@ -63,7 +63,7 @@ const ADDRESSES_PRIOR_TURN =
   /\b(u|you|ur|your|you'?re|youre)\s+(said|say|says|answered|answer|replied|mentioned|told|gave|keep|kept|misunderstood|misread|missed|didn'?t|dint|did\s+not|are\s+wrong|'?re\s+wrong)\b|\b(that|this|it|the)\s+(answer|response|reply|reading|interpretation)\b|\bnot\s+what\s+i\s+(asked|said|meant)\b|\bans(wer)?\s+(my|the)\s+(question|q)\b|\bthat'?s?\s+not\s+what\s+i\b|\byou'?re\s+missing\b|\bmisunderstood\b|\bmisread\b/i;
 
 /**
- * True when this message reads as a response to Vera's own previous turn
+ * True when this message reads as a response to Asher's own previous turn
  * rather than a self-contained statement.
  *
  * Deliberately STRUCTURAL, never topical: it looks at how the message is

@@ -302,7 +302,7 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
           </button>
         )}
         <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', letterSpacing: '0.04em', color: isUnprompted ? 'var(--vera-unprompted)' : isFlagged ? palette.coral : palette.faint, margin: '0 0 4px' }}>
-          {isUnprompted ? 'VERA FOLLOWED UP · ' : ''}{sourceLabel(item.source)} · {item.createdAt ? formatTime(item.createdAt) : ''}
+          {isUnprompted ? 'ASHER FOLLOWED UP · ' : ''}{sourceLabel(item.source)} · {item.createdAt ? formatTime(item.createdAt) : ''}
           {/* A resolved item was previously only struck through, which made
               "I actioned this" and "I dismissed this" look identical the
               next morning. Say which one it was. */}
@@ -334,7 +334,7 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
             {plan.kind === 'local' && (
               <>
                 <PlugZap style={{ width: 11, height: 11, flexShrink: 0, marginTop: 2 }} />
-                <span>Vera can't send this — it isn't tied to a connected account. Copy it and send it yourself; Accept just files it.</span>
+                <span>Asher can't send this — it isn't tied to a connected account. Copy it and send it yourself; Accept just files it.</span>
               </>
             )}
             {plan.kind === 'unrouted' && (
@@ -342,7 +342,7 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
                 <PlugZap style={{ width: 11, height: 11, flexShrink: 0, marginTop: 2 }} />
                 <span>
                   {connectorName(plan.connector, connectors.data?.connectors ?? [])} is connected, but this row lost the
-                  thread it belongs to, so Vera can't send it. Copy the text and send it yourself.
+                  thread it belongs to, so Asher can't send it. Copy the text and send it yourself.
                 </span>
               </>
             )}
@@ -408,7 +408,7 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
                 </>
               ) : (
               <>
-                {/* When Vera can't send it, copying IS the action — so it
+                {/* When Asher can't send it, copying IS the action — so it
                     leads, and filing the row becomes the secondary. */}
                 {plan.kind === 'local' || plan.kind === 'unlinked' || plan.kind === 'broken' || plan.kind === 'unrouted' ? (
                   <>
@@ -469,9 +469,9 @@ function streakLine(streak: number, keptToday = true): { headline: string; sub: 
   // rather than saying "Day one" next to a lifetime days-active tally.
   if (streak <= 0) return { headline: 'No streak yet', sub: 'Clear something off the board and your streak starts today.' };
   if (streak === 1) return { headline: '1 day in a row', sub: 'One day is a start. Come back tomorrow and it becomes a habit.' };
-  if (streak < 5) return { headline: `${streak} days in a row`, sub: "You've shown up every day this week. Vera's been keeping up." };
+  if (streak < 5) return { headline: `${streak} days in a row`, sub: "You've shown up every day this week. Asher's been keeping up." };
   if (streak < 14) return { headline: `${streak} days in a row`, sub: 'This is a routine now, not a novelty.' };
-  return { headline: `${streak} days in a row`, sub: "Genuinely impressive. Vera works better the longer you've done this." };
+  return { headline: `${streak} days in a row`, sub: "Genuinely impressive. Asher works better the longer you've done this." };
 }
 
 // The rail's version of the same idea, cut to fit beside a 32px numeral in a
@@ -533,7 +533,7 @@ function streakCaption(streak: number, keptToday = true): { label: string; note:
   if (streak === 1) return { label: 'Day in a row', note: 'Kept today. Come back tomorrow and it sticks.', state };
   if (streak < 5) return { label: 'Days in a row', note: "Kept today. You've shown up every day this week.", state };
   if (streak < 14) return { label: 'Days in a row', note: 'Kept today. A routine now, not a novelty.', state };
-  return { label: 'Days in a row', note: 'Kept today. Vera works better the longer you do this.', state };
+  return { label: 'Days in a row', note: 'Kept today. Asher works better the longer you do this.', state };
 }
 
 /** Whether the board was actually cleared today, read off the same per-day
@@ -824,25 +824,25 @@ const QUICK_ACTIONS: { type: InstantActionType; label: string; hint: string; pla
   {
     type: 'sell_this',
     label: 'Pressure-test it',
-    hint: 'Paste a plan or assumption — Vera argues the other side and finds what breaks it.',
+    hint: 'Paste a plan or assumption — Asher argues the other side and finds what breaks it.',
     placeholder: "The plan or assumption you're about to commit to…",
   },
   {
     type: 'summarize',
     label: 'Cut to the point',
-    hint: 'Paste any long thread, doc or report — Vera returns just what matters and what to do.',
+    hint: 'Paste any long thread, doc or report — Asher returns just what matters and what to do.',
     placeholder: 'Paste the thread, doc or report…',
   },
   {
     type: 'draft_reply',
     label: 'Draft a reply',
-    hint: 'Paste a message you need to answer — Vera writes the reply for you to review.',
+    hint: 'Paste a message you need to answer — Asher writes the reply for you to review.',
     placeholder: 'Paste the message you need to answer…',
   },
   {
     type: 'follow_up',
     label: 'Restart a thread',
-    hint: 'Say who went quiet and what it was about — Vera writes the nudge that reopens it.',
+    hint: 'Say who went quiet and what it was about — Asher writes the nudge that reopens it.',
     placeholder: 'Who went quiet, and what it was about…',
   },
 ];
@@ -907,7 +907,7 @@ function QuickAddRow({ palette, onAdded }: { palette: Palette; onAdded: (itemId:
           transition: 'color 200ms ease',
         }}
       >
-        {hintText ?? 'Shortcuts — paste something in and Vera puts the result on the board.'}
+        {hintText ?? 'Shortcuts — paste something in and Asher puts the result on the board.'}
       </p>
 
       {activeMeta && (
@@ -975,7 +975,7 @@ function ConnectedTile() {
         <p className="vera-t-support" style={{ margin: '0 0 2px' }}>
           {liveCount === 0
             ? "Nothing is connected, so nothing arrives here on its own. Your chats don't feed this board — connectors and workflows do."
-            : 'These are what Vera can see and send through.'}
+            : 'These are what Asher can see and send through.'}
         </p>
 
         {all.map((c: ConnectorStatus) => {
@@ -1410,7 +1410,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
           <p style={{ fontStyle: 'italic', fontSize: '13px', color: palette.muted, margin: '0 0 4px' }}>{dateLabel}</p>
           <h1 style={{ fontSize: '28px', fontWeight: 500, margin: '0 0 6px' }}>Today's {boardName}</h1>
           <p style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '11.5px', color: palette.muted, letterSpacing: '0.01em', margin: '0 0 22px' }}>
-            EVERYTHING VERA DRAFTED, DECIDED, OR FOUND WHILE YOU WERE AWAY
+            EVERYTHING ASHER DRAFTED, DECIDED, OR FOUND WHILE YOU WERE AWAY
           </p>
 
           {/* The retention hook from the build plan (section 7) — plain

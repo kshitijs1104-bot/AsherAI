@@ -141,7 +141,7 @@ export function AttachmentPreviewModal({
           ) : (
             <div style={{ padding: '48px 24px', textAlign: 'center' }}>
               <p style={{ fontSize: '13px', marginBottom: '14px', color: 'var(--v7-text-dim)' }}>
-                Vera can't preview this file type inline.
+                Asher can't preview this file type inline.
               </p>
               <a
                 href={url}

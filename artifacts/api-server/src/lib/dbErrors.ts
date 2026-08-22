@@ -33,10 +33,10 @@
 /** Postgres SQLSTATE codes that mean something actionable here. */
 const MESSAGE_BY_CODE: Record<string, string> = {
   // undefined_table — the schema was never migrated into this database.
-  "42P01": "Vera's database is missing a table it needs — the schema migration hasn't been run on this environment.",
+  "42P01": "Asher's database is missing a table it needs — the schema migration hasn't been run on this environment.",
   // undefined_column / invalid_column_reference — schema is behind the code.
-  "42703": "Vera's database schema is out of date — the latest migration hasn't been run on this environment.",
-  "42P10": "Vera's database schema is out of date — the latest migration hasn't been run on this environment.",
+  "42703": "Asher's database schema is out of date — the latest migration hasn't been run on this environment.",
+  "42P10": "Asher's database schema is out of date — the latest migration hasn't been run on this environment.",
   // unique_violation — a real conflict, not a deployment problem.
   "23505": "That already exists.",
   // foreign_key_violation
@@ -44,13 +44,13 @@ const MESSAGE_BY_CODE: Record<string, string> = {
   // not_null_violation
   "23502": "Something required was missing from that request.",
   // insufficient_privilege — the restricted app role is missing a grant.
-  "42501": "Vera's database user isn't permitted to do that — a grant is missing on this environment.",
+  "42501": "Asher's database user isn't permitted to do that — a grant is missing on this environment.",
   // connection failures / admin shutdown / crash recovery
-  ECONNREFUSED: "Vera's database isn't reachable right now — try again in a moment.",
-  ETIMEDOUT: "Vera's database didn't respond in time — try again in a moment.",
-  "57P01": "Vera's database is restarting — try again in a moment.",
-  "57P03": "Vera's database isn't accepting connections yet — try again in a moment.",
-  "53300": "Vera's database is at its connection limit — try again in a moment.",
+  ECONNREFUSED: "Asher's database isn't reachable right now — try again in a moment.",
+  ETIMEDOUT: "Asher's database didn't respond in time — try again in a moment.",
+  "57P01": "Asher's database is restarting — try again in a moment.",
+  "57P03": "Asher's database isn't accepting connections yet — try again in a moment.",
+  "53300": "Asher's database is at its connection limit — try again in a moment.",
 };
 
 const GENERIC = "Something went wrong saving that. It's been logged — try again, and tell us if it keeps happening.";

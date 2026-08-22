@@ -70,17 +70,17 @@ export function SettingsPage() {
         <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5">
           <path d="M15 5L8 12L15 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        Back to Vera
+        Back to Asher
       </Link>
       <header>
         <h1 className="text-2xl font-syne font-bold text-white mb-2">Settings</h1>
-        <p className="text-sm font-mono text-[var(--muted)]">Configure how Vera reads your business.</p>
+        <p className="text-sm font-mono text-[var(--muted)]">Configure how Asher reads your business.</p>
       </header>
 
       {/* Business Context */}
       <section className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8">
         <h2 className="text-lg font-syne font-bold text-white mb-1">Business Context</h2>
-        <p className="text-xs text-[var(--muted)] mb-8">This context is sent to Vera with every request to calibrate analysis.</p>
+        <p className="text-xs text-[var(--muted)] mb-8">This context is sent to Asher with every request to calibrate analysis.</p>
 
         <form 
           className="space-y-6"
@@ -161,9 +161,9 @@ export function SettingsPage() {
           Venus in chat, not something you fill in by hand. */}
       {facts.length > 0 && (
         <section className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8">
-          <h2 className="text-lg font-syne font-bold text-white mb-1">What Vera Knows</h2>
+          <h2 className="text-lg font-syne font-bold text-white mb-1">What Asher Knows</h2>
           <p className="text-xs text-[var(--muted)] mb-6">
-            Captured automatically from your conversations. This is what Vera factors into every answer, beyond the context above.
+            Captured automatically from your conversations. This is what Asher factors into every answer, beyond the context above.
           </p>
           <ul className="space-y-2">
             {facts.map((fact) => (
@@ -189,7 +189,7 @@ export function SettingsPage() {
       <section className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-8">
         <h2 className="text-lg font-syne font-bold text-white mb-1">Privacy &amp; Terms</h2>
         <p className="text-xs text-[var(--muted)] mb-4">
-          What Vera stores, how it's protected, and the terms you agreed to when you signed up.
+          What Asher stores, how it's protected, and the terms you agreed to when you signed up.
         </p>
         <Link
           href="/privacy"

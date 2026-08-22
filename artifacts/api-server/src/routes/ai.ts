@@ -679,15 +679,15 @@ function summarizeCardForLogging(card: any): string | null {
 // ---- What the conversation log remembers of a card ----
 //
 // Only `summary` was ever written to the message log, so every option name,
-// score, risk, phase and action Vera produced vanished the moment the
-// response was rendered. The founder can see the card on screen; Vera
+// score, risk, phase and action Asher produced vanished the moment the
+// response was rendered. The founder can see the card on screen; Asher
 // cannot see it on the next turn. That is why "what was option B again?",
 // "you said the risk was medium", or a correction aimed at a number that
-// only ever existed inside a card land on a Vera that has no record of
+// only ever existed inside a card land on a Asher that has no record of
 // saying it — and a model with no record either agrees with whatever the
 // founder asserts or contradicts itself. It reads as amnesia because it is.
 //
-// A compact digest, not the card JSON: enough for Vera to recognise and
+// A compact digest, not the card JSON: enough for Asher to recognise and
 // stand behind what it said, cheap enough to replay every turn. Full card
 // content is already durable in venus_decisions (see autoLogDecisionCards).
 function digestCardsForLog(cards: unknown): string {
@@ -2523,7 +2523,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           console.error(`[groundedness] session=${sessionId} ungroundedCurrencies=${JSON.stringify(ungroundedCurrencies)} query="${body.data.message.slice(0, 200)}"`);
           for (const currency of ungroundedCurrencies) {
             groundednessIssues.push({
-              description: `Uses ${currency} — that currency doesn't appear anywhere in what you told Vera or what it found. Worth double-checking.`,
+              description: `Uses ${currency} — that currency doesn't appear anywhere in what you told Asher or what it found. Worth double-checking.`,
             });
           }
         }
@@ -2538,7 +2538,7 @@ router.post("/ai/analyze", requireAuth, async (req, res) => {
           console.error(`[groundedness] session=${sessionId} ungroundedEntityClaims=${JSON.stringify(ungroundedEntityClaims)} query="${body.data.message.slice(0, 200)}"`);
           for (const claim of ungroundedEntityClaims) {
             groundednessIssues.push({
-              description: `Mentions "${claim.entity}" alongside a specific figure, but neither was part of what you told Vera or what it found — worth verifying before you rely on it.`,
+              description: `Mentions "${claim.entity}" alongside a specific figure, but neither was part of what you told Asher or what it found — worth verifying before you rely on it.`,
             });
           }
         }

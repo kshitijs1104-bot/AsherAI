@@ -55,13 +55,13 @@ const MIN_NEW_MESSAGES_TO_REFRESH = 2;
 const MAX_NEW_MESSAGES_PER_REFRESH = 30;
 const MAX_CHARS_PER_MESSAGE = 600;
 
-const SUMMARY_SYSTEM_PROMPT = `You maintain Vera's running memory of ONE conversation between Vera (a business advisor) and a founder. You are given the memory so far and the newest turns. Return the updated memory.
+const SUMMARY_SYSTEM_PROMPT = `You maintain Asher's running memory of ONE conversation between Asher (a business advisor) and a founder. You are given the memory so far and the newest turns. Return the updated memory.
 
-What the summary is for: months later, in a completely different chat, the founder asks "what did we decide about X" or "remind me who you said to contact". Your summary is the only thing Vera will have. Write it so that question is answerable.
+What the summary is for: months later, in a completely different chat, the founder asks "what did we decide about X" or "remind me who you said to contact". Your summary is the only thing Asher will have. Write it so that question is answerable.
 
 Rules:
 - 70 words maximum. Dense, plain sentences. No preamble, no "in this conversation".
-- Record: what the founder is working on, what they asked, what Vera concluded or recommended, anything Vera PRODUCED (a drafted email, a chosen option, a named contact), and anything left open or unresolved.
+- Record: what the founder is working on, what they asked, what Asher concluded or recommended, anything Asher PRODUCED (a drafted email, a chosen option, a named contact), and anything left open or unresolved.
 - Keep proper nouns, names, organisations, email addresses, URLs and numbers EXACTLY as they appear. These are what the founder will search by later. Never generalise "IITB VLabs (support@vlabs.co.in)" into "a university lab".
 - Never add anything the turns do not say. If the new turns add nothing meaningful, return the previous summary unchanged.
 - Write it as a record of what happened, not advice to the founder. No second person.
@@ -100,7 +100,7 @@ export function extractiveSynopsis(messages: { role: string; content: string }[]
   const parts: string[] = [];
   if (firstUser) parts.push(`Opened with: "${truncate(firstUser.content, 220)}"`);
   if (lastUser) parts.push(`Later asked: "${truncate(lastUser.content, 200)}"`);
-  if (lastAssistant) parts.push(`Vera's last answer: "${truncate(lastAssistant.content, 260)}"`);
+  if (lastAssistant) parts.push(`Asher's last answer: "${truncate(lastAssistant.content, 260)}"`);
   return parts.join(" ");
 }
 
@@ -211,7 +211,7 @@ async function upgradeExtractiveSummary(userId: string, chatId: number, title: s
     const messages = recent.reverse();
 
     const transcript = messages
-      .map((m) => `${m.role === "user" ? "Founder" : "Vera"}: ${truncate(m.content, MAX_CHARS_PER_MESSAGE)}`)
+      .map((m) => `${m.role === "user" ? "Founder" : "Asher"}: ${truncate(m.content, MAX_CHARS_PER_MESSAGE)}`)
       .join("\n");
     const { parsed } = await callGroqJSON(
       groq,
@@ -319,7 +319,7 @@ export async function ensureChatSummary(userId: string, chatId: number | undefin
     }
 
     const transcript = fresh
-      .map((m) => `${m.role === "user" ? "Founder" : "Vera"}: ${truncate(m.content, MAX_CHARS_PER_MESSAGE)}`)
+      .map((m) => `${m.role === "user" ? "Founder" : "Asher"}: ${truncate(m.content, MAX_CHARS_PER_MESSAGE)}`)
       .join("\n");
     const priorBlock = existing?.summary
       ? `Memory so far:\n${existing.summary}\n\nExisting topics: ${existing.topics}\n\n`

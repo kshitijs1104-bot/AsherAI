@@ -295,10 +295,10 @@ export function SkinPicker() {
             One-time setup
           </span>
           <h2 id="skin-picker-title" style={{ fontSize: '25px', fontWeight: 700, color: 'var(--v7-text)', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-            Choose how Vera looks
+            Choose how Asher looks
           </h2>
           <p style={{ fontSize: '14px', color: 'var(--v7-text-dim)', margin: 0, lineHeight: 1.55, maxWidth: '52ch' }}>
-            Three designs, the same Vera underneath. Pick whichever you'd rather look
+            Three designs, the same Asher underneath. Pick whichever you'd rather look
             at all day. You can switch any time in Settings.
           </p>
         </div>

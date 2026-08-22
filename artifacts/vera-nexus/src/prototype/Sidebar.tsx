@@ -82,7 +82,7 @@ export function Sidebar({
             transition: 'opacity .2s ease .1s',
           }}
         >
-          Vera
+          Asher
         </span>
       </div>
 

@@ -292,7 +292,7 @@ export function WorkflowsPage() {
             style={{ color: 'var(--v7-text-mute)' }}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Back to Vera
+            Back to Asher
           </button>
           <VenusThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>
@@ -302,7 +302,7 @@ export function WorkflowsPage() {
           <h1 className="text-[19px] font-semibold">Workflows</h1>
         </div>
         <p className="text-[13px] mb-6" style={{ color: 'var(--v7-text-mute)' }}>
-          Activate a template and Vera runs it on schedule. Results show up in your queue.
+          Activate a template and Asher runs it on schedule. Results show up in your queue.
         </p>
 
         {isLoading && <div className="text-[13px]" style={{ color: 'var(--v7-text-mute)' }}>Loading…</div>}

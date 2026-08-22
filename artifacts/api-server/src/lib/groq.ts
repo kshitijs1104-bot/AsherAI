@@ -48,12 +48,12 @@ export type VenusPromptTag =
   | "crossChat";
 
 const VENUS_PROMPT_SECTIONS: readonly { tag: VenusPromptTag; text: string }[] = [
-  { tag: "core", text: `You are Vera, the founder's most experienced advisor — built for founders and early-stage teams. You think in causality: why something happened, what caused it, what it causes next. Name real companies, real numbers, real market dynamics. Voice: warm, direct, informal, short sentences, real opinions — never corporate hedge-speak — though output is strict JSON, not prose.` },
+  { tag: "core", text: `You are Asher, the founder's most experienced advisor — built for founders and early-stage teams. You think in causality: why something happened, what caused it, what it causes next. Name real companies, real numbers, real market dynamics. Voice: warm, direct, informal, short sentences, real opinions — never corporate hedge-speak — though output is strict JSON, not prose.` },
   { tag: "core", text: `Use the founder's full context (onboarding, business context, past sessions) in every answer, calibrated to their actual stage, not a generic default — a company with real revenue doesn't get pre-seed advice (pilots, LOIs, customer discovery) unless the actual evidence says it's still needed.` },
-  { tag: "capability", text: `WHAT VERA ACTUALLY IS — READ THIS BEFORE ANSWERING ANY QUESTION ABOUT YOURSELF ("what can you do", "does Vera do X", "what should I post about your features", etc.). Your real, currently-shipped capabilities are exactly this list and nothing else:
+  { tag: "capability", text: `WHAT ASHER ACTUALLY IS — READ THIS BEFORE ANSWERING ANY QUESTION ABOUT YOURSELF ("what can you do", "does Asher do X", "what should I post about your features", etc.). Your real, currently-shipped capabilities are exactly this list and nothing else:
 1. Strategic/causal advice on the founder's specific business — the core chat you're running right now (diagnosing bottlenecks, comparing options, roadmapping, weighing decisions).
-2. Business idea review — evaluate a new idea against verified precedents from Vera's curated dataset.
-3. Decision logging and outcome tracking — Vera remembers calls it made for this founder and what happened after, and uses that as evidence in later answers.
+2. Business idea review — evaluate a new idea against verified precedents from Asher's curated dataset.
+3. Decision logging and outcome tracking — Asher remembers calls it made for this founder and what happened after, and uses that as evidence in later answers.
 4. Company research reports — pull founders, funding, timeline, and a written analysis on a named company.
 5. Article summarization.
 6. Content drafting — LinkedIn posts, short-form video/reel scripts, presentation talking points, and similar founder-facing copy, delivered as plain written text, not a strategy card.
@@ -97,7 +97,7 @@ For analysis cards the content is: { "points": [ { "label": "insight label", "va
 For market cards the content is: { "tam": "$XB", "sam": "$XM", "som": "$XM", "growth": "X% CAGR", "competitors": [ "Company name — what they own and where they are weak" ], "whitespace": "The specific gap that exists right now that this business can own and why" }
 For risk cards the content is: { "risks": [ { "name": "Risk name", "probability": 0-100, "impact": "High or Med or Low", "mitigation": "One specific action they can take this week to reduce this risk" } ] }
 For roadmap cards the content is: { "horizon": "6 months or 24 months", "phases": [ { "period": "0-30 days", "title": "Phase name", "actions": [ "specific action" ], "metric": "The one number or outcome that tells you this phase succeeded" } ] }
-For decision cards the content is: { "options": [ { "name": "Option name", "chosen": true or false, "reasoning": "2-3 sentences of real prose on why this option would or wouldn't work here", "scores": { "viability": 0-10, "speed": 0-10, "defensibility": 0-10, "capital_efficiency": 0-10 } } ], "recommendation": "Vera's clear call on which option and the single most important reason why" }
+For decision cards the content is: { "options": [ { "name": "Option name", "chosen": true or false, "reasoning": "2-3 sentences of real prose on why this option would or wouldn't work here", "scores": { "viability": 0-10, "speed": 0-10, "defensibility": 0-10, "capital_efficiency": 0-10 } } ], "recommendation": "Asher's clear call on which option and the single most important reason why" }
 DECISION CARDS ARE SECONDARY: the call and why belongs in "summary" as prose FIRST — the card, if included, is supporting detail, never where the recommendation is first made or discovered. Each option's "reasoning" is the primary content — a real mechanism for why it wins or loses here, including options you're NOT picking; "scores" is optional/secondary and may be omitted. Thin or interchangeable reasoning across options is a failed card — rewrite it.
 For precedent cards the content is: { "precedents": [ { "company": "Real company name", "year": "Year or range, e.g. 2008 or 2012-2015", "outcome": "succeeded, pivoted, collapsed, acquired", "lesson": "The specific causal lesson and how it applies here" } ] }
 For funnel cards the content is: { "stages": [ { "title": "Stage name", "description": "One line" } ] } — titles ≤5 words, details ≤20 words.
@@ -1014,7 +1014,7 @@ export function quotaRetryAfterMs(err: any): number | null {
 // ---- Rescuing a real answer that simply wasn't wearing JSON ----
 //
 // THE FAILURE THIS CLOSES, observed in production: a founder attached a PDF
-// Vera couldn't read, and the model — correctly following the "say plainly
+// Asher couldn't read, and the model — correctly following the "say plainly
 // you can't read that file" instruction in attachmentContext.ts — answered in
 // one honest sentence of prose. Groq's JSON mode rejected its own generation
 // (json_validate_failed), all three attempts produced the same sentence,
@@ -1304,7 +1304,7 @@ IMPORTANT — LIMITED PRECEDENT MODE (moderate confidence): The VERIFIED PRECEDE
 // with the same VENUS_PROMPT — never had a grounding guard at all, and
 // neither did the company-autopsy route. Every hardening pass applied to
 // /ai/analyze quietly did not apply to them. The guard is a property of
-// "Vera answering anything", not of one route, so it lives with the prompt
+// "Asher answering anything", not of one route, so it lives with the prompt
 // it guards and every call site imports the same string.
 //
 // NAMED-ENTITY GROUNDING GUARD: separate from the precedent-card rule in
@@ -1330,7 +1330,7 @@ export const NAMED_ENTITY_GUARD = `GROUNDING OF NAMED ENTITIES (applies to every
 const FACTUAL_LOOKUP_GROUNDING = `\n\nTHIS IS A FACTUAL LOOKUP: the founder is asking for real-world information, not (only) judgment. Ground every specific fact in the WEB SEARCH RESULTS provided, and attribute naturally in the prose where it matters ("per <source>…"). If the search results don't actually contain what was asked for, say exactly that — name what you did and didn't find — rather than filling the gap from memory. If sources disagree, say they disagree instead of silently picking one. Do not present a fact from your own training data as if it were retrieved and current.`;
 
 /**
- * The grounding block every Vera answer carries. `isFactualLookup` adds the
+ * The grounding block every Asher answer carries. `isFactualLookup` adds the
  * source-attribution rules on top; it never removes the named-entity guard,
  * which applies unconditionally.
  */
@@ -1411,7 +1411,7 @@ Tag every evidence claim at the moment you write it: FACT only if directly attri
 
 export function buildFallbackVenusResponse(message: string): object {
   return {
-    summary: "Vera is not configured. Please add your Groq API key in Settings to unlock full intelligence. Here's a placeholder response based on your query.",
+    summary: "Asher is not configured. Please add your Groq API key in Settings to unlock full intelligence. Here's a placeholder response based on your query.",
     confidence: "exploratory",
     confidenceNote: "The response is only a placeholder because the Groq API key is not configured.",
     cards: [
@@ -1453,10 +1453,10 @@ function formatWaitDuration(ms: number): string {
 
 export function buildTransientErrorResponse(message: string, kind?: "policy" | "quota", retryAfterMs?: number | null): object {
   const summary = kind === "policy"
-    ? "Sorry, Vera can't answer that. Please try a different question."
+    ? "Sorry, Asher can't answer that. Please try a different question."
     : kind === "quota"
-      ? `Vera's hit today's usage limit.${retryAfterMs ? ` Try again in about ${formatWaitDuration(retryAfterMs)}.` : " Please try again shortly."}`
-      : "Sorry, Vera couldn't answer that right now. Please try again or ask something else.";
+      ? `Asher's hit today's usage limit.${retryAfterMs ? ` Try again in about ${formatWaitDuration(retryAfterMs)}.` : " Please try again shortly."}`
+      : "Sorry, Asher couldn't answer that right now. Please try again or ask something else.";
   return {
     summary,
     isError: true,

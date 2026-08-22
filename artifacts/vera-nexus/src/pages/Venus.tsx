@@ -1034,7 +1034,7 @@ export function VenusPage() {
             >
               <VeraMark size={14} />
             </div>
-            <span className="font-semibold text-[15px]" style={{ letterSpacing: '-0.01em' }}>Vera</span>
+            <span className="font-semibold text-[15px]" style={{ letterSpacing: '-0.01em' }}>Asher</span>
           </div>
           <div
             className="flex items-center gap-[5px] font-medium text-[9px] uppercase"
@@ -1332,10 +1332,9 @@ export function VenusPage() {
             ></div>
 
             <div className="m-auto flex flex-col items-center w-full max-w-[600px] relative">
-              {/* Only ever shown on this "new chat" landing view, never
-                  overlaid on an in-progress chat thread — a check-in is a
-                  start-of-session moment, not something that should follow
-                  the founder into every chat they switch to. */}
+              {/* The glowing dot that used to sit here encoded nothing. It was a
+                neon halo next to a tier label that already says the tier, and a
+                decorative status dot is the loudest template tell there is. */}
               <TodayCard />
 
               <div className="flex items-center gap-3 mb-5">
@@ -1348,7 +1347,7 @@ export function VenusPage() {
                       mark now, from components/VeraMark. */}
                   <VeraMark size={30} />
                 </div>
-                <span className="font-semibold" style={{ fontSize: '28px', letterSpacing: '-0.01em', color: 'var(--v7-text)' }}>Vera</span>
+                <span className="font-semibold" style={{ fontSize: '28px', letterSpacing: '-0.01em', color: 'var(--v7-text)' }}>Asher</span>
               </div>
 
               <div
@@ -1377,14 +1376,10 @@ export function VenusPage() {
               </h1>
 
               <p className="font-medium mb-8" style={{ fontSize: '15px', color: 'var(--v7-text-dim)', maxWidth: '420px', lineHeight: '1.6' }}>
-                Vera traces what's actually driving your numbers, so every decision has a reason behind it.
+                Asher traces what's actually driving your numbers, so every decision has a reason behind it.
               </p>
 
-              {/* Vera noticing something real — a long absence, a run worth
-                  acknowledging, work left open. Null on most opens, which is
-                  the point: a product that always has a remark is one whose
-                  remarks stop meaning anything. See lib/veraPresence.ts for
-                  why every line is a fact and never a mood. */}
+              {/* Back link + sidebar collapse */}
               {presenceNote && (
                 <div
                   className="mb-7 px-3.5 py-2.5 rounded-xl"
@@ -1425,7 +1420,7 @@ export function VenusPage() {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                  placeholder="Tell Vera what's really going on…"
+                  placeholder="Tell Asher what's really going on…"
                   rows={1}
                   className="flex-1 bg-transparent border-none outline-none resize-none min-h-[38px] py-2 font-medium text-[14.5px]"
                   style={{ color: 'var(--v7-text)', fontFamily: 'var(--v7-font-round)' }}
@@ -1502,12 +1497,12 @@ export function VenusPage() {
                       <div className="flex items-center justify-between gap-3 mb-1">
                         <div className="flex items-center gap-2">
                           <VeraAvatar />
-                          <span className="text-[10px] font-mono uppercase text-[var(--muted-text)]">Vera</span>
+                          <span className="text-[10px] font-mono uppercase text-[var(--muted-text)]">Asher</span>
                         </div>
                       </div>
 
                       {/* A response that IS the deliverable (a post, an
-                          email, a Slack message the founder asked Vera to
+                          email, a Slack message the founder asked Asher to
                           write) renders as a working document instead of
                           chat prose — copyable, revisable line by line, and
                           publishable where the connector can take it. Every
@@ -1672,7 +1667,7 @@ function stripStrayCodeFences(text: string): string {
   return text.replace(/```[\s\S]*?```/g, '').replace(/```[\s\S]*$/g, '');
 }
 
-// The brand mark shrunk to the per-message avatar slot, so every Vera
+// The brand mark shrunk to the per-message avatar slot, so every Asher
 // response carries the same logo as the sidebar, the hero, the landing page
 // and the launch film. One definition — see components/VeraMark.
 function VeraAvatar({ pulse = false }: { pulse?: boolean }) {
@@ -1693,14 +1688,14 @@ function VeraAvatar({ pulse = false }: { pulse?: boolean }) {
 // more than showing progress.
 //
 // Each line resolves from a spinner to a check on a stagger, then the next
-// begins. The copy is deliberately about what Vera is reading rather than a
+// begins. The copy is deliberately about what Asher is reading rather than a
 // fake percentage, and the last line is open-ended ("Writing it up") because
 // the real request finishes whenever it finishes — nothing here pretends to
 // know how long is left. If the response outlasts the script the final line
 // simply stays spinning, which is honest.
 // Several honest phrasings of the same four beats, rather than one fixed
 // script. The old version showed the identical four lines for every single
-// question, which stopped reading as "here's what Vera is actually doing"
+// question, which stopped reading as "here's what Asher is actually doing"
 // and started reading as a canned loading animation the moment a founder
 // asked more than one thing in a session. None of these claim anything more
 // specific than the fixed set did — same four beats (read context, cross-
@@ -1714,7 +1709,7 @@ const TRACING_STEP_SETS: string[][] = [
     'Writing it up',
   ],
   [
-    'Pulling in what Vera already knows about your business',
+    'Pulling in what Asher already knows about your business',
     'Checking it against similar situations on record',
     'Weighing what actually applies here',
     'Putting the answer together',
@@ -1871,7 +1866,7 @@ function VeraTracing({ seed }: { seed: string }) {
 function VenusMessage({ content, confidence }: { content: string; confidence?: 'verified' | 'exploratory'; confidenceNote?: string }) {
   const withoutFences = stripStrayCodeFences(content);
   const stripped = confidence === 'exploratory'
-    ? withoutFences.replace(/^⚠️ No verified precedent match — (the answer below|this) is general strategic reasoning, not backed by (Vera|Venus AI)'s dataset\.\s*(Treat (it as|as) an? (useful starting point|unverified starting point only)[^.]*\.)?\s*/i, '').trim()
+    ? withoutFences.replace(/^⚠️ No verified precedent match — (the answer below|this) is general strategic reasoning, not backed by (Asher|Venus AI)'s dataset\.\s*(Treat (it as|as) an? (useful starting point|unverified starting point only)[^.]*\.)?\s*/i, '').trim()
     : withoutFences;
   const lines = stripped.split('\n').filter((line) => line.trim() !== '```' && line.trim() !== '```json');
   return (
@@ -2279,7 +2274,7 @@ function IntegrityNotices({
 
 // The evidence itself, rendered inline and always visible rather than hidden
 // behind a hover. Naming the precedents an answer stands on is the single
-// thing Vera can show that a general-purpose chat assistant cannot — it was
+// thing Asher can show that a general-purpose chat assistant cannot — it was
 // being computed on every request and then thrown away by the client.
 function EvidenceStrip({
   confidence,
@@ -3021,12 +3016,12 @@ function cardToText(card: any): string {
 }
 
 function messageToText(msg: ChatMessage): string {
-  const parts: string[] = ['VERA ANALYSIS', ''];
+  const parts: string[] = ['ASHER ANALYSIS', ''];
   if (msg.content) parts.push(msg.content, '');
   (msg.cards ?? []).forEach((card: any) => {
     parts.push(cardToText(card), '');
   });
-  parts.push('---', `Generated by Vera · ${new Date().toLocaleString()}`);
+  parts.push('---', `Generated by Asher · ${new Date().toLocaleString()}`);
   return parts.join('\n');
 }
 

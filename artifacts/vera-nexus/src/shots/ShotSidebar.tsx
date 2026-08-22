@@ -79,7 +79,7 @@ export function ShotSidebar({ skinned, pendingCount }: { skinned: boolean; pendi
               <circle cx="12" cy="12" r="1.1" fill="var(--v7-bg-raised-2)" stroke="#3a3d47" strokeWidth="0.5" />
             </svg>
           </div>
-          <span className="font-extrabold text-[15px]" style={{ letterSpacing: '-0.01em' }}>Vera</span>
+          <span className="font-extrabold text-[15px]" style={{ letterSpacing: '-0.01em' }}>Asher</span>
         </div>
         <div
           className="flex items-center gap-[5px] font-medium text-[9px] uppercase"

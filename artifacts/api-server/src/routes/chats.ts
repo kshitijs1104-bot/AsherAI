@@ -247,7 +247,7 @@ router.put("/chats/:id/goal", requireAuth, async (req, res) => {
   const body = SetChatGoalBody.safeParse(req.body);
   if (!body.success) {
     return res.status(400).json({
-      error: "A goal needs a title, successMetric, valueInr, and deadline — without all four Vera can't reason about urgency or trade-offs.",
+      error: "A goal needs a title, successMetric, valueInr, and deadline — without all four Asher can't reason about urgency or trade-offs.",
     });
   }
 

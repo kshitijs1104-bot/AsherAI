@@ -40,7 +40,7 @@ const CHANNEL_META: Record<DraftChannel, ChannelMeta> = {
     label: 'Email',
     publishable: false,
     connector: 'gmail',
-    unavailableNote: 'Vera can only put drafts into an existing Gmail thread, so this one is copy-and-paste for now.',
+    unavailableNote: 'Asher can only put drafts into an existing Gmail thread, so this one is copy-and-paste for now.',
   },
   slack: {
     filename: 'slack-message.txt',

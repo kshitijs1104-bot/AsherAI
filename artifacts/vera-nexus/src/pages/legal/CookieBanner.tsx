@@ -56,16 +56,16 @@ export function CookieBanner() {
             id="cookie-banner-title"
             className="text-sm font-bold text-white mb-2"
           >
-            Cookies and what Vera keeps on this device
+            Cookies and what Asher keeps on this device
           </h2>
           <p className="text-[13px] text-[var(--muted)] leading-relaxed">
-            Some storage is required for Vera to work at all — staying signed in, remembering that you
+            Some storage is required for Asher to work at all — staying signed in, remembering that you
             accepted the privacy policy, and a short-lived token used while connecting an account. That part
             has no off switch, because without it there is no product.
           </p>
           <p className="text-[13px] text-[var(--muted)] leading-relaxed mt-2">
             The optional part is your <strong className="text-[var(--text)] font-semibold">preferences</strong>:
-            your theme, which panels you left open, and which cards you dismissed. Decline and Vera still
+            your theme, which panels you left open, and which cards you dismissed. Decline and Asher still
             works exactly the same — it just starts from defaults each time, and anything already saved
             under those is deleted now. Your chats, saved analyses and account are not affected either way.
           </p>

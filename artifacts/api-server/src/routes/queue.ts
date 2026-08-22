@@ -33,8 +33,8 @@ const router = Router();
 const WELCOME_ITEM = {
   type: "welcome",
   source: "vera",
-  title: "Welcome to Vera — your personalized business consultant",
-  body: "This board is where everything Vera drafts, decides, or finds for you shows up. It's quiet right now because nothing is connected yet — set up your first workflow and Vera starts filling it in on its own.",
+  title: "Welcome to Asher — your personalized business consultant",
+  body: "This board is where everything Asher drafts, decides, or finds for you shows up. It's quiet right now because nothing is connected yet — set up your first workflow and Asher starts filling it in on its own.",
   draftContent: null,
   externalId: "welcome",
 };

@@ -56,7 +56,7 @@ export function WaitlistGate({ declined }: { declined?: boolean }) {
         {declined ? (
           <>
             <h1 className="font-syne font-semibold mb-3" style={{ fontSize: 22, color: 'var(--text)' }}>
-              Vera isn't open to this account
+              Asher isn't open to this account
             </h1>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.65, color: 'var(--muted)' }}>
               Your account exists, but it doesn't have access right now. If you think that's a mistake,
@@ -69,7 +69,7 @@ export function WaitlistGate({ declined }: { declined?: boolean }) {
               You're on the list
             </h1>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.65, color: 'var(--muted)' }}>
-              Vera is closed to new accounts while we work with a small group of founders. Yours is
+              Asher is closed to new accounts while we work with a small group of founders. Yours is
               recorded — we'll email the address you signed up with when it opens.
             </p>
             <p style={{ margin: '14px 0 0', fontSize: 12.5, lineHeight: 1.6, color: 'var(--dim)' }}>

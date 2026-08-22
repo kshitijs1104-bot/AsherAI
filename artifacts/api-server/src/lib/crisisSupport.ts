@@ -169,7 +169,7 @@ export function looksLikeModelSafetyRefusal(summary: string): boolean {
 /* -------------------------------------------------------------- the response */
 
 // Numbers are named services with published, stable helplines rather than a
-// single hardcoded national number, because Vera's users are not all in one
+// single hardcoded national number, because Asher's users are not all in one
 // country and a US-only number shown to someone in Bengaluru is a dead end
 // dressed as help. India is listed first because POLICY_META.jurisdiction is
 // India and that is where most of this product's users are; the rest is there

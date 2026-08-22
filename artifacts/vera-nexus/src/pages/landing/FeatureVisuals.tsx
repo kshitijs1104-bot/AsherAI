@@ -86,7 +86,7 @@ export function RecallVisual() {
           background: 'linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.015))',
         }}
       >
-        <div className="lp-v-key" style={{ color: 'var(--lp-teal)' }}>Vera</div>
+        <div className="lp-v-key" style={{ color: 'var(--lp-teal)' }}>Asher</div>
         <div className="lp-v-txt" style={{ marginTop: 6, color: 'var(--lp-text)' }}>
           Not yet — you parked SMB in April at 4% trial conversion, and your Sept goal needs 70% of
           revenue from mid-market. Re-entering now competes with that.

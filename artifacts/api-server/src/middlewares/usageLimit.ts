@@ -126,7 +126,7 @@ export function dailyUsageLimit(keyFor: (req: Request) => string) {
           });
           res.setHeader("Retry-After", String(Math.ceil(remaining / 1000)));
           res.status(429).json({
-            error: `You've used today's ${calls} Vera analyses. You can pick back up in ${humanDuration(remaining)}.`,
+            error: `You've used today's ${calls} Asher analyses. You can pick back up in ${humanDuration(remaining)}.`,
             retryAfterSeconds: Math.ceil(remaining / 1000),
           });
           return;

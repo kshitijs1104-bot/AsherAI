@@ -607,7 +607,7 @@ export function CausalTrace() {
                   e.currentTarget.form?.requestSubmit();
                 }
               }}
-              placeholder="Tell Vera what's really going on…"
+              placeholder="Tell Asher what's really going on…"
               className="flex-1 min-w-0 resize-none bg-transparent outline-none text-[15px] font-medium py-2.5 max-h-32"
               style={{ color: 'var(--p-text)', letterSpacing: '-.021em' }}
             />

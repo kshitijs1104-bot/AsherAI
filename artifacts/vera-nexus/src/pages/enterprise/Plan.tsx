@@ -44,12 +44,12 @@ import { useState } from 'react';
 // got into trouble in the first place.
 const INCLUDED: string[] = [
   'Strategic and causal advice on your own business, with full conversation memory',
-  'Company file (Dossier) — Vera builds and keeps a working file on your business',
+  'Company file (Dossier) — Asher builds and keeps a working file on your business',
   'Goals, roadmaps and decision logging, with outcomes tracked over time',
-  'Business idea review against Vera\'s verified precedent dataset',
+  'Business idea review against Asher\'s verified precedent dataset',
   'Company research reports and article summaries',
   'Content drafting — LinkedIn posts, scripts, talking points',
-  'Document and image reading — attach a P&L or a screenshot and Vera reads it',
+  'Document and image reading — attach a P&L or a screenshot and Asher reads it',
   '250 analyses per day, then a five-hour cooldown',
 ];
 
@@ -81,7 +81,7 @@ export function PlanGate() {
           </div>
           <h1 className="text-3xl font-syne font-semibold text-white mb-3">Your Plan</h1>
           <p className="text-sm text-[var(--muted)]">
-            One plan, free while Vera is in beta. Everything below is live today — nothing here is coming soon.
+            One plan, free while Asher is in beta. Everything below is live today — nothing here is coming soon.
           </p>
           <p className="text-xs text-[var(--dim)] mt-3">
             No card, no trial clock, no tiers. If paid plans arrive, you'll be told before anything changes.

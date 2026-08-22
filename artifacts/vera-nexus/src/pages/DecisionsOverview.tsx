@@ -254,7 +254,7 @@ export function DecisionsOverview() {
             style={{ color: 'var(--v7-text-mute)' }}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Back to Vera
+            Back to Asher
           </button>
           <VenusThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>
@@ -264,7 +264,7 @@ export function DecisionsOverview() {
           <h1 className="text-[19px] font-semibold">Decisions</h1>
         </div>
         <p className="text-[13px] mb-5" style={{ color: 'var(--v7-text-mute)' }}>
-          Everything Vera has recommended, and what happened when you acted on it.
+          Everything Asher has recommended, and what happened when you acted on it.
         </p>
 
         <div className="flex items-center gap-1.5 mb-2 flex-wrap">
@@ -293,7 +293,7 @@ export function DecisionsOverview() {
           <div className="text-[13px] rounded-xl p-4 mt-4" style={{ background: 'var(--v7-bg-raised)', color: 'var(--v7-text-mute)' }}>
             {isArchivedView
               ? "Nothing archived yet — the archive icon on any decision moves it here without deleting it."
-              : 'Nothing here yet — a decision or roadmap card Vera gives you in any chat gets logged here automatically.'}
+              : 'Nothing here yet — a decision or roadmap card Asher gives you in any chat gets logged here automatically.'}
           </div>
         )}
 

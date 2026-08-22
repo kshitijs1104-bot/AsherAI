@@ -168,7 +168,7 @@ export function AccessRequestsPage() {
           <svg viewBox="0 0 24 24" fill="none" className="w-3.5 h-3.5">
             <path d="M15 5L8 12L15 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          Back to Vera
+          Back to Asher
         </Link>
 
         <header>

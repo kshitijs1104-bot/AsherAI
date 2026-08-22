@@ -246,7 +246,7 @@ export function AccountCard() {
               className="font-mono uppercase"
               style={{ fontSize: 9.5, letterSpacing: '0.16em', color: 'var(--v7-text-mute)' }}
             >
-              Vera account
+              Asher account
             </span>
           </div>
           {memberSince && (
@@ -289,7 +289,7 @@ export function AccountCard() {
             {/* Email is Clerk's and is NOT editable here. Changing the address
                 you sign in with is an account-security operation with its own
                 verification flow — putting a pencil next to it would imply
-                Vera can do something it cannot and should not. */}
+                Asher can do something it cannot and should not. */}
             <div className="truncate" style={{ fontSize: 12.5, color: 'var(--v7-text-mute)' }}>
               {profile?.email ?? 'No email on file'}
             </div>
@@ -326,7 +326,7 @@ export function AccountCard() {
             className="font-mono uppercase"
             style={{ fontSize: 9.5, letterSpacing: '0.14em', color: 'var(--v7-text-mute)' }}
           >
-            What Vera reasons from
+            What Asher reasons from
           </span>
         </div>
 
@@ -358,7 +358,7 @@ export function AccountCard() {
       {/* Says plainly that this is not cosmetic — a correction here changes
           the answers, which is the reason to bother making one. */}
       <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.55, color: 'var(--v7-text-mute)' }}>
-        Vera reads your company, role, size and stage into every analysis. Correcting something here
+        Asher reads your company, role, size and stage into every analysis. Correcting something here
         changes what it says next, not just what this card shows.
       </p>
 

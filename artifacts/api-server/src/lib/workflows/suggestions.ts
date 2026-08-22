@@ -40,7 +40,7 @@ export async function checkAutomationSuggestions(userId: string): Promise<number
         type: "automation_suggestion",
         source: "workflow",
         title: `I noticed you do this a lot — automate it?`,
-        body: `You've used ${label} ${count} times this week. Want Vera to handle this automatically going forward?`,
+        body: `You've used ${label} ${count} times this week. Want Asher to handle this automatically going forward?`,
         externalId: `suggest-${type}`,
       })
       .onConflictDoNothing({ target: [queueItemsTable.userId, queueItemsTable.source, queueItemsTable.externalId] })

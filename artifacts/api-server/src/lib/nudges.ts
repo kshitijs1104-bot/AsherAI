@@ -196,8 +196,8 @@ async function deriveCandidates(userId: string, now: Date): Promise<Nudge[]> {
   if (s && !hasToldVeraWhoTheyAre) {
     candidates.push({
       kind: "onboarding.incomplete",
-      title: "Tell Vera who you are",
-      body: "Vera calibrates every answer to your company and stage. Right now it's working without that.",
+      title: "Tell Asher who you are",
+      body: "Asher calibrates every answer to your company and stage. Right now it's working without that.",
       href: "/enterprise/onboarding",
       actionLabel: "Finish setup",
       priority: "high",
@@ -209,8 +209,8 @@ async function deriveCandidates(userId: string, now: Date): Promise<Nudge[]> {
   if (!d) {
     candidates.push({
       kind: "dossier.missing",
-      title: "Vera doesn't have a company file yet",
-      body: "The dossier is what makes Vera's answers about your business instead of businesses in general.",
+      title: "Asher doesn't have a company file yet",
+      body: "The dossier is what makes Asher's answers about your business instead of businesses in general.",
       href: "/vera/dossier",
       actionLabel: "Start the dossier",
       priority: "high",
@@ -220,7 +220,7 @@ async function deriveCandidates(userId: string, now: Date): Promise<Nudge[]> {
     if (unanswered > 0) {
       candidates.push({
         kind: "dossier.incomplete",
-        title: `${unanswered} thing${unanswered === 1 ? "" : "s"} Vera still doesn't know`,
+        title: `${unanswered} thing${unanswered === 1 ? "" : "s"} Asher still doesn't know`,
         body: "Each one it can't answer is a gap it has to guess around. They take a sentence each.",
         href: "/vera/dossier",
         actionLabel: "Fill them in",
@@ -240,7 +240,7 @@ async function deriveCandidates(userId: string, now: Date): Promise<Nudge[]> {
       candidates.push({
         kind: "chat.unfinished",
         title: "You left a question hanging",
-        body: "Your last message never got an answer. Reopen it and Vera will pick it back up.",
+        body: "Your last message never got an answer. Reopen it and Asher will pick it back up.",
         href: "/vera",
         actionLabel: "Reopen it",
         priority: "high",
@@ -254,7 +254,7 @@ async function deriveCandidates(userId: string, now: Date): Promise<Nudge[]> {
     candidates.push({
       kind: "queue.pending",
       title: `${pending} item${pending === 1 ? "" : "s"} waiting on you`,
-      body: "Vera drafted or found these. They stay pending until you accept, edit or reject them.",
+      body: "Asher drafted or found these. They stay pending until you accept, edit or reject them.",
       href: "/vera?view=command-center",
       actionLabel: "Open the board",
       priority: "normal",
@@ -283,7 +283,7 @@ async function deriveCandidates(userId: string, now: Date): Promise<Nudge[]> {
     candidates.push({
       kind: "goal.none",
       title: "No goal set",
-      body: "With a goal, Vera weighs advice against what you're actually trying to hit. Without one it can only answer in general.",
+      body: "With a goal, Asher weighs advice against what you're actually trying to hit. Without one it can only answer in general.",
       href: "/vera/goals",
       actionLabel: "Set a goal",
       priority: "low",

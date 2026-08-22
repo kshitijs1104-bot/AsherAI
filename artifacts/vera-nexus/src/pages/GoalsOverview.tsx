@@ -93,7 +93,7 @@ export function GoalsOverview() {
             style={{ color: 'var(--v7-text-mute)' }}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Back to Vera
+            Back to Asher
           </button>
           <VenusThemeToggle theme={theme} onToggle={toggleTheme} />
         </div>
@@ -110,7 +110,7 @@ export function GoalsOverview() {
 
         {!isLoading && goals.length === 0 && (
           <div className="text-[13px] rounded-xl p-4" style={{ background: 'var(--v7-bg-raised)', color: 'var(--v7-text-mute)' }}>
-            No goals set yet. Open a chat and set one — Vera will weigh urgency, value, and trade-offs against it in every answer there.
+            No goals set yet. Open a chat and set one — Asher will weigh urgency, value, and trade-offs against it in every answer there.
           </div>
         )}
 

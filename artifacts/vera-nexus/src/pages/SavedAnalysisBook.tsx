@@ -136,7 +136,7 @@ function MiniVera({
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderBottom: `1px solid ${palette.tealBorder}` }}>
         <span style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', letterSpacing: '0.05em', color: palette.teal }}>
-          ASK VERA · {MINI_TURN_LIMIT - userTurns} {MINI_TURN_LIMIT - userTurns === 1 ? 'MESSAGE' : 'MESSAGES'} LEFT
+          ASK ASHER · {MINI_TURN_LIMIT - userTurns} {MINI_TURN_LIMIT - userTurns === 1 ? 'MESSAGE' : 'MESSAGES'} LEFT
         </span>
         <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: palette.muted, fontSize: '11px', fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", cursor: 'pointer', padding: 0 }}>
           Close
@@ -152,7 +152,7 @@ function MiniVera({
         {messages.map((m, i) => (
           <div key={i} style={{ marginBottom: '10px' }}>
             <div style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '9.5px', letterSpacing: '0.05em', color: m.role === 'user' ? palette.faint : palette.teal, marginBottom: '3px' }}>
-              {m.role === 'user' ? 'YOU' : 'VERA'}
+              {m.role === 'user' ? 'YOU' : 'ASHER'}
             </div>
             <div style={{ fontSize: '13px', lineHeight: 1.55, color: palette.text, whiteSpace: 'pre-wrap' }}>{m.content}</div>
           </div>
@@ -174,7 +174,7 @@ function MiniVera({
         {atLimit ? (
           <div>
             <p style={{ fontSize: '12.5px', color: palette.text, margin: '0 0 8px', lineHeight: 1.5 }}>
-              That's as far as this goes here. Let's continue properly in a new chat, where Vera keeps the full thread.
+              That's as far as this goes here. Let's continue properly in a new chat, where Asher keeps the full thread.
             </p>
             <button
               type="button"
@@ -274,7 +274,7 @@ function AnalysisEntry({
           }}
         >
           <MessageSquare style={{ width: 11, height: 11 }} />
-          {asking ? 'Hide Vera' : 'Analyze with Vera'}
+          {asking ? 'Hide Asher' : 'Analyze with Asher'}
         </button>
 
         {canOpenThread && (
@@ -419,8 +419,8 @@ function IndexPage({
 
       <p style={{ fontSize: '14px', lineHeight: 1.7, color: palette.text, margin: '0 0 26px' }}>
         {saved.length === 0
-          ? "Nothing saved yet. When Vera gives you something worth keeping, hit “Save as Analysis” under the response and it gets filed here by type."
-          : `${saved.length} ${saved.length === 1 ? 'analysis' : 'analyses'} kept from your conversations, filed by what they're about. Pick a tab to read one back, ask Vera about it, or jump to the chat it came from.`}
+          ? "Nothing saved yet. When Asher gives you something worth keeping, hit “Save as Analysis” under the response and it gets filed here by type."
+          : `${saved.length} ${saved.length === 1 ? 'analysis' : 'analyses'} kept from your conversations, filed by what they're about. Pick a tab to read one back, ask Asher about it, or jump to the chat it came from.`}
       </p>
 
       {presentTypes.length > 0 && (

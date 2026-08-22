@@ -120,8 +120,8 @@ function writeLines(d: {
 }): { headline: string; body: string } {
   if (d.isBrandNew) {
     return {
-      headline: "Connect something and Vera starts working in the background",
-      body: "Your board is empty because nothing is connected yet. Link Gmail, Slack, Calendar or Jira and Vera starts pulling what needs your attention into one place — drafts ready to send, deadlines coming up, threads waiting on you.",
+      headline: "Connect something and Asher starts working in the background",
+      body: "Your board is empty because nothing is connected yet. Link Gmail, Slack, Calendar or Jira and Asher starts pulling what needs your attention into one place — drafts ready to send, deadlines coming up, threads waiting on you.",
     };
   }
 
@@ -265,7 +265,7 @@ export async function sendDigestEmail(to: string, digest: DailyDigest, unfinishe
   // Plain text alongside HTML: a digest that only renders as HTML lands in
   // spam more often, and this content is short enough that the text version is
   // genuinely readable rather than a courtesy.
-  const text = `${digest.headline}\n\n${digest.body}${unfinishedText}\n\nOpen your board: ${boardUrl}\n\nTo stop these, turn off daily email in Vera → Settings.`;
+  const text = `${digest.headline}\n\n${digest.body}${unfinishedText}\n\nOpen your board: ${boardUrl}\n\nTo stop these, turn off daily email in Asher → Settings.`;
 
   const unfinishedHtml =
     topUnfinished.length > 0
@@ -276,12 +276,12 @@ export async function sendDigestEmail(to: string, digest: DailyDigest, unfinishe
       : "";
 
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;color:#16191f;line-height:1.6">
-  <p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#757d8c;margin:0 0 14px">Vera · Daily brief</p>
+  <p style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#757d8c;margin:0 0 14px">Asher · Daily brief</p>
   <h1 style="font-size:19px;margin:0 0 10px;line-height:1.3">${escapeHtml(digest.headline)}</h1>
   <p style="margin:0 0 20px;color:#4a515e">${escapeHtml(digest.body)}</p>
   ${unfinishedHtml}
   <a href="${escapeHtml(boardUrl)}" style="display:inline-block;background:#2f4c8c;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:14px">Open your board</a>
-  <p style="font-size:12px;color:#757d8c;margin:24px 0 0">To stop these, turn off daily email in Vera → Settings.</p>
+  <p style="font-size:12px;color:#757d8c;margin:24px 0 0">To stop these, turn off daily email in Asher → Settings.</p>
 </div>`;
 
   try {

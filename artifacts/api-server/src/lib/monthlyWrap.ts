@@ -145,12 +145,12 @@ function busiestDayOf(dates: (Date | null)[]): { date: string; count: number } |
   return best && best.count >= 3 ? best : null;
 }
 
-const NARRATIVE_SYSTEM_PROMPT = `You write a founder's monthly wrap for Vera — a short, sharp read on the month they just had, based ONLY on numbers computed from their actual activity.
+const NARRATIVE_SYSTEM_PROMPT = `You write a founder's monthly wrap for Asher — a short, sharp read on the month they just had, based ONLY on numbers computed from their actual activity.
 
 Hard rules:
 - Use ONLY the figures given to you. Never introduce a number, percentage, date, company or person that isn't in the input. If you want to say something you don't have a number for, say it qualitatively or don't say it.
 - No congratulation-for-its-own-sake and no motivational filler. A founder can tell the difference between a real observation about their month and a greeting card, and the second one costs you all your credibility.
-- If the month was quiet, say it was quiet. That is a legitimate, useful thing to report — a founder who barely used Vera should be told that plainly, not handed a fabricated highlight reel.
+- If the month was quiet, say it was quiet. That is a legitimate, useful thing to report — a founder who barely used Asher should be told that plainly, not handed a fabricated highlight reel.
 - Notice the SHAPE of the month, not just the totals: what they focused on, what changed against last month, what they started and didn't finish.
 - Second person, plain language, short sentences. No emoji, no headings, no markdown.
 
@@ -210,11 +210,11 @@ export async function buildMonthlyWrap(userId: string, periodMonth: string, groq
   const prevResolvedCount = previous.decisions.filter((d) => d.status === "resolved").length;
 
   const stats: WrapStat[] = [
-    { key: "questions", label: "Questions you brought to Vera", value: current.messages, previousValue: previous.messages, changePct: changePct(current.messages, previous.messages), unit: "count" },
+    { key: "questions", label: "Questions you brought to Asher", value: current.messages, previousValue: previous.messages, changePct: changePct(current.messages, previous.messages), unit: "count" },
     { key: "decisions", label: "Decisions logged", value: current.decisions.length, previousValue: previous.decisions.length, changePct: changePct(current.decisions.length, previous.decisions.length), unit: "count" },
     { key: "resolved", label: "Decisions you closed the loop on", value: resolvedCount, previousValue: prevResolvedCount, changePct: changePct(resolvedCount, prevResolvedCount), unit: "count" },
     { key: "actions", label: "Actions taken from your inbox", value: current.actionsTaken, previousValue: previous.actionsTaken, changePct: changePct(current.actionsTaken, previous.actionsTaken), unit: "count" },
-    { key: "facts", label: "New things Vera learned about you", value: current.factsLearned, previousValue: previous.factsLearned, changePct: changePct(current.factsLearned, previous.factsLearned), unit: "count" },
+    { key: "facts", label: "New things Asher learned about you", value: current.factsLearned, previousValue: previous.factsLearned, changePct: changePct(current.factsLearned, previous.factsLearned), unit: "count" },
   ];
 
   const topicCounts = new Map<string, number>();

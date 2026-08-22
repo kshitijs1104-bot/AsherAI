@@ -91,7 +91,7 @@ export function ShotChat({ prompt, dots }: { prompt: string; dots: number }) {
         >
           <Paperclip className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--v7-text-mute)' }} />
           <span className="flex-1 text-sm" style={{ color: 'var(--v7-text-mute)' }}>
-            Ask Vera anything about your business…
+            Ask Asher anything about your business…
           </span>
         </div>
       </div>

@@ -213,7 +213,7 @@ export function WorkflowHub() {
           <PageHead
             eyebrow="Workflow Hub"
             title="Work that runs without you asking"
-            blurb="Activate a template and Vera runs it on schedule. Results land in your queue with the same causal trace you would get from asking directly."
+            blurb="Activate a template and Asher runs it on schedule. Results land in your queue with the same causal trace you would get from asking directly."
             actions={<Button variant="primary">New workflow</Button>}
           />
         </Rise>

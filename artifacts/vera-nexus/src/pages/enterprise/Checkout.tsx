@@ -70,7 +70,7 @@ export function CheckoutGate() {
           </div>
           <h1 className="text-3xl font-syne font-semibold text-white mb-3">Billing isn't live yet</h1>
           <p className="text-sm text-[var(--muted)]">
-            Vera isn't charging for access at this stage. You won't be asked for a card, and nothing will be
+            Asher isn't charging for access at this stage. You won't be asked for a card, and nothing will be
             billed to you today.
           </p>
         </div>
@@ -104,7 +104,7 @@ export function CheckoutGate() {
             disabled={continuing}
             className="w-full bg-[var(--mint)] text-black font-bold py-3.5 rounded-lg transition-colors text-sm uppercase tracking-wider disabled:opacity-70 flex items-center justify-center gap-2"
           >
-            {continuing ? 'Opening Vera…' : 'Continue to Vera →'}
+            {continuing ? 'Opening Asher…' : 'Continue to Asher →'}
           </button>
 
           <p className="text-[11px] text-center text-[var(--dim)] font-mono leading-relaxed">

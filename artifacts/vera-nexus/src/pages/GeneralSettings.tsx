@@ -76,8 +76,8 @@ function CookieChoiceRow() {
       </div>
       <p className="text-[11.5px] leading-relaxed mt-1.5" style={{ color: 'var(--v7-text-mute)' }}>
         {allowed
-          ? 'Your theme, panel layout and dismissed cards are remembered between visits. Turning this off deletes them now and stops Vera saving them again.'
-          : 'Vera is not saving your theme, panel layout or dismissed cards, so it starts from defaults each visit. Turning this on saves them from now on. Your chats and saved analyses are unaffected either way.'}
+          ? 'Your theme, panel layout and dismissed cards are remembered between visits. Turning this off deletes them now and stops Asher saving them again.'
+          : 'Asher is not saving your theme, panel layout or dismissed cards, so it starts from defaults each visit. Turning this on saves them from now on. Your chats and saved analyses are unaffected either way.'}
       </p>
     </div>
   );
@@ -146,7 +146,7 @@ function DeleteAccountSection() {
         This permanently deletes your account
       </div>
       <p className="text-[11.5px] leading-relaxed mb-2.5" style={{ color: 'var(--v7-text-mute)' }}>
-        Every chat and message, every uploaded file, your business profile, everything Vera has
+        Every chat and message, every uploaded file, your business profile, everything Asher has
         learned about your company, your connected accounts, your workflows and your settings.
         This cannot be undone.
       </p>

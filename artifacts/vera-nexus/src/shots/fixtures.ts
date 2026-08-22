@@ -113,7 +113,7 @@ export const QUEUE_PENDING: QueueItem[] = [
     type: 'automation_suggestion',
     source: 'sheets',
     title: 'You do the same export every Monday at 9',
-    body: 'Eleven weeks running. Vera can have it done before you get in.',
+    body: 'Eleven weeks running. Asher can have it done before you get in.',
     draftContent: null,
     status: 'pending',
     createdAt: todayAt(8, 2),

@@ -468,7 +468,7 @@ export function TodayCard() {
       )}
 
       {inboxItems.length > 0 && (
-        <Section title="Needs your attention" hint={`${inboxItems.length} thing${inboxItems.length === 1 ? '' : 's'} Vera flagged from your activity.`}>
+        <Section title="Needs your attention" hint={`${inboxItems.length} thing${inboxItems.length === 1 ? '' : 's'} Asher flagged from your activity.`}>
           <div className="space-y-2">
             {inboxItems.map((item, i) => (
               <div

@@ -221,8 +221,8 @@ export function DataConnections() {
         <Rise>
           <PageHead
             eyebrow="Data Connections"
-            title="Where Vera gets its evidence"
-            blurb="Every source below feeds the causal trace. Connect more and the answers get narrower; disconnect one and Vera tells you which conclusions it can no longer stand behind."
+            title="Where Asher gets its evidence"
+            blurb="Every source below feeds the causal trace. Connect more and the answers get narrower; disconnect one and Asher tells you which conclusions it can no longer stand behind."
           />
         </Rise>
 

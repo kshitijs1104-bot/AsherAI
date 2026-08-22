@@ -74,7 +74,7 @@ const EXTRACT_SYSTEM_PROMPT = `You build a structured company file from whatever
 
 ${NAMED_ENTITY_GUARD}
 
-You are EXTRACTING, not analysing and not advising. The single rule that matters: if the source material does not state something, that field is null. Not a guess, not an industry-typical figure, not an inference from the company's sector, not "probably early-stage". null. A field you leave null becomes a question Vera asks the founder, which is a good outcome; a field you invent becomes a false fact Vera reasons from for months, which is the worst outcome available to you here.
+You are EXTRACTING, not analysing and not advising. The single rule that matters: if the source material does not state something, that field is null. Not a guess, not an industry-typical figure, not an inference from the company's sector, not "probably early-stage". null. A field you leave null becomes a question Asher asks the founder, which is a good outcome; a field you invent becomes a false fact Asher reasons from for months, which is the worst outcome available to you here.
 
 Light inference IS allowed where the source makes it unambiguous — "we charge $49/seat/month" clearly fills pricing, and "we've raised a seed round" clearly indicates stage. Reading "$49/seat" and writing an ARR figure is NOT allowed: that's arithmetic on data you don't have.
 

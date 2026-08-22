@@ -48,7 +48,7 @@ import './landing.css';
 /* --------------------------------------------------------------------- nav */
 
 const NAV_LINKS = [
-  { href: '#why', label: 'Why Vera' },
+  { href: '#why', label: 'Why Asher' },
   { href: '#command-centre', label: 'Command centre' },
   { href: '#how', label: 'How it works' },
   { href: '#review', label: 'Monthly review' },
@@ -63,7 +63,7 @@ function Nav() {
         <div className="lp-nav-inner">
           <a className="lp-logo" href="#top">
             <VeraMark />
-            Vera
+            Asher
           </a>
 
           <nav className="lp-nav-links">
@@ -111,7 +111,7 @@ function Hero() {
 
             <Reveal delay={0.62} y={12}>
               <p className="lp-lead" style={{ marginTop: 26, maxWidth: 476 }}>
-                Vera remembers your business, learns from every decision, and helps you understand
+                Asher remembers your business, learns from every decision, and helps you understand
                 what actually drives growth.
               </p>
             </Reveal>
@@ -165,7 +165,7 @@ const OLD_WAY = [
 ];
 
 const NEW_WAY = [
-  { t: 'Question', s: 'Asked against everything Vera already knows.' },
+  { t: 'Question', s: 'Asked against everything Asher already knows.' },
   { t: 'Decision', s: 'Options, trade-offs, and the number it turns on.' },
   { t: 'Outcome', s: 'What actually happened, recorded against the call.' },
   { t: 'Learning', s: 'The rule your business just proved or disproved.' },
@@ -262,12 +262,12 @@ function ProblemSection() {
               </div>
             </div>
 
-            {/* Vera */}
+            {/* Asher */}
             <div className="lp-card lp-compare-card" data-tone="vera">
               <div className="lp-compare-head">
                 <div>
                   <div className="lp-v-key" style={{ color: 'var(--lp-teal)' }}>
-                    Vera
+                    Asher
                   </div>
                   <div className="lp-h4" style={{ marginTop: 9 }}>
                     A continuous record
@@ -324,7 +324,7 @@ const FEATURES = [
   {
     label: 'Business memory',
     title: 'Never explain your business twice.',
-    body: 'Goals, decisions, analyses, constraints and history stay with Vera across weeks and months. Ask a question in July and March is still in the room.',
+    body: 'Goals, decisions, analyses, constraints and history stay with Asher across weeks and months. Ask a question in July and March is still in the room.',
     outcome: "You stop paying the context tax. Every conversation starts where the last one ended.",
     stage: 'Recall',
     visual: <RecallVisual />,
@@ -332,7 +332,7 @@ const FEATURES = [
   {
     label: 'Causal intelligence',
     title: "Find what's actually driving results.",
-    body: 'Vera traces the path from an outcome back to its cause — through spend, margin, mix and timing — and shows you what it ruled out on the way there.',
+    body: 'Asher traces the path from an outcome back to its cause — through spend, margin, mix and timing — and shows you what it ruled out on the way there.',
     outcome: 'You spend the next $10k on the thing that moves the number, not the thing that moved alongside it.',
     stage: 'Trace',
     visual: <CausalVisual />,
@@ -340,7 +340,7 @@ const FEATURES = [
   {
     label: 'Continuous execution',
     title: 'Wake up to completed work.',
-    body: 'Overnight, Vera re-runs the analyses that matter, updates the roadmap, drafts the decisions waiting on you and files what it found.',
+    body: 'Overnight, Asher re-runs the analyses that matter, updates the roadmap, drafts the decisions waiting on you and files what it found.',
     outcome: 'Your morning starts with a call to make, not a backlog to triage.',
     stage: 'Overnight',
     visual: <OvernightVisual />,
@@ -356,7 +356,7 @@ const FEATURES = [
   {
     label: 'Founder review',
     title: 'Monthly Founder Review.',
-    body: 'On the first of the month, Vera assembles a review out of everything that actually happened — wins, risks, lessons and the one thing worth your attention next.',
+    body: 'On the first of the month, Asher assembles a review out of everything that actually happened — wins, risks, lessons and the one thing worth your attention next.',
     outcome: 'The board update writes itself. You learn something from it before they do.',
     stage: 'Assemble',
     visual: <ReviewVisual />,
@@ -485,10 +485,10 @@ function Footer() {
         <div className="lp-footer-inner">
           <div className="lp-logo" style={{ color: 'var(--lp-text-2)' }}>
             <VeraMark size={18} />
-            Vera
+            Asher
           </div>
           <div className="lp-footer-links">
-            <a href="#why">Why Vera</a>
+            <a href="#why">Why Asher</a>
             <a href="#command-centre">Command centre</a>
             <a href="#how">How it works</a>
             <a href="#review">Monthly review</a>
@@ -503,13 +503,13 @@ function Footer() {
             <Link href="/privacy">Privacy Policy</Link>
             <Link href="/privacy#liability">Terms</Link>
           </div>
-          <span className="lp-small">© {new Date().getFullYear()} Vera</span>
+          <span className="lp-small">© {new Date().getFullYear()} Asher</span>
         </div>
 
         {/* Point 10 of the brief, and it belongs on the marketing page rather
             than only in the policy: "The cause behind every decision" is the
             headline at the top of this page, and read literally it is a promise
-            that Vera identifies true causes. It cannot guarantee that. Saying so
+            that Asher identifies true causes. It cannot guarantee that. Saying so
             here, in the same place the claim is made, is what stops the headline
             from being the misrepresentation — a disclaimer that only exists in a
             document behind a link does not qualify the copy a visitor read.
@@ -518,8 +518,8 @@ function Footer() {
           className="lp-small"
           style={{ marginTop: 26, maxWidth: 760, lineHeight: 1.65, color: 'var(--lp-text-3)' }}
         >
-          Vera generates analysis with a language model and can be wrong. "The cause behind every
-          decision" describes what Vera is built to do, not a guaranteed result — its outputs are
+          Asher generates analysis with a language model and can be wrong. "The cause behind every
+          decision" describes what Asher is built to do, not a guaranteed result — its outputs are
           information for you to weigh, not professional advice, and decisions you take after reading
           them remain yours. Verify anything consequential with a qualified professional. See{' '}
           <Link href="/privacy#no-advice" style={{ color: 'var(--lp-text-2)' }}>

@@ -277,7 +277,7 @@ export function CommandCentreSection() {
   );
 }
 
-/* ================================================================= 5. Why Vera */
+/* ================================================================= 5. Why Asher */
 
 function LayersArt() {
   return (
@@ -377,7 +377,7 @@ const PILLARS = [
     art: <CausalArt />,
     title: 'Causal intelligence',
     quote: 'Find causes, not correlations.',
-    body: 'Vera separates the thing that moved from the thing that moved with it, then shows you the path it followed to get there.',
+    body: 'Asher separates the thing that moved from the thing that moved with it, then shows you the path it followed to get there.',
   },
   {
     art: <LoopArt />,
@@ -393,7 +393,7 @@ export function PillarsSection() {
       <div className="lp-container">
         <Reveal>
           <div style={{ maxWidth: 620, marginBottom: 52 }}>
-            <div className="lp-eyebrow">Why Vera</div>
+            <div className="lp-eyebrow">Why Asher</div>
             <h2 className="lp-h2" style={{ marginTop: 20 }}>
               Three things a chat window structurally cannot do.
             </h2>
@@ -535,7 +535,7 @@ export function ReviewSection() {
               Your month, written up by something that was there for all of it.
             </h2>
             <p className="lp-lead" style={{ marginTop: 20 }}>
-              On the first of every month, Vera assembles a review from your real activity — what
+              On the first of every month, Asher assembles a review from your real activity — what
               won, what is quietly getting worse, and the one thing worth your attention next.
             </p>
           </div>

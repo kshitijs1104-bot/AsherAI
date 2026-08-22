@@ -72,7 +72,7 @@ function CompanyFile() {
           <div className="flex items-start justify-between gap-4 mb-5">
             <div className="min-w-0">
               <h2 className="m-0 text-[19px] font-bold leading-tight" style={{ color: 'var(--p-text)', letterSpacing: '-.026em' }}>
-                Vera Intelligence Ltd
+                Asher Intelligence Ltd
               </h2>
               <p className="m-0 mt-1.5 text-[13.5px] font-medium leading-[1.6] max-w-[62ch]" style={{ color: 'var(--p-text-2)' }}>
                 Causal analysis for founders — it traces what is actually driving the numbers, so every decision carries a reason behind it.
@@ -96,7 +96,7 @@ function CompanyFile() {
             </div>
             <Meter pct={completeness} />
             <p className="m-0 mt-2 text-[12px] font-semibold" style={{ color: 'var(--p-text-2)' }}>
-              {known.length} of {DOSSIER_FIELDS.length} fields known. Vera reasons with the gaps named, never filled in silently.
+              {known.length} of {DOSSIER_FIELDS.length} fields known. Asher reasons with the gaps named, never filled in silently.
             </p>
           </div>
 
@@ -124,7 +124,7 @@ function CompanyFile() {
                 {unknown.map((f) => f.label).join(' · ')}
               </p>
               <p className="m-0 mt-2 text-[12.5px] font-medium leading-[1.55]" style={{ color: 'var(--p-text-2)' }}>
-                Named on purpose. A founder should be able to see exactly where Vera is reasoning with a gap — that is the difference between a file and a marketing page.
+                Named on purpose. A founder should be able to see exactly where Asher is reasoning with a gap — that is the difference between a file and a marketing page.
               </p>
             </div>
           ) : null}
@@ -142,7 +142,7 @@ function CompanyFile() {
             Three questions would take this file to 100%
           </h3>
           <p className="m-0 mb-4 text-[13px] font-medium leading-[1.6] max-w-[62ch]" style={{ color: 'var(--p-text-2)' }}>
-            Each one changes an answer Vera is already giving you. Answer them in any order.
+            Each one changes an answer Asher is already giving you. Answer them in any order.
           </p>
           <div className="flex flex-col gap-2.5">
             {[
@@ -267,8 +267,8 @@ export function DossierStorage() {
         <Rise>
           <PageHead
             eyebrow="Dossier Storage"
-            title="The file Vera reasons from"
-            blurb="Everything Vera knows about your company, and everything it does not. Every answer you get is built on what is written here."
+            title="The file Asher reasons from"
+            blurb="Everything Asher knows about your company, and everything it does not. Every answer you get is built on what is written here."
             actions={
               <DossierTabSegmented
                 value={tab}
