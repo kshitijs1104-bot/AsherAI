@@ -1,0 +1,25 @@
+There is still a live bug: in a brand new chat (Command Center / Exploratory Analysis feature), asking "what's your name" returns:
+
+"I'm Vera, your AI advisor built to help founders with strategy, ideas, and decisions."
+
+This exact phrase does NOT match the system prompt already fixed in groq.ts ("the founder's most experienced advisor"). This means there is a SECOND, separate system prompt or persona definition somewhere in the codebase that was missed in the previous search — likely specific to this Command Center / Exploratory Analysis chat feature, which may use a different prompt-building function or route than the main chat.
+
+TASK:
+1. Search the ENTIRE codebase (frontend and api-server, all files, not just the ones previously reviewed) for the exact substrings:
+   - "AI advisor built to help founders"
+   - "strategy, ideas, and decisions"
+   - "I'm Vera"
+   - "your AI advisor"
+   Also search more broadly for any other occurrence of "Vera" in any .ts or .tsx file that wasn't part of the previous searches, in case there are multiple prompt-building files (e.g. a separate analysisPrompt.ts, explorationPrompt.ts, or similar feature-specific file).
+
+2. Also check: is there more than one place in the codebase that constructs a system prompt sent to the AI model? List every distinct system-prompt-building location you find (file + function name), not just the one in groq.ts. The bug suggests at least two exist.
+
+3. Also verify: was the Replit server/app actually restarted after the last edit to groq.ts? Sometimes changes to running Node processes don't take effect until restart. Check if a restart is needed and let me know.
+
+4. List every file and line where "Vera" appears in any persona/identity/system-prompt text, across the whole codebase, with surrounding context. Wait for my confirmation before editing.
+
+5. Once confirmed, replace "Vera" with "Asher" only in these persona/identity instruction strings, same rules as before — no other changes, no renaming of variables/files/routes, no db changes.
+
+6. Show me a diff-style summary of every file changed. Confirm whether a server restart is needed for the fix to appear live, and if so, restart it.
+
+Do not commit or push.
