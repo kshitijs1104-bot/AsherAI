@@ -82,6 +82,7 @@ type Palette = typeof DARK;
 const SOURCE_LABEL: Record<string, string> = {
   gmail: 'GMAIL', slack: 'SLACK', sheets: 'SHEETS', calendar: 'CALENDAR', notion: 'NOTION',
   jira: 'JIRA', linkedin: 'LINKEDIN', whatsapp: 'WHATSAPP', instant_action: 'QUICK ACTION',
+  vera: 'ASHER',
 };
 
 // Moved here from the Living Context bar, which used to carry the "what can
@@ -1193,7 +1194,7 @@ export function CommandCenterSection({ theme, onBack, onOpenThread, onContinueIn
                 <p className="vera-t-support" style={{ margin: '0 0 2px' }}>{dateLabel}</p>
                 <h1 className="vera-t-title" style={{ margin: '0 0 6px' }}>Today's {boardName}</h1>
                 <p className="vera-label" style={{ margin: 0 }}>
-                  EVERYTHING VERA DRAFTED, DECIDED, OR FOUND WHILE YOU WERE AWAY
+                  EVERYTHING ASHER DRAFTED, DECIDED, OR FOUND WHILE YOU WERE AWAY
                 </p>
                 <div style={{ marginTop: '16px' }}>
                   <QuickAddRow
