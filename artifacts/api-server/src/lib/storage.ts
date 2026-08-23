@@ -65,9 +65,15 @@ export const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
 // of letting a burst of large files exhaust the heap.
 export const UPLOAD_TMP_DIR = path.resolve(process.cwd(), "uploads", ".incoming");
 
-const SUPABASE_URL = process.env.SUPABASE_URL?.trim().replace(/\/+$/, "") ?? "";
+// Accept both the project URL and the Storage API URL. Operators commonly
+// copy the latter from a Supabase dashboard, and appending `/storage/v1` again
+// produces Supabase's opaque PGRST125 "Invalid path specified" response.
+const SUPABASE_URL = (process.env.SUPABASE_URL?.trim() ?? "")
+  .replace(/\/+$/, "")
+  .replace(/\/storage\/v1$/i, "")
+  .replace(/\/storage\/v1\/object$/i, "");
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
-const SUPABASE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET?.trim() ?? "";
+const SUPABASE_BUCKET = (process.env.SUPABASE_STORAGE_BUCKET?.trim() ?? "").replace(/^\/+|\/+$/g, "");
 
 const supabaseParts = [
   ["SUPABASE_URL", SUPABASE_URL],

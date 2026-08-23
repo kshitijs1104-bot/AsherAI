@@ -168,6 +168,19 @@ test('a partial config is refused rather than silently falling back to disk', ()
   );
 });
 
+test('normalises a Supabase Storage URL before constructing object paths', () => {
+  assert.match(
+    STORAGE_SRC,
+    /SUPABASE_URL[\s\S]{0,180}replace\(\/\\\/storage\\\/v1\$\/i, ""\)/,
+    'a URL copied with its /storage/v1 suffix must not produce a duplicated API path',
+  );
+  assert.match(
+    STORAGE_SRC,
+    /replace\(\/\\\/storage\\\/v1\\\/object\$\/i, ""\)/,
+    'a URL copied with its /storage/v1/object suffix must not produce a duplicated API path',
+  );
+});
+
 test('reads use the driver recorded on the row, never the active one', () => {
   // getObject/putText/deleteObject all take an explicit driver argument. If one
   // ever defaults to `activeDriver`, every file written before a storage switch
