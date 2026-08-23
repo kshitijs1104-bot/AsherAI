@@ -12,7 +12,6 @@ import { DossierPage } from "@/pages/Dossier";
 import { GoalsOverview } from "@/pages/GoalsOverview";
 import { DecisionsOverview } from "@/pages/DecisionsOverview";
 import { SettingsPage } from "@/pages/Settings";
-import { AccessRequestsPage } from "@/pages/AccessRequests";
 import { SkinPicker } from "@/pages/SkinPicker";
 import { LandingPage } from "@/pages/landing/Landing";
 // ---- The design prototype is a DEVELOPMENT-ONLY surface ----
@@ -46,10 +45,9 @@ import { PrivacyGate } from "@/pages/legal/PrivacyGate";
 import { PrivacyPolicyPage } from "@/pages/legal/PrivacyPolicyPage";
 import { CookieBanner } from "@/pages/legal/CookieBanner";
 import { usePrivacyAccepted, refreshFromServer } from "@/lib/privacyConsent";
-import { useAccessState, useProfile } from "@/lib/venusApi";
+import { useProfile } from "@/lib/venusApi";
 import { repairServerProfile } from "@/lib/enterpriseGate";
 import { guardAccountIdentity } from "@/lib/accountIsolation";
-import { WaitlistGate } from "@/pages/WaitlistGate";
 
 const queryClient = new QueryClient();
 
@@ -163,14 +161,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
     return <RedirectToSignIn signInFallbackRedirectUrl={returnTo} signUpFallbackRedirectUrl={returnTo} />;
   }
 
-  // Access before consent, deliberately: making somebody accept a privacy
-  // policy for a product they are not allowed into would be collecting an
-  // agreement for nothing.
-  return (
-    <RequireAccess>
-      <RequireConsent>{children}</RequireConsent>
-    </RequireAccess>
-  );
+  return <RequireConsent>{children}</RequireConsent>;
 }
 
 // ---- Consent is a condition on the product, not a step in the funnel ----
@@ -191,51 +182,6 @@ function RequireAuth({ children }: { children: ReactNode }) {
 // and the originally requested route appears underneath. Someone who signed up
 // and landed here continues to onboarding; someone who pasted a link gets the
 // link. Consent costs them their place in the queue, not their destination.
-// ---- Signup mode, checked once at the door ----
-//
-// In open mode (the default, and what ships) the server answers immediately
-// without a database read, so this is one trivial request and nothing else.
-// In waitlist mode an unapproved account gets the waiting room instead of the
-// product — and an APPROVED one, or anyone who was already using Vera before
-// the switch was flipped, notices nothing at all.
-//
-// Renders children while the check is in flight rather than blocking on it.
-// The gate exists to slow growth, not to put a spinner in front of founders
-// who already have access, and the server fails open for the same reason —
-// so the worst case of a slow or failed check is that somebody sees the app,
-// which is the correct direction for this particular thing to fail in.
-//
-// ONE PAGE IS NEVER GATED, AND IT IS THE ONE THAT UNDOES THE GATE.
-// /enterprise/access is where an operator approves people. Behind this gate it
-// was unreachable in exactly the situation it exists for: flip
-// VERA_SIGNUP_MODE=waitlist and the founder's own account — which has no
-// approved row, because nobody approved themselves — got the waiting room
-// instead of the approvals screen, leaving no way to let the first person in
-// short of writing SQL by hand.
-//
-// The server now also treats operators as always-allowed (see
-// routes/access.ts), so this is the second of two locks, not the only one. It
-// still earns its place: it is what keeps the page's "you are not in
-// OPERATOR_USER_IDS, here is how to fix it" message reachable. That message is
-// only ever needed by someone the server does NOT consider an operator — i.e.
-// precisely the person the server-side carve-out cannot help.
-//
-// Exposing the page costs nothing, because the page is not the authority.
-// Every endpoint it calls is guarded by requireOperator and answers 404 to
-// anyone else, so a waitlisted visitor who types the URL gets the same screen
-// telling them they are not an operator, and no data.
-const UNGATED_PATHS = ['/enterprise/access'];
-
-function RequireAccess({ children }: { children: ReactNode }) {
-  const { data } = useAccessState();
-
-  if (data && !data.allowed && !UNGATED_PATHS.some((p) => currentPath().startsWith(p))) {
-    return <WaitlistGate declined={data.status === 'declined'} />;
-  }
-
-  return <>{children}</>;
-}
-
 function RequireConsent({ children }: { children: ReactNode }) {
   const accepted = usePrivacyAccepted();
 
@@ -514,12 +460,6 @@ function Router() {
             {/* Settings is Vera's own — the business context attached to every
                 request, and the read-only company memory. */}
             <Route path="/settings" component={SettingsPage} />
-
-            {/* Operator-only in practice (the page itself checks whoami and
-                explains what's missing if you're not one) — same "reachable
-                by URL, not in the nav" precedent as /settings above. See
-                pages/AccessRequests.tsx. */}
-            <Route path="/enterprise/access" component={AccessRequestsPage} />
 
             {/* Reached only by a signed-in user with a bad path. A signed-out
                 one never gets here — RequireAuth sent them to Clerk. */}

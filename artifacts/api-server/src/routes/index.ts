@@ -18,7 +18,6 @@ import accountRouter from "./account";
 import operatorRouter from "./operator";
 import profileRouter from "./profile";
 import nudgesRouter from "./nudges";
-import accessRouter from "./access";
 
 // ---- Every route registered here is reachable from the live product ----
 //
@@ -77,9 +76,5 @@ router.use(profileRouter);
 // GET /nudges — what is genuinely unfinished for this founder right now. See
 // lib/nudges.ts for why nudges are derived per request and never stored.
 router.use(nudgesRouter);
-// GET /access/me + the operator half of the waitlist. Signup is OPEN unless
-// VERA_SIGNUP_MODE=waitlist, in which case new accounts are captured and told
-// where they stand rather than silently blocked. See routes/access.ts.
-router.use(accessRouter);
 
 export default router;
