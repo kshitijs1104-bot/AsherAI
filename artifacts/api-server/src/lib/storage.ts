@@ -223,9 +223,13 @@ async function supabaseFetch(url: string, init: RequestInit): Promise<Response> 
 // The response body is never returned to the caller: Supabase's error bodies
 // carry request ids and bucket internals, and every caller of this module
 // turns a failure into a fixed founder-facing sentence anyway.
-async function assertOk(res: Response, action: string, key: string): Promise<void> {
+async function assertOk(res: Response, action: string, key: string, options: { missingIsExpected?: boolean } = {}): Promise<void> {
   if (res.ok) return;
   const detail = await res.text().catch(() => "");
+  const missing = res.status === 404 || (res.status === 400 && /NoSuchKey|Object not found|not_found/i.test(detail));
+  if (missing && options.missingIsExpected) {
+    throw new Error("Stored object is missing");
+  }
   logger.error({ action, key, status: res.status, detail: detail.slice(0, 300) }, "Supabase Storage request failed");
   throw new Error(`Storage ${action} failed with status ${res.status}`);
 }
@@ -278,7 +282,11 @@ export async function getObject(key: string, driver: StorageDriver): Promise<Buf
 /** Small text objects (the extraction sidecar). Null when absent or unreadable. */
 export async function getText(key: string, driver: StorageDriver): Promise<string | null> {
   try {
-    return (await getObject(key, driver)).toString("utf8");
+    if (driver === "local") return (await getObject(key, driver)).toString("utf8");
+    assertStorageAvailable();
+    const res = await supabaseFetch(supabaseObjectUrl(key), { method: "GET" });
+    await assertOk(res, "download", key, { missingIsExpected: true });
+    return Buffer.from(await res.arrayBuffer()).toString("utf8");
   } catch {
     return null;
   }

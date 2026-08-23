@@ -406,6 +406,14 @@ async function ensureDossierTable(): Promise<void> {
     )
   `);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS company_dossiers_user_id_idx ON company_dossiers (user_id)`);
+  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS profile_id integer`);
+  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS source_label text`);
+  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS extracted_json text`);
+  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS questions_json text`);
+  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS answers_json text NOT NULL DEFAULT '{}'`);
+  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'draft'`);
+  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now()`);
+  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS updated_at timestamp DEFAULT now()`);
   dossierTableEnsured = true;
 }
 

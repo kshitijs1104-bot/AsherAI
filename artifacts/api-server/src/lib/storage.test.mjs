@@ -184,6 +184,11 @@ test('normalises a Supabase Storage URL before constructing object paths', () =>
     /new URL\(apiPath, [\s\S]{0,40}SUPABASE_URL/,
     'the request path must replace, rather than concatenate with, any URL path supplied in SUPABASE_URL',
   );
+  assert.match(
+    STORAGE_SRC,
+    /missingIsExpected[\s\S]{0,260}NoSuchKey/,
+    'missing extraction sidecars must be treated as cache misses rather than logged storage failures',
+  );
 });
 
 test('reads use the driver recorded on the row, never the active one', () => {
