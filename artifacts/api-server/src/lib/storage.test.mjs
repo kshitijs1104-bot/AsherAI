@@ -179,6 +179,11 @@ test('normalises a Supabase Storage URL before constructing object paths', () =>
     /replace\(\/\\\/storage\\\/v1\\\/object\$\/i, ""\)/,
     'a URL copied with its /storage/v1/object suffix must not produce a duplicated API path',
   );
+  assert.match(
+    STORAGE_SRC,
+    /new URL\(apiPath, [\s\S]{0,40}SUPABASE_URL/,
+    'the request path must replace, rather than concatenate with, any URL path supplied in SUPABASE_URL',
+  );
 });
 
 test('reads use the driver recorded on the row, never the active one', () => {

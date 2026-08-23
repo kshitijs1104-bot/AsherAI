@@ -176,11 +176,17 @@ function localPathFor(key: string): string {
 
 const SUPABASE_TIMEOUT_MS = 20_000;
 
+function supabaseApiUrl(apiPath: string): string {
+  // The pathname starts with `/`, so URL parsing discards any path/query a
+  // deployment may have included in SUPABASE_URL instead of concatenating it.
+  return new URL(apiPath, `${SUPABASE_URL}/`).toString();
+}
+
 function supabaseObjectUrl(key: string): string {
   // Each segment encoded separately so a key containing a slash stays a path
   // and never collapses into one escaped component.
   const encoded = key.split("/").map(encodeURIComponent).join("/");
-  return `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(SUPABASE_BUCKET)}/${encoded}`;
+  return supabaseApiUrl(`/storage/v1/object/${encodeURIComponent(SUPABASE_BUCKET)}/${encoded}`);
 }
 
 async function supabaseFetch(url: string, init: RequestInit): Promise<Response> {
@@ -333,7 +339,10 @@ export async function storageHealthy(): Promise<boolean> {
     }
   }
   try {
-    const res = await supabaseFetch(`${SUPABASE_URL}/storage/v1/bucket/${encodeURIComponent(SUPABASE_BUCKET)}`, { method: "GET" });
+    const res = await supabaseFetch(
+      supabaseApiUrl(`/storage/v1/bucket/${encodeURIComponent(SUPABASE_BUCKET)}`),
+      { method: "GET" },
+    );
     return res.ok;
   } catch {
     return false;
