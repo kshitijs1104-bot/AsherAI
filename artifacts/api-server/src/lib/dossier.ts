@@ -1,6 +1,6 @@
 import type Groq from "groq-sdk";
 import { db, companyDossiersTable, type CompanyDossier } from "@workspace/db";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { callGroqJSON, estimateTokens, tpmLimitForModel, NAMED_ENTITY_GUARD, TPM_SAFETY_MARGIN } from "./groq";
 
 // ---- The Dossier: intake, gap-finding, and the company file ----
@@ -375,48 +375,6 @@ export async function getDossier(userId: string, profileId: number | null): Prom
   }
 }
 
-// The deployed schema is applied by hand (`pnpm --filter @workspace/db run
-// push`), and company_dossiers is the newest table in it — so it is exactly
-// the one that can be missing from a database provisioned before the Dossier
-// shipped. The symptom of that was the worst available: intake ran, both
-// model calls were paid for, and the founder was told "built the file but
-// couldn't save it". Created on demand instead, once per process. IF NOT
-// EXISTS makes it a no-op everywhere push has been run, and the column list
-// mirrors lib/db/src/schema/company_dossiers.ts exactly.
-//
-// The unique index on (user_id, profile_id) is deliberately NOT recreated
-// here: saveDossier no longer relies on it (see below), and a CREATE UNIQUE
-// on a table that already has duplicate rows would fail on every save.
-let dossierTableEnsured = false;
-async function ensureDossierTable(): Promise<void> {
-  if (dossierTableEnsured) return;
-  await db.execute(sql`
-    CREATE TABLE IF NOT EXISTS company_dossiers (
-      id serial PRIMARY KEY,
-      user_id text NOT NULL,
-      profile_id integer,
-      source_text text NOT NULL,
-      source_label text,
-      extracted_json text NOT NULL,
-      questions_json text NOT NULL,
-      answers_json text NOT NULL DEFAULT '{}',
-      status text NOT NULL DEFAULT 'draft',
-      created_at timestamp DEFAULT now(),
-      updated_at timestamp DEFAULT now()
-    )
-  `);
-  await db.execute(sql`CREATE INDEX IF NOT EXISTS company_dossiers_user_id_idx ON company_dossiers (user_id)`);
-  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS profile_id integer`);
-  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS source_label text`);
-  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS extracted_json text`);
-  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS questions_json text`);
-  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS answers_json text NOT NULL DEFAULT '{}'`);
-  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'draft'`);
-  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now()`);
-  await db.execute(sql`ALTER TABLE company_dossiers ADD COLUMN IF NOT EXISTS updated_at timestamp DEFAULT now()`);
-  dossierTableEnsured = true;
-}
-
 /**
  * Writes the founder's company file. Throws on a real database failure rather
  * than returning null — the caller needs to be able to say WHY, because "try
@@ -431,8 +389,6 @@ export async function saveDossier(input: {
   extraction: DossierExtraction;
   questions: DossierQuestion[];
 }): Promise<CompanyDossier> {
-  await ensureDossierTable();
-
   const values = {
     userId: input.userId,
     profileId: input.profileId,
@@ -503,8 +459,6 @@ export async function saveDossierAnswers(
   dossierId: number,
   answers: Record<string, string>,
 ): Promise<CompanyDossier | null> {
-  await ensureDossierTable();
-
   const [existing] = await db
     .select()
     .from(companyDossiersTable)
