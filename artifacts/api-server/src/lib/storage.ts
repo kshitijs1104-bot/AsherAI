@@ -51,7 +51,8 @@ import { logger } from "./logger";
    FAIL-CLOSED CONFIG. Supabase is used only when ALL THREE of its variables
    are present. A half-configured deployment silently falling back to a disk
    that gets discarded is exactly the failure this file exists to remove, so a
-   partially-set configuration is a fatal boot error, not a fallback.
+   partially-set configuration disables attachments outright — see the second
+   block below for why it disables the FEATURE and no longer the whole server.
 --------------------------------------------------------------------------- */
 
 export type StorageDriver = "local" | "supabase";
@@ -76,20 +77,70 @@ const supabaseParts = [
 
 const supabaseSet = supabaseParts.filter(([, v]) => v.length > 0);
 
-if (supabaseSet.length > 0 && supabaseSet.length < supabaseParts.length) {
-  throw new Error(
-    "Supabase Storage is partially configured — set all three or none of: " +
-      supabaseParts.map(([k]) => k).join(", ") +
-      ". Missing: " +
-      supabaseParts.filter(([, v]) => !v).map(([k]) => k).join(", ") +
-      ". Refusing to start rather than silently writing founder uploads to a disk that gets discarded on redeploy.",
-  );
+const partiallyConfigured = supabaseSet.length > 0 && supabaseSet.length < supabaseParts.length;
+
+/* ---------------------------------------------------------------------------
+   A HALF-CONFIGURED BUCKET DISABLES ATTACHMENTS. IT NO LONGER DISABLES VERA.
+
+   THE FAILURE THIS FIXES, and it is the expensive one. The three lines above
+   used to end in a bare `throw` at module scope. storage.ts is imported by
+   routes/attachments.ts, which is imported by the route index, which is
+   imported by app.ts — so the throw happened during module evaluation, before
+   the logger was attached to anything and before the port was bound. The whole
+   API refused to boot. Every route, not just uploads: sign-in, /access/me, the
+   operator surface, chat. One mistyped Secret out of three and the product was
+   down with a stack trace that named a storage file, which reads as "Supabase
+   is broken" rather than "one of these three values is missing".
+
+   The reasoning for failing closed was right and is kept: the alternative it
+   was written against — silently falling back to a local disk that Replit
+   discards on every redeploy — loses founders' uploaded documents while still
+   showing them in the UI. That must not happen.
+
+   What was wrong was the BLAST RADIUS, not the direction. Attachments are one
+   feature. Taking the entire product offline to protect it is not a safer
+   choice than turning that feature off, it is a louder version of the same
+   outage. So a partial configuration now:
+
+     - refuses to serve attachments, loudly, with the missing variable named;
+     - never writes to the ephemeral disk, so the data-loss guarantee holds;
+     - leaves every other route working.
+
+   Reads of EXISTING attachments are refused too, deliberately. Half a config
+   usually means the wrong project or a rotated key, and answering a read with
+   "not found" from the local disk when the file is really in a bucket this
+   process cannot reach is how a configuration mistake gets mistaken for data
+   loss and acted on.
+--------------------------------------------------------------------------- */
+
+/** Non-null when storage is misconfigured; the sentence an operator needs. */
+export const storageUnavailableReason: string | null = partiallyConfigured
+  ? "Supabase Storage is partially configured — set all three or none of: " +
+    supabaseParts.map(([k]) => k).join(", ") +
+    ". Missing: " +
+    supabaseParts.filter(([, v]) => !v).map(([k]) => k).join(", ") +
+    ". Attachments are disabled until this is fixed; nothing is being written to the local disk, because on this host that disk is discarded on every redeploy."
+  : null;
+
+if (storageUnavailableReason) {
+  logger.error({ missing: supabaseParts.filter(([, v]) => !v).map(([k]) => k) }, storageUnavailableReason);
+}
+
+/** Throws the operator-readable reason if storage is not usable at all. */
+export function assertStorageAvailable(): void {
+  if (storageUnavailableReason) throw new Error(storageUnavailableReason);
 }
 
 /** The driver NEW uploads are written with. Existing rows carry their own. */
 export const activeDriver: StorageDriver = supabaseSet.length === supabaseParts.length ? "supabase" : "local";
 
-if (activeDriver === "local") {
+if (storageUnavailableReason) {
+  // Deliberately says nothing about a driver. `activeDriver` still computes to
+  // "local" in this state — it has no third value — and announcing "using the
+  // LOCAL disk driver" right under the error would contradict it, telling an
+  // operator that uploads are landing on disk when they are being refused.
+  logger.warn("Attachment uploads and downloads are DISABLED until the storage configuration above is fixed. Everything else is running normally.");
+} else if (activeDriver === "local") {
   logger.warn(
     "Attachment storage is using the LOCAL disk driver. On an ephemeral or autoscaled host, uploaded files are lost on every redeploy and are invisible to other instances. Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and SUPABASE_STORAGE_BUCKET to use object storage.",
   );
@@ -178,6 +229,7 @@ async function assertOk(res: Response, action: string, key: string): Promise<voi
  * directory growing.
  */
 export async function putFromTempFile(key: string, tempPath: string, contentType: string): Promise<StorageDriver> {
+  assertStorageAvailable();
   if (activeDriver === "local") {
     const dest = localPathFor(key);
     await fsp.mkdir(path.dirname(dest), { recursive: true });
@@ -203,6 +255,7 @@ export async function putFromTempFile(key: string, tempPath: string, contentType
 
 /** Reads an object written by `driver`. Throws if it is not there. */
 export async function getObject(key: string, driver: StorageDriver): Promise<Buffer> {
+  assertStorageAvailable();
   if (driver === "local") return fsp.readFile(localPathFor(key));
 
   const res = await supabaseFetch(supabaseObjectUrl(key), { method: "GET" });
@@ -220,6 +273,7 @@ export async function getText(key: string, driver: StorageDriver): Promise<strin
 }
 
 export async function putText(key: string, driver: StorageDriver, body: string): Promise<void> {
+  assertStorageAvailable();
   if (driver === "local") {
     const dest = localPathFor(key);
     await fsp.mkdir(path.dirname(dest), { recursive: true });
@@ -240,6 +294,7 @@ export async function putText(key: string, driver: StorageDriver, body: string):
  * founder asked to have deleted. Returns whether something was actually gone.
  */
 export async function deleteObject(key: string, driver: StorageDriver): Promise<boolean> {
+  assertStorageAvailable();
   try {
     if (driver === "local") {
       await fsp.unlink(localPathFor(key));
@@ -262,6 +317,7 @@ export async function deleteObject(key: string, driver: StorageDriver): Promise<
  * or a deleted bucket is visible before a founder discovers it by uploading.
  */
 export async function storageHealthy(): Promise<boolean> {
+  if (storageUnavailableReason) return false;
   if (activeDriver === "local") {
     try {
       await fsp.access(UPLOADS_DIR, fs.constants.W_OK);
@@ -279,6 +335,7 @@ export async function storageHealthy(): Promise<boolean> {
 }
 
 export function ensureLocalDirs(): void {
+  if (storageUnavailableReason) return;
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   fs.mkdirSync(UPLOAD_TMP_DIR, { recursive: true });
 }

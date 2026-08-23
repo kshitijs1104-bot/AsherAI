@@ -120,8 +120,20 @@ router.post("/dossier", requireAuth, async (req, res) => {
     const groq = getGroqClient();
     if (!groq) return res.status(400).json({ error: "No Groq API key configured — add one in Settings" });
 
-    const extraction = await extractDossier(groq, sourceText);
+    const { extraction, errorType } = await extractDossier(groq, sourceText);
     if (!extraction) {
+      // TWO DIFFERENT FAILURES, TWO DIFFERENT SENTENCES. These used to share
+      // one message that blamed the document ("try again, or paste a bit more
+      // detail") — including when the real cause was the free-tier rate
+      // limit, which no amount of pasting more detail can fix. A founder
+      // reading that swaps in another deck, gets the same line, and concludes
+      // the feature does not work with any file. It was never about the file.
+      if (errorType === "transient") {
+        return res.status(429).json({
+          error:
+            "Vera's model hit its per-minute limit while reading that — this is a capacity limit on our side, not a problem with your document. Wait about a minute and press build again; nothing you uploaded was lost.",
+        });
+      }
       return res.status(502).json({ error: "Couldn't build the file from that — try again, or paste a bit more detail." });
     }
 

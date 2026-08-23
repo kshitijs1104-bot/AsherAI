@@ -204,10 +204,32 @@ function RequireAuth({ children }: { children: ReactNode }) {
 // who already have access, and the server fails open for the same reason —
 // so the worst case of a slow or failed check is that somebody sees the app,
 // which is the correct direction for this particular thing to fail in.
+//
+// ONE PAGE IS NEVER GATED, AND IT IS THE ONE THAT UNDOES THE GATE.
+// /enterprise/access is where an operator approves people. Behind this gate it
+// was unreachable in exactly the situation it exists for: flip
+// VERA_SIGNUP_MODE=waitlist and the founder's own account — which has no
+// approved row, because nobody approved themselves — got the waiting room
+// instead of the approvals screen, leaving no way to let the first person in
+// short of writing SQL by hand.
+//
+// The server now also treats operators as always-allowed (see
+// routes/access.ts), so this is the second of two locks, not the only one. It
+// still earns its place: it is what keeps the page's "you are not in
+// OPERATOR_USER_IDS, here is how to fix it" message reachable. That message is
+// only ever needed by someone the server does NOT consider an operator — i.e.
+// precisely the person the server-side carve-out cannot help.
+//
+// Exposing the page costs nothing, because the page is not the authority.
+// Every endpoint it calls is guarded by requireOperator and answers 404 to
+// anyone else, so a waitlisted visitor who types the URL gets the same screen
+// telling them they are not an operator, and no data.
+const UNGATED_PATHS = ['/enterprise/access'];
+
 function RequireAccess({ children }: { children: ReactNode }) {
   const { data } = useAccessState();
 
-  if (data && !data.allowed) {
+  if (data && !data.allowed && !UNGATED_PATHS.some((p) => currentPath().startsWith(p))) {
     return <WaitlistGate declined={data.status === 'declined'} />;
   }
 

@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 
 // Run with:  node node_modules/tsx/dist/cli.mjs src/lib/storage.test.mjs
 //
@@ -86,14 +88,83 @@ test('deleteObject never throws, so one missing file cannot abort a cascade', as
   assert.equal(escaped, false);
 });
 
-test('Supabase configuration is all-or-nothing', () => {
-  // A half-configured deployment must refuse to boot rather than silently
-  // falling back to a disk that gets discarded — that fallback is the exact
-  // failure this module exists to remove, and it would be invisible.
+test('a half-configured bucket disables attachments without taking the server down', async () => {
+  /* A partial SUPABASE_* configuration has to do two things AT ONCE, and the
+     first version of this rule only did the second:
+
+       - it must never fall back to the local disk, because on an autoscale
+         host that disk is discarded on redeploy and the founder's document is
+         gone while the UI still lists it;
+       - it must not stop the rest of the API from working. It used to `throw`
+         at module scope, which aborted boot for every route — sign-in,
+         /access/me, the operator surface — over one mistyped Secret out of
+         three.
+
+     Checked in a CHILD PROCESS rather than in this one because storage.ts
+     reads its environment once at import time and the module is then cached;
+     there is no way to re-import it under different env in-process. The child
+     imports the module, then reports what it observed. */
+
+  const probe = `
+    const s = await import(${JSON.stringify(new URL('./storage.ts', import.meta.url).href)});
+    let rejected = false;
+    try { await s.putFromTempFile('k', 'tmp', 'text/plain'); } catch { rejected = true; }
+    // Marker-delimited: the module logs its own (pretty-printed) warning to
+    // stdout on import, so the result cannot just be "the last line".
+    console.log('__PROBE__' + JSON.stringify({
+      imported: true,
+      reason: s.storageUnavailableReason,
+      rejected,
+      healthy: await s.storageHealthy(),
+    }));
+  `;
+
+  // Written to a file rather than passed with `-e`: tsx's loader refuses
+  // --input-type=module, so an inline script cannot use `await import`.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vera-storage-probe-'));
+  const probePath = path.join(dir, 'probe.mjs');
+  fs.writeFileSync(probePath, probe, 'utf8');
+
+  let child;
+  try {
+    child = spawnSync(process.execPath, ['--import', 'tsx', probePath], {
+      encoding: 'utf8',
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        // Two of three: the exact shape that used to abort boot.
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 'sb_secret_test',
+        SUPABASE_STORAGE_BUCKET: '',
+      },
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  assert.equal(
+    child.status,
+    0,
+    `importing storage.ts with a partial config must not abort the process. stderr:\n${child.stderr}`,
+  );
+
+  const marked = child.stdout.split(/\r?\n/).find((l) => l.includes('__PROBE__'));
+  assert.ok(marked, `probe produced no result.\nstdout:\n${child.stdout}\nstderr:\n${child.stderr}`);
+  const out = JSON.parse(marked.slice(marked.indexOf('__PROBE__') + '__PROBE__'.length));
+
+  assert.ok(out.reason, 'a partial config must expose storageUnavailableReason');
+  assert.match(out.reason, /SUPABASE_STORAGE_BUCKET/, 'the reason must name the variable that is missing');
+  assert.ok(out.rejected, 'writes must be refused rather than falling back to the local disk');
+  assert.equal(out.healthy, false, 'storageHealthy must report the misconfiguration');
+});
+
+test('a partial config is refused rather than silently falling back to disk', () => {
+  // The direction of the failure, asserted on the source: nothing may quietly
+  // choose the local driver when SUPABASE_* is half-set.
   assert.match(
     STORAGE_SRC,
-    /partially configured[\s\S]{0,200}Refusing to start/,
-    'storage.ts must throw when only some SUPABASE_* variables are set',
+    /partiallyConfigured[\s\S]{0,600}storageUnavailableReason/,
+    'storage.ts must derive an unavailable-reason from a partial configuration',
   );
 });
 
