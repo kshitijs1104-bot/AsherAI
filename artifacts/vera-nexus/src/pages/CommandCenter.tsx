@@ -10,6 +10,7 @@ import { ActivityWeek } from './ActivityWeek';
 import { getSavedAnalyses, typeLabel, type SavedAnalysis, type SavedAnalysisType, type ChatMessage } from '../lib/venusHistory';
 import {
   useQueue, useQueueAction, useDailyBrief, useRunInstantAction, useConnectors, useDecisions,
+  useQueueResolveMessage, useQueueResolveConfirm,
   startConnectorAuth,
   type QueueItem, type InstantActionType, type DailyBriefStats, type ConnectorStatus,
 } from '../lib/venusApi';
@@ -165,6 +166,60 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+function ScopedQueueResolver({ item, palette, onDone }: { item: QueueItem; palette: Palette; onDone: () => void }) {
+  const [input, setInput] = useState('');
+  const [history, setHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [proposal, setProposal] = useState<import('../lib/venusApi').QueueResolveProposal | null>(null);
+  const resolve = useQueueResolveMessage();
+  const confirm = useQueueResolveConfirm();
+
+  const send = () => {
+    const message = input.trim();
+    if (!message || resolve.isPending || confirm.isPending) return;
+    setInput('');
+    const nextHistory = [...history, { role: 'user' as const, content: message }];
+    setHistory(nextHistory);
+    resolve.mutate({ id: item.id, message, history }, {
+      onSuccess: (result) => {
+        setHistory((current) => [...current, { role: 'assistant', content: result.assistant }]);
+        setProposal(result.proposal);
+      },
+    });
+  };
+
+  const approve = () => {
+    if (!proposal || confirm.isPending) return;
+    confirm.mutate({ id: item.id, proposal }, { onSuccess: onDone });
+  };
+
+  return (
+    <div style={{ marginTop: '12px', padding: '12px', background: palette.paperEdge, border: `1px solid ${palette.tealBorder}`, borderRadius: '6px' }}>
+      <div style={{ fontFamily: "var(--v7-font-mono, 'IBM Plex Mono', monospace)", fontSize: '10px', color: palette.faint, marginBottom: '8px' }}>
+        ASHER RESOLVER · {item.type}
+      </div>
+      {history.filter((message) => message.role === 'assistant').map((message, index) => <p key={index} style={{ fontSize: '12px', color: palette.muted, margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>{message.content}</p>)}
+      {proposal && (
+        <div style={{ marginBottom: '8px', padding: '8px', borderLeft: `2px solid ${palette.teal}`, fontSize: '11px', color: palette.text }}>
+          <strong>Ready to run: {proposal.name}</strong>
+          <pre style={{ whiteSpace: 'pre-wrap', margin: '4px 0 0', color: palette.muted }}>{JSON.stringify(proposal.arguments, null, 2)}</pre>
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <button type="button" onClick={approve} {...actionProps(palette, false, true)}>{confirm.isPending ? 'Working…' : 'Confirm and run'}</button>
+            <button type="button" onClick={() => setProposal(null)} {...actionProps(palette, true, true)}>Change</button>
+          </div>
+        </div>
+      )}
+      {resolve.data?.unavailable && <p style={{ fontSize: '12px', color: palette.coral, margin: '0 0 8px' }}>Asher can’t automate this type yet.</p>}
+      {resolve.isError && <p style={{ fontSize: '11px', color: palette.coral, margin: '0 0 8px' }}>{resolve.error instanceof Error ? resolve.error.message : 'Could not prepare a resolution.'}</p>}
+      {confirm.isError && <p style={{ fontSize: '11px', color: palette.coral, margin: '0 0 8px' }}>{confirm.error instanceof Error ? confirm.error.message : 'The action failed; this item remains pending.'}</p>}
+      <form onSubmit={(event) => { event.preventDefault(); send(); }} style={{ display: 'flex', gap: '6px' }}>
+        <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="What should Asher resolve?" style={{ flex: 1, minWidth: 0, background: palette.paper, border: `1px solid ${palette.line}`, borderRadius: '4px', padding: '7px 8px', color: palette.text, font: 'inherit', fontSize: '12px' }} />
+        <button type="submit" disabled={!input.trim() || resolve.isPending} {...actionProps(palette, false, true)}>{resolve.isPending ? 'Thinking…' : 'Send'}</button>
+        <button type="button" onClick={onDone} {...actionProps(palette, true, true)}>Close</button>
+      </form>
+    </div>
+  );
+}
+
 function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
   item: QueueItem;
   palette: Palette;
@@ -225,12 +280,7 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
   // only marks the row resolved once the founder is on the page that can
   // actually fix it.
   const handleResolve = () => {
-    if (resolution) {
-      action.mutate({ id: item.id, action: 'accept' });
-      navigate(resolution.href);
-      return;
-    }
-    action.mutate({ id: item.id, action: 'accept' });
+    setResolving(true);
   };
 
   // Accepting one of these doesn't just tidy the board — it saves a real
@@ -243,13 +293,12 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
   // which promised an outward action that was never going to happen.
   const outbound = plan.kind === 'send' ? outboundTargetFor(item) : null;
   const [confirmingSend, setConfirmingSend] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
   const handleAccept = () => {
-    if (outbound && !confirmingSend) { setConfirmingSend(true); return; }
-    setConfirmingSend(false);
-    action.mutate({ id: item.id, action: 'accept' });
+    setResolving(true);
   };
-  const handleReject = () => action.mutate({ id: item.id, action: 'reject' });
+  const handleReject = () => action.mutate({ id: item.id, action: 'dismiss' });
   // Saving an edit sends too — the server treats 'edited' exactly like
   // 'accept' for the purposes of actually performing the action — so it
   // needs the same confirmation step as Accept does.
@@ -425,7 +474,7 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
                     {resolution ? resolution.label : meta.acceptLabel}
                   </button>
                 )}
-                {item.draftContent && <button type="button" onClick={() => setEditing(true)} {...actionProps(palette, true, skinned)}>Edit</button>}
+                {item.draftContent && item.type !== 'draft_reply' && <button type="button" onClick={() => setEditing(true)} {...actionProps(palette, true, skinned)}>Edit</button>}
                 {/* The decisions section was read-only: it named a decision
                     and offered no way back to the conversation it came out
                     of, which is the only place its context lives. */}
@@ -439,6 +488,9 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
               )
             )}
           </div>
+        )}
+        {!isDone && resolving && (
+          <ScopedQueueResolver item={item} palette={palette} onDone={() => setResolving(false)} />
         )}
         {action.isError && (
           <div style={{ fontSize: '11px', marginTop: '6px', color: palette.coral }}>
@@ -764,6 +816,7 @@ function resolutionLabel(status: string, meta: CategoryMeta): string {
   if (status === 'accepted') return meta.acceptedLabel;
   if (status === 'edited') return meta.editedLabel;
   if (status === 'rejected') return meta.rejectedLabel;
+  if (status === 'dismissed') return 'DISMISSED';
   return status.toUpperCase();
 }
 

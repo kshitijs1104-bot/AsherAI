@@ -252,7 +252,7 @@ export function useDailyBrief() {
 
 // ---- Command Center queue ----
 
-export type QueueItemStatus = 'pending' | 'accepted' | 'edited' | 'rejected';
+export type QueueItemStatus = 'pending' | 'accepted' | 'edited' | 'rejected' | 'dismissed';
 
 export interface QueueItem {
   id: number;
@@ -308,7 +308,7 @@ export function useMarkQueueSeen() {
 export function useQueueAction() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: number; action: 'accept' | 'edit' | 'reject'; editedContent?: string }) =>
+    mutationFn: (input: { id: number; action: 'accept' | 'edit' | 'reject' | 'dismiss'; editedContent?: string }) =>
       apiFetch<{ item: QueueItem }>(`/api/queue/${input.id}/action`, {
         method: 'POST',
         body: JSON.stringify({ action: input.action, edited_content: input.editedContent }),
@@ -316,6 +316,39 @@ export function useQueueAction() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/queue'] });
     },
+  });
+}
+
+export interface QueueResolveProposal {
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface QueueResolveResponse {
+  assistant: string;
+  proposal: QueueResolveProposal | null;
+  unavailable: boolean;
+}
+
+export function useQueueResolveMessage() {
+  return useMutation({
+    mutationFn: (input: { id: number; message: string; history?: { role: 'user' | 'assistant'; content: string }[] }) =>
+      apiFetch<QueueResolveResponse>(`/api/queue/${input.id}/resolve/message`, {
+        method: 'POST',
+        body: JSON.stringify({ message: input.message, history: input.history ?? [] }),
+      }),
+  });
+}
+
+export function useQueueResolveConfirm() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: number; proposal: QueueResolveProposal }) =>
+      apiFetch<{ item: QueueItem; result: unknown }>(`/api/queue/${input.id}/resolve/confirm`, {
+        method: 'POST',
+        body: JSON.stringify({ name: input.proposal.name, arguments: input.proposal.arguments }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/queue'] }),
   });
 }
 
