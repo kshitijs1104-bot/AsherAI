@@ -9,6 +9,8 @@ import { performQueueItemSendAction } from "../lib/connectors/sendAction";
 import { countUnseen, markQueueSeen } from "../lib/dailyDigest";
 import { getNudgesFor, markNudgesShown } from "../lib/nudges";
 import { logger } from "../lib/logger";
+import { getGroqClient } from "../lib/groq";
+import { executeQueueResolveTool, QUEUE_RESOLVE_TOOLS } from "../lib/queueResolveTools";
 
 const router = Router();
 
@@ -171,7 +173,7 @@ router.get("/queue", requireAuth, async (req, res) => {
 });
 
 const ActionBody = z.object({
-  action: z.enum(["accept", "edit", "reject"]),
+  action: z.enum(["accept", "edit", "reject", "dismiss"]),
   edited_content: z.string().optional(),
 });
 
@@ -180,7 +182,7 @@ router.post("/queue/:id/action", requireAuth, async (req, res) => {
   if (!Number.isFinite(itemId)) return res.status(400).json({ error: "Invalid queue item id" });
 
   const body = ActionBody.safeParse(req.body);
-  if (!body.success) return res.status(400).json({ error: "action must be accept, edit, or reject" });
+  if (!body.success) return res.status(400).json({ error: "action must be accept, edit, reject, or dismiss" });
   if (body.data.action === "edit" && !body.data.edited_content?.trim()) {
     return res.status(400).json({ error: "edited_content is required for an edit action" });
   }
@@ -195,7 +197,14 @@ router.post("/queue/:id/action", requireAuth, async (req, res) => {
     if (!owned) return res.status(404).json({ error: "Queue item not found" });
     if (owned.status !== "pending") return res.status(400).json({ error: "Queue item already resolved" });
 
-    const status = body.data.action === "accept" ? "accepted" : body.data.action === "reject" ? "rejected" : "edited";
+    // Drafts are now resolved only through the scoped, confirm-first AI flow.
+    // Keeping this guard prevents the legacy Accept path from sending beside
+    // the new confirmation step.
+    if ((body.data.action === "accept" || body.data.action === "edit") && owned.type === "draft_reply") {
+      return res.status(409).json({ error: "Draft replies must be resolved through the confirmed Asher flow" });
+    }
+
+    const status = body.data.action === "accept" ? "accepted" : body.data.action === "reject" ? "rejected" : body.data.action === "dismiss" ? "dismissed" : "edited";
     const finalDraftContent = body.data.action === "edit" ? body.data.edited_content! : owned.draftContent;
 
     // Accept/edit is the moment a queue item stops being "a suggestion in
@@ -232,6 +241,83 @@ router.post("/queue/:id/action", requireAuth, async (req, res) => {
     // is answered generically.
     const status = isUserFacingError(err) ? err.status : 500;
     return res.status(status).json({ error: messageForCaller(err, describeDbError(err)) });
+  }
+});
+
+const ResolveMessageBody = z.object({
+  message: z.string().trim().min(1).max(20000),
+  history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(20000) })).max(20).default([]),
+});
+
+// Only types with a real backing mutation are eligible for Asher resolution.
+// Poll/read-only types must produce an explicit limitation, never a guessed
+// connector action or a silent no-op.
+const RESOLVABLE_TYPES = new Set(["draft_reply", "goal_risk"]);
+
+async function loadOwnedQueueItem(userId: string, itemId: number) {
+  const [item] = await db.select().from(queueItemsTable).where(and(eq(queueItemsTable.id, itemId), eq(queueItemsTable.userId, userId))).limit(1);
+  return item;
+}
+
+router.post("/queue/:id/resolve/message", requireAuth, async (req, res) => {
+  const itemId = Number(req.params.id);
+  const body = ResolveMessageBody.safeParse(req.body);
+  if (!Number.isFinite(itemId) || !body.success) return res.status(400).json({ error: "A queue item id and non-empty message are required" });
+
+  try {
+    const userId = requireUserId(req);
+    const item = await loadOwnedQueueItem(userId, itemId);
+    if (!item) return res.status(404).json({ error: "Queue item not found" });
+    if (item.status !== "pending") return res.status(400).json({ error: "Queue item already resolved" });
+    if (!RESOLVABLE_TYPES.has(item.type)) return res.json({ assistant: "Asher can't automate this type yet.", proposal: null, unavailable: true });
+
+    const groq = getGroqClient();
+    if (!groq) return res.status(503).json({ error: "Asher is not configured" });
+    const context = `Queue item id: ${item.id}\nType: ${item.type}\nSource: ${item.source}\nTitle: ${item.title}\nBody: ${item.body}\nDraft: ${item.draftContent ?? "none"}\nMetadata: ${item.metadataJson ?? "none"}`;
+    const completion = await groq.chat.completions.create({
+      model: "openai/gpt-oss-120b",
+      temperature: 0.2,
+      max_tokens: 1200,
+      messages: [
+        { role: "system", content: `You are resolving exactly one Command Center queue item. Use only the listed tools. Never claim an unsupported queue type can be automated. Ask one concise clarification when required information is missing. Do not execute anything; propose a tool call for the founder to confirm. Context:\n${context}` },
+        ...body.data.history,
+        { role: "user", content: body.data.message },
+      ],
+      tools: QUEUE_RESOLVE_TOOLS,
+      tool_choice: "auto",
+    } as any);
+    const message = completion.choices[0]?.message as any;
+    const call = message?.tool_calls?.[0];
+    let proposal = null;
+    if (call?.function?.name) {
+      proposal = { name: call.function.name, arguments: JSON.parse(call.function.arguments || "{}") };
+    }
+    return res.json({ assistant: message?.content ?? (proposal ? "I have a proposed action ready for your confirmation." : "What detail should I use to resolve this item?"), proposal, unavailable: false });
+  } catch (err) {
+    req.log.error(err);
+    return res.status(502).json({ error: "Asher could not prepare a resolution" });
+  }
+});
+
+const ResolveConfirmBody = z.object({ name: z.string(), arguments: z.unknown() });
+
+router.post("/queue/:id/resolve/confirm", requireAuth, async (req, res) => {
+  const itemId = Number(req.params.id);
+  const body = ResolveConfirmBody.safeParse(req.body);
+  if (!Number.isFinite(itemId) || !body.success) return res.status(400).json({ error: "A proposed tool call is required" });
+
+  try {
+    const userId = requireUserId(req);
+    const item = await loadOwnedQueueItem(userId, itemId);
+    if (!item) return res.status(404).json({ error: "Queue item not found" });
+    if (item.status !== "pending") return res.status(400).json({ error: "Queue item already resolved" });
+    const executed = await executeQueueResolveTool(userId, body.data.name, body.data.arguments);
+    const [updated] = await db.update(queueItemsTable).set({ status: "accepted", resolvedAt: new Date() }).where(and(eq(queueItemsTable.id, itemId), eq(queueItemsTable.userId, userId), eq(queueItemsTable.status, "pending"))).returning();
+    if (!updated) return res.status(409).json({ error: "Queue item changed before confirmation" });
+    return res.json({ item: updated, result: executed.result });
+  } catch (err) {
+    req.log.error(err);
+    return res.status(400).json({ error: err instanceof Error ? err.message : "Tool execution failed; the item remains pending" });
   }
 });
 

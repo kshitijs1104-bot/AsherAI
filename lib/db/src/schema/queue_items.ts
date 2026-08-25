@@ -48,7 +48,7 @@ export const queueItemsTable = pgTable(
     // insight/alert, an automation suggestion).
     metadataJson: text("metadata_json"),
 
-    // pending -> accepted | edited | rejected. Terminal states keep the row
+    // pending -> accepted | edited | rejected | dismissed. Terminal states keep the row
     // (resolvedAt set) rather than deleting it — a founder's accept/reject
     // history is itself a signal (e.g. future "you keep rejecting X" tuning).
     status: text("status").notNull().default("pending"),
