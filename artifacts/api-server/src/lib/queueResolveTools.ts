@@ -61,31 +61,32 @@ async function ownedQueueItem(userId: string, id: number): Promise<QueueItem> {
 }
 
 export async function executeQueueResolveTool(userId: string, name: string, rawArgs: unknown): Promise<{ ok: true; result: unknown }> {
-  if (!(name in Args)) throw new Error(`Tool is not permitted: ${name}`);
-  const toolName = name as QueueResolveToolName;
-  const args = Args[toolName].parse(rawArgs);
-
-  if (toolName === "send_chat_reply") {
+  if (name === "send_chat_reply") {
+    const args = Args.send_chat_reply.parse(rawArgs);
     const item = await ownedQueueItem(userId, args.queue_item_id);
     if (!item.draftContent) throw new Error("This queue item has no sendable draft");
     await performQueueItemSendAction(userId, { ...item, draftContent: args.message });
     return { ok: true, result: { queueItemId: item.id, sent: true } };
   }
 
-  if (toolName === "update_profile_field") {
-    const column = PROFILE_COLUMNS[args.field as keyof typeof PROFILE_COLUMNS];
+  if (name === "update_profile_field") {
+    const args = Args.update_profile_field.parse(rawArgs);
+    const column = PROFILE_COLUMNS[args.field];
     const update = { updatedAt: new Date(), [column]: args.value };
     const result = await db.update(settingsTable).set(update).where(eq(settingsTable.sessionId, userId)).returning({ id: settingsTable.id });
     if (!result[0]) throw new Error("Profile not found");
     return { ok: true, result: { field: args.field, updated: true } };
   }
 
-  if (toolName === "update_goal_status") {
+  if (name === "update_goal_status") {
+    const args = Args.update_goal_status.parse(rawArgs);
     const result = await db.update(goalsTable).set({ status: args.status, resolvedAt: args.status === "active" ? null : new Date(), updatedAt: new Date() }).where(and(eq(goalsTable.chatId, args.chat_id), eq(goalsTable.userId, userId))).returning({ id: goalsTable.id });
     if (!result[0]) throw new Error("Goal not found");
     return { ok: true, result: { goalId: result[0].id, status: args.status } };
   }
 
+  if (name !== "update_roadmap_action") throw new Error(`Tool is not permitted: ${name}`);
+  const args = Args.update_roadmap_action.parse(rawArgs);
   const [ownedRoadmap] = await db.select({ id: roadmapsTable.id }).from(roadmapsTable).where(and(eq(roadmapsTable.id, args.roadmap_id), eq(roadmapsTable.userId, userId))).limit(1);
   if (!ownedRoadmap) throw new Error("Roadmap not found");
   const updated = await setRoadmapActionStatus(args.roadmap_id, args.phase_index, args.action_index, args.status);
