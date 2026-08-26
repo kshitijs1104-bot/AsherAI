@@ -1,0 +1,19 @@
+TASK: Find and reverse a whitelist/access-restriction feature that was added earlier, so the app is open to all users again instead of requiring pre-approved access.
+
+This likely involves something like an access-request or waitlist gate (possibly related to a file called WaitlistGate.tsx on the frontend, and a matching check on the backend — but confirm, don't assume).
+
+STEP 1 — AUDIT FIRST, DO NOT EDIT YET:
+1. Search the codebase (frontend and api-server) for any logic that restricts app access based on a whitelist, approved-user list, invite status, or access-request approval — e.g. checks like "isApproved", "isWhitelisted", "accessGranted", "waitlist", "pendingAccess", or similar.
+2. List every file and function involved in this gate — where the check happens, what table/column it reads from (if backend/database-based), and where it's enforced (e.g. a route middleware, a frontend redirect/guard, or both).
+3. Explain exactly what removing or disabling it would involve, and whether it's safer to:
+   a) Fully remove the gating logic and the route/component (more invasive), or
+   b) Keep the code in place but change the default/condition so it always evaluates to "access granted" (less invasive, easier to reverse later if needed)
+4. Recommend which approach is lower-risk given the existing codebase, and show me the exact planned change (diff-style) for that approach.
+5. Wait for my confirmation before making any change.
+
+RULES:
+- Do not touch anything unrelated — no other auth logic (e.g. login/signup itself, Clerk integration, role permissions like Admin/Manager) should be affected. This is specifically about the pre-approval/whitelist gate, not general authentication.
+- Do not touch the database schema. If existing "approved" or "pending" user records need to stay as historical data, leave them as is — just stop enforcing the check.
+- Do not delete any user data or access-request records.
+- Do not commit or push. I will review and approve first, then handle commit/push separately.
+- Show me a full diff of the proposed change before I approve it.
