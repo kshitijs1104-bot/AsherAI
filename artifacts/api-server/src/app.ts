@@ -11,6 +11,7 @@ import { clerkMiddleware, operatorCount } from "./middlewares/auth";
 import { sameOriginOnly } from "./middlewares/csrf";
 import { dailyUsageLimit } from "./middlewares/usageLimit";
 import { recordAuditEvent } from "./lib/auditLog";
+import { resolveAllowedOrigins, resolveClerkPublishableKey, resolveFrontendUrl, originOfUrl } from "./lib/deployConfig";
 
 // ---- Every credential this process cannot run without, checked at boot ----
 //
@@ -44,6 +45,13 @@ const REQUIRED_ENV: { name: string; why: string }[] = [
   { name: "DATABASE_URL", why: "Postgres connection string; lib/db throws on import without it" },
   { name: "CONNECTOR_ENCRYPTION_KEY", why: "32 bytes hex/base64; AES-256-GCM key for OAuth tokens at rest (lib/crypto.ts)" },
 ];
+
+if (!process.env.CLERK_PUBLISHABLE_KEY?.trim()) {
+  const resolved = resolveClerkPublishableKey();
+  if (resolved) {
+    process.env.CLERK_PUBLISHABLE_KEY = resolved;
+  }
+}
 
 // Not fatal, but each one silently disables a whole feature, and a feature that
 // is off because a secret was never set looks identical to a feature that is
@@ -98,12 +106,17 @@ const isProduction = process.env.NODE_ENV === "production";
 // development it falls back to the usual local Vite ports.
 const DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5000", "http://127.0.0.1:5000"];
 
-function originOfUrl(value: string | undefined): string | null {
-  if (!value?.trim()) return null;
-  try {
-    return new URL(value.trim()).origin;
-  } catch {
-    return null;
+if (!process.env.FRONTEND_URL?.trim()) {
+  const resolvedFrontend = resolveFrontendUrl();
+  if (resolvedFrontend) {
+    process.env.FRONTEND_URL = resolvedFrontend;
+  }
+}
+
+if (!process.env.ALLOWED_ORIGIN?.trim()) {
+  const resolvedOrigins = resolveAllowedOrigins();
+  if (resolvedOrigins.length > 0) {
+    process.env.ALLOWED_ORIGIN = resolvedOrigins.join(",");
   }
 }
 
@@ -119,9 +132,9 @@ const explicitAllowedOrigins = (process.env.ALLOWED_ORIGIN ?? "")
 // new domain, instead of two secrets that must be changed together — and
 // silently drift apart when only one is, which is exactly what turns every
 // write on the site into "origin not allowed" while reads keep working.
-const frontendOrigin = originOfUrl(process.env.FRONTEND_URL);
+const frontendOrigin = originOfUrl(resolveFrontendUrl());
 
-const allowedOrigins = Array.from(new Set([...explicitAllowedOrigins, ...(frontendOrigin ? [frontendOrigin] : [])]));
+const allowedOrigins = resolveAllowedOrigins();
 
 if (isProduction && allowedOrigins.length === 0) {
   throw new Error(
