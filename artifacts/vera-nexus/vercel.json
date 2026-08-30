@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://workspaceapi-server-production-2e2f.up.railway.app/api/:path*" }
+  ]
+}
