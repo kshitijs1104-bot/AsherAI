@@ -166,6 +166,22 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
+function queueNudgeKind(item: QueueItem): string | null {
+  if (item.type !== 'nudge' || !item.externalId) return null;
+  const match = /^nudge:([^:]+):/.exec(item.externalId);
+  return match?.[1] ?? null;
+}
+
+function directNavigationForNudge(item: QueueItem): { label: string; href: string } | null {
+  const kind = queueNudgeKind(item);
+  if (!kind) return null;
+  if (kind === 'chat.unfinished') return { label: 'Reopen it', href: '/vera' };
+  if (kind === 'queue.pending') return { label: 'Open the board', href: '/vera?view=command-center' };
+  if (kind === 'streak.at_risk') return { label: 'Keep the streak', href: '/vera?view=command-center' };
+  if (kind === 'usage.cooldown_ended') return { label: 'Carry on', href: '/vera' };
+  return null;
+}
+
 function ScopedQueueResolver({ item, palette, onDone }: { item: QueueItem; palette: Palette; onDone: () => void }) {
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
@@ -294,8 +310,13 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
   const outbound = plan.kind === 'send' ? outboundTargetFor(item) : null;
   const [confirmingSend, setConfirmingSend] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const directNavigation = directNavigationForNudge(item);
 
   const handleAccept = () => {
+    if (directNavigation) {
+      navigate(directNavigation.href);
+      return;
+    }
     setResolving(true);
   };
   const handleReject = () => action.mutate({ id: item.id, action: 'dismiss' });
@@ -489,7 +510,7 @@ function Entry({ item, palette, category, fresh, onHide, onOpenChat }: {
             )}
           </div>
         )}
-        {!isDone && resolving && (
+        {!isDone && resolving && !directNavigation && (
           <ScopedQueueResolver item={item} palette={palette} onDone={() => setResolving(false)} />
         )}
         {action.isError && (

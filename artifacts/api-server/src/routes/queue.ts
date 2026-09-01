@@ -252,7 +252,28 @@ const ResolveMessageBody = z.object({
 // Only types with a real backing mutation are eligible for Asher resolution.
 // Poll/read-only types must produce an explicit limitation, never a guessed
 // connector action or a silent no-op.
-const RESOLVABLE_TYPES = new Set(["draft_reply", "goal_risk"]);
+const RESOLVABLE_TYPES = new Set(["draft_reply", "goal_risk", "nudge"]);
+
+const NUDGE_KIND_TOOL_ALLOWLIST: Record<string, readonly string[]> = {
+  "onboarding.incomplete": ["update_profile_field"],
+  "dossier.missing": ["update_profile_field"],
+  "dossier.incomplete": ["update_profile_field"],
+  "goal.none": ["update_goal_status"],
+};
+
+function nudgeKindFor(item: { externalId?: string | null }) {
+  const match = /^nudge:([^:]+):/.exec(item.externalId ?? "");
+  return match?.[1] ?? null;
+}
+
+function allowedQueueResolveToolsForItem(item: { type: string; externalId?: string | null }) {
+  if (item.type !== "nudge") return QUEUE_RESOLVE_TOOLS;
+
+  const kind = nudgeKindFor(item);
+  const allowed = kind ? (NUDGE_KIND_TOOL_ALLOWLIST[kind] ?? []) : [];
+  if (allowed.length === 0) return [];
+  return QUEUE_RESOLVE_TOOLS.filter((tool) => allowed.includes(tool.function.name));
+}
 
 async function loadOwnedQueueItem(userId: string, itemId: number) {
   const [item] = await db.select().from(queueItemsTable).where(and(eq(queueItemsTable.id, itemId), eq(queueItemsTable.userId, userId))).limit(1);
@@ -271,25 +292,34 @@ router.post("/queue/:id/resolve/message", requireAuth, async (req, res) => {
     if (item.status !== "pending") return res.status(400).json({ error: "Queue item already resolved" });
     if (!RESOLVABLE_TYPES.has(item.type)) return res.json({ assistant: "Asher can't automate this type yet.", proposal: null, unavailable: true });
 
+    const allowedTools = item.type === "nudge" ? allowedQueueResolveToolsForItem(item) : QUEUE_RESOLVE_TOOLS;
+    if (item.type === "nudge" && allowedTools.length === 0) {
+      return res.json({ assistant: "Asher can't automate this nudge yet.", proposal: null, unavailable: true });
+    }
+
     const groq = getGroqClient();
     if (!groq) return res.status(503).json({ error: "Asher is not configured" });
-    const context = `Queue item id: ${item.id}\nType: ${item.type}\nSource: ${item.source}\nTitle: ${item.title}\nBody: ${item.body}\nDraft: ${item.draftContent ?? "none"}\nMetadata: ${item.metadataJson ?? "none"}`;
+    const context = `Queue item id: ${item.id}\nType: ${item.type}\nSource: ${item.source}\nTitle: ${item.title}\nBody: ${item.body}\nDraft: ${item.draftContent ?? "none"}\nMetadata: ${item.metadataJson ?? "none"}\nNudge kind: ${nudgeKindFor(item) ?? "unknown"}`;
     const completion = await groq.chat.completions.create({
       model: "openai/gpt-oss-120b",
       temperature: 0.2,
       max_tokens: 1200,
       messages: [
-        { role: "system", content: `You are resolving exactly one Command Center queue item. Use only the listed tools. Never claim an unsupported queue type can be automated. Ask one concise clarification when required information is missing. Do not execute anything; propose a tool call for the founder to confirm. Context:\n${context}` },
+        { role: "system", content: `You are resolving exactly one Command Center queue item. Use only the listed tools. Never claim an unsupported queue type can be automated. When this is a nudge, use only the tool(s) valid for its kind. Ask one concise clarification when required information is missing. Do not execute anything; propose a tool call for the founder to confirm. Context:\n${context}` },
         ...body.data.history,
         { role: "user", content: body.data.message },
       ],
-      tools: QUEUE_RESOLVE_TOOLS,
+      tools: allowedTools,
       tool_choice: "auto",
     } as any);
     const message = completion.choices[0]?.message as any;
     const call = message?.tool_calls?.[0];
     let proposal = null;
     if (call?.function?.name) {
+      const permitted = allowedTools.some((tool) => tool.function.name === call.function.name);
+      if (item.type === "nudge" && !permitted) {
+        return res.json({ assistant: "That action isn't available for this nudge kind.", proposal: null, unavailable: true });
+      }
       proposal = { name: call.function.name, arguments: JSON.parse(call.function.arguments || "{}") };
     }
     return res.json({ assistant: message?.content ?? (proposal ? "I have a proposed action ready for your confirmation." : "What detail should I use to resolve this item?"), proposal, unavailable: false });
@@ -311,6 +341,15 @@ router.post("/queue/:id/resolve/confirm", requireAuth, async (req, res) => {
     const item = await loadOwnedQueueItem(userId, itemId);
     if (!item) return res.status(404).json({ error: "Queue item not found" });
     if (item.status !== "pending") return res.status(400).json({ error: "Queue item already resolved" });
+
+    if (item.type === "nudge") {
+      const allowedTools = allowedQueueResolveToolsForItem(item);
+      const permitted = allowedTools.some((tool) => tool.function.name === body.data.name);
+      if (!permitted) {
+        return res.status(400).json({ error: "That action is not allowed for this nudge kind" });
+      }
+    }
+
     const executed = await executeQueueResolveTool(userId, body.data.name, body.data.arguments);
     const [updated] = await db.update(queueItemsTable).set({ status: "accepted", resolvedAt: new Date() }).where(and(eq(queueItemsTable.id, itemId), eq(queueItemsTable.userId, userId), eq(queueItemsTable.status, "pending"))).returning();
     if (!updated) return res.status(409).json({ error: "Queue item changed before confirmation" });
