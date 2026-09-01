@@ -356,7 +356,10 @@ router.post("/queue/:id/resolve/confirm", requireAuth, async (req, res) => {
     return res.json({ item: updated, result: executed.result });
   } catch (err) {
     req.log.error(err);
-    return res.status(400).json({ error: err instanceof Error ? err.message : "Tool execution failed; the item remains pending" });
+    const status = isUserFacingError(err) ? err.status : 400;
+    return res.status(status).json({
+      error: messageForCaller(err, "Tool execution failed; the item remains pending"),
+    });
   }
 });
 
