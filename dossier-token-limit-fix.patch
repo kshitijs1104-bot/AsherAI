@@ -1,0 +1,107 @@
+diff --git a/artifacts/api-server/src/lib/dossier.ts b/artifacts/api-server/src/lib/dossier.ts
+index c61d822..15e8ffd 100644
+--- a/artifacts/api-server/src/lib/dossier.ts
++++ b/artifacts/api-server/src/lib/dossier.ts
+@@ -164,6 +164,28 @@ function sourceCharBudget(): number {
+   return Math.max(3_000, Math.min(16_000, availableTokens * 4));
+ }
+ 
++export const DOSSIER_SOURCE_CHAR_LIMIT = sourceCharBudget();
++export const DOSSIER_SOURCE_WORD_LIMIT = Math.max(1, Math.round(DOSSIER_SOURCE_CHAR_LIMIT / 5));
++
++export function dossierInputOverLimit(sourceText: string): boolean {
++  return sourceText.trim().length > DOSSIER_SOURCE_CHAR_LIMIT;
++}
++
++export function dossierInputOverLimitMessage(): string {
++  return `This document is over the size limit for dossier intake (about ${DOSSIER_SOURCE_WORD_LIMIT} words). Please shorten it to under ${DOSSIER_SOURCE_WORD_LIMIT} words and try again.`;
++}
++
++export function dossierInputWarningMessage(sourceText: string): string | null {
++  const trimmed = sourceText.trim();
++  if (!trimmed) return null;
++
++  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
++  if (wordCount >= Math.round(DOSSIER_SOURCE_WORD_LIMIT * 0.85)) {
++    return `This document is close to the size limit (~${DOSSIER_SOURCE_WORD_LIMIT} words). Please shorten it to under ${DOSSIER_SOURCE_WORD_LIMIT} words to save successfully.`;
++  }
++  return null;
++}
++
+ /** `errorType` distinguishes "this document is unusable" from "we were rate
+  *  limited" — the two need completely different sentences shown to the
+  *  founder, and collapsing them into `null` is what made every document look
+diff --git a/artifacts/api-server/src/routes/dossier.ts b/artifacts/api-server/src/routes/dossier.ts
+index aec9575..41f6f06 100644
+--- a/artifacts/api-server/src/routes/dossier.ts
++++ b/artifacts/api-server/src/routes/dossier.ts
+@@ -9,6 +9,9 @@ import { getOrCreateActiveProfile } from "../lib/businessProfiles";
+ import { addCompanyFact } from "../lib/companyMemory";
+ import { ensureIngest } from "../lib/attachmentIngest";
+ import {
++  DOSSIER_SOURCE_CHAR_LIMIT,
++  dossierInputOverLimit,
++  dossierInputOverLimitMessage,
+   extractDossier,
+   generateGapQuestions,
+   getDossier,
+@@ -117,6 +120,10 @@ router.post("/dossier", requireAuth, async (req, res) => {
+       return res.status(400).json({ error: "Paste something about the company, or attach a document." });
+     }
+ 
++    if (dossierInputOverLimit(sourceText)) {
++      return res.status(422).json({ error: dossierInputOverLimitMessage() });
++    }
++
+     const groq = getGroqClient();
+     if (!groq) return res.status(400).json({ error: "No Groq API key configured — add one in Settings" });
+ 
+diff --git a/artifacts/vera-nexus/src/pages/Dossier.tsx b/artifacts/vera-nexus/src/pages/Dossier.tsx
+index 7ab991e..a5c727f 100644
+--- a/artifacts/vera-nexus/src/pages/Dossier.tsx
++++ b/artifacts/vera-nexus/src/pages/Dossier.tsx
+@@ -27,6 +27,19 @@ import { Reveal, RevealGroup, RevealItem, Spotlight, EASE } from '../lib/motion'
+ 
+ type Tab = 'file' | 'wrap';
+ 
++// Keep this aligned with the exact char limit computed in the server-side
++// sourceCharBudget() helper in api-server/src/lib/dossier.ts. That helper
++// currently resolves to 3,000 chars on the free tier, which is roughly 600
++// words; the warning below intentionally uses that exact backend threshold
++// rather than a raw TPM guess.
++const DOSSIER_TEXT_LIMIT_CHARS = 3000;
++const DOSSIER_TEXT_LIMIT_WORDS = Math.max(1, Math.round(DOSSIER_TEXT_LIMIT_CHARS / 5));
++const DOSSIER_TEXT_WARNING_WORDS = Math.round(DOSSIER_TEXT_LIMIT_WORDS * 0.85);
++
++function estimateWords(text: string): number {
++  return text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
++}
++
+ function Panel({ children, className = '', style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
+   return (
+     <div
+@@ -53,6 +66,8 @@ function Intake({ onDone }: { onDone: () => void }) {
+   const createDossier = useCreateDossier();
+   const uploadAttachment = useUploadAttachment();
+   const busy = createDossier.isPending || uploadAttachment.isPending;
++  const wordCount = estimateWords(text);
++  const shouldShowLimitWarning = wordCount >= DOSSIER_TEXT_WARNING_WORDS;
+ 
+   const submitText = () => {
+     setError(null);
+@@ -111,6 +126,15 @@ function Intake({ onDone }: { onDone: () => void }) {
+         </div>
+       )}
+ 
++      {shouldShowLimitWarning && (
++        <div className="flex items-start gap-2 mt-3 text-[12.5px]" style={{ color: 'var(--amber, #f5b458)' }}>
++          <AlertCircle className="w-4 h-4 shrink-0 mt-px" />
++          <span>
++            This document is close to the size limit (~{DOSSIER_TEXT_LIMIT_WORDS} words). Please shorten it to under {DOSSIER_TEXT_LIMIT_WORDS} words to save successfully.
++          </span>
++        </div>
++      )}
++
+       <div className="flex flex-wrap items-center gap-2.5 mt-4">
+         <button
+           onClick={submitText}
