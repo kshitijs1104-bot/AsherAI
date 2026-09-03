@@ -1,6 +1,5 @@
 {
   "rewrites": [
-    { "source": "/__clerk/:path*", "destination": "/api/__clerk/:path*" },
-    { "source": "/((?!api|assets|.*\\.[\\w]+$).*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
