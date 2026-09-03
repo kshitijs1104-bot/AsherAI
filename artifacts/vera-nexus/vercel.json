@@ -1,8 +1,5 @@
 {
   "rewrites": [
-    {
-      "source": "/__clerk/:path*",
-      "destination": "https://frontend-api.clerk.dev/:path*"
-    }
+    { "source": "/__clerk/:path*", "destination": "/api/__clerk/:path*" }
   ]
 }
