@@ -483,7 +483,7 @@ function App() {
     // the user not at all — and a policy sentence that needs that much
     // qualification to stay true is a sentence that should just be made true.
     // Leave it disabled, or change section 19 in the same commit.
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} telemetry={{ disabled: true }}>
+    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} proxyUrl="/__clerk" telemetry={{ disabled: true }}>
       <AuthTokenBridge />
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
