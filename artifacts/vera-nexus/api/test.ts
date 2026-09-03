@@ -1,1 +1,1 @@
-export default function handler(req, res) { res.status(200).send('ok'); }
+import type { IncomingMessage, ServerResponse } from 'http'; export default function handler(req: IncomingMessage, res: ServerResponse) { res.statusCode = 200; res.end('ok'); }
