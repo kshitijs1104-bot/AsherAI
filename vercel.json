@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/__clerk/:path*", "destination": "/api/clerk-proxy" },
+    { "source": "/__clerk/:path*", "destination": "/api/test" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  const path = (req.url || '').replace(/^\/api\/__clerk/, '').replace(/^\/__clerk/, '');
+  const path = (req.url || '').replace(/^\/api\/test/, '').replace(/^\/__clerk/, '');
   const target = `https://frontend-api.clerk.dev${path}`;
 
   const chunks: Uint8Array[] = [];
