@@ -2236,9 +2236,11 @@ function IntegrityNotices({
   groundednessIssues?: { description: string }[];
   lengthConstraintNote?: string;
 }) {
+  const [open, setOpen] = useState<boolean>(false);
   const hasArithmetic = Array.isArray(arithmeticIssues) && arithmeticIssues.length > 0;
   const hasGroundedness = Array.isArray(groundednessIssues) && groundednessIssues.length > 0;
   if (!hasArithmetic && !hasGroundedness && !lengthConstraintNote) return null;
+  const itemCount = (arithmeticIssues?.length ?? 0) + (groundednessIssues?.length ?? 0) + (lengthConstraintNote ? 1 : 0);
 
   return (
     <div
@@ -2246,28 +2248,42 @@ function IntegrityNotices({
       style={{ padding: '10px 14px', borderColor: 'var(--amber)' }}
       role="note"
     >
-      <span className="vera-label" style={{ fontSize: '12px', color: 'var(--amber)' }}>
-        Check before you rely on this
-      </span>
-      <ul className="mt-1.5 space-y-1">
-        {hasArithmetic &&
-          arithmeticIssues!.map((issue, i) => (
-            <li key={`arith-${i}`} style={{ fontSize: '13px' }}>
-              Numbers don't reconcile: {issue.description}
+      <div className="flex items-center justify-between gap-2">
+        <span className="vera-label" style={{ fontSize: '12px', color: 'var(--amber)' }}>
+          Check before you rely on this
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-1 vera-label"
+          aria-expanded={open}
+          aria-label={open ? 'Collapse verification items' : 'Expand verification items'}
+        >
+          {!open && `${itemCount} items to verify`}
+          {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        </button>
+      </div>
+      {open && (
+        <ul className="mt-1.5 space-y-1">
+          {hasArithmetic &&
+            arithmeticIssues!.map((issue, i) => (
+              <li key={`arith-${i}`} style={{ fontSize: '13px' }}>
+                Numbers don't reconcile: {issue.description}
+              </li>
+            ))}
+          {hasGroundedness &&
+            groundednessIssues!.map((issue, i) => (
+              <li key={`ground-${i}`} style={{ fontSize: '13px' }}>
+                {issue.description}
+              </li>
+            ))}
+          {lengthConstraintNote && (
+            <li key="length" style={{ fontSize: '13px' }}>
+              {lengthConstraintNote}
             </li>
-          ))}
-        {hasGroundedness &&
-          groundednessIssues!.map((issue, i) => (
-            <li key={`ground-${i}`} style={{ fontSize: '13px' }}>
-              {issue.description}
-            </li>
-          ))}
-        {lengthConstraintNote && (
-          <li key="length" style={{ fontSize: '13px' }}>
-            {lengthConstraintNote}
-          </li>
-        )}
-      </ul>
+          )}
+        </ul>
+      )}
     </div>
   );
 }
