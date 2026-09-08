@@ -232,7 +232,7 @@ export function OnboardingGate() {
           <button
             type="submit"
             disabled={!isValid}
-            className="w-full bg-[var(--indigo)] hover:bg-[var(--indigo-light)] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors text-sm uppercase tracking-wider mt-2"
+            className="w-full bg-[var(--indigo)] hover:bg-[var(--indigo-light)] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-lg transition-colors text-sm uppercase tracking-wider mt-2"
           >
             Continue to Plan Selection →
           </button>

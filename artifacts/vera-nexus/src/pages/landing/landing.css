@@ -386,7 +386,14 @@
   opacity: 1;
 }
 
-/* --- Chips / badges -------------------------------------------------------- */
+/* --- Hero eyebrow --------------------------------------------------------- */
+
+.lp-hero-eyebrow {
+  color: var(--lp-text-2);
+  font-family: "Newsreader", serif;
+  font-size: 19px;
+  font-style: italic;
+}
 
 .lp-chip {
   display: inline-flex;

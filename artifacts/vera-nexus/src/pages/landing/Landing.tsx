@@ -97,8 +97,7 @@ function Hero() {
         <div className="lp-hero-grid">
           <div className="lp-hero-copy">
             <Reveal delay={0.05} y={10}>
-              <div className="lp-chip">
-                <span className="lp-dot" />
+              <div className="lp-hero-eyebrow">
                 A founder operating system, not a chat window
               </div>
             </Reveal>

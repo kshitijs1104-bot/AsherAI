@@ -173,7 +173,7 @@ export function PrivacyGate() {
               type="button"
               onClick={accept}
               disabled={!agreed}
-              className="bg-[var(--indigo)] hover:bg-[var(--indigo-light)] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 px-6 rounded-lg transition-colors text-sm uppercase tracking-wider"
+              className="bg-[var(--indigo)] hover:bg-[var(--indigo-light)] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2.5 px-6 rounded-lg transition-colors text-sm uppercase tracking-wider"
             >
               Agree and continue →
             </button>
